@@ -1,0 +1,20 @@
+{
+  "name": "wee-sports",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "shared",
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,magenta \"npm run dev -w @wee/server\" \"npm run dev -w @wee/client\"",
+    "test": "npm test -w @wee/server",
+    "build": "npm run build -w @wee/client",
+    "start": "npm start -w @wee/server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
