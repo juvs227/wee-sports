@@ -1,23 +1,28 @@
 // components/player.js
 import * as THREE from 'three';
-// import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
-export function createPlayer() {
+// import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+export function createPlayer(x, y, z, color=0x3b82f6) {
     const geometry = new THREE.BoxGeometry(1, 1.5, 0.2);
     const material = new THREE.MeshStandardMaterial({ 
-        color: 0x3b82f6, // Blue player block
+        color: color, 
         roughness: 0.4 
     });
     const player = new THREE.Mesh(geometry, material);
-    player.position.set(0, 0.75, 5); // Positioned at the back of the court
+    
+    // Save the starting position so they don't overwrite each other
+    player.userData.initialX = x; 
+    
+    player.position.set(x, y, z);
     player.castShadow = true;
 
     return player;
 }
 
-export function updatePlayerMotion(player) {
+export function updatePlayerMotion(player, offset = 0) {
     const time = Date.now() * 0.002;
-    player.position.x = Math.sin(time) * 3;
+    // Moves back and forth starting from their own initial position
+    player.position.x = player.userData.initialX + Math.sin(time + offset) * 1.5;
 }
 
 

@@ -4,7 +4,7 @@ import { createGround } from './components/ground.js';
 import { createNet } from './components/net.js';
 import { createCourt } from './components/court.js';
 import { createPlayer, updatePlayerMotion } from './components/player.js';
-
+import { createBall, updateBallMotion } from './components/ball.js';
 export class World {
     constructor(container) {
         // 1. Scene
@@ -51,8 +51,16 @@ export class World {
         this.scene.add(court);
 
         // Player
-        this.player = createPlayer();
-        this.scene.add(this.player);
+        const player_Z = 5;
+        this.player1 = createPlayer(0, 0.75, player_Z,0x3b82f6); // Blue player block
+        this.scene.add(this.player1);
+
+        this.player2 = createPlayer(0, 0.75, -player_Z,0xef4444); // Red player block
+        this.scene.add(this.player2);
+
+        // Ball - Spawned in the air above the court
+        this.ball = createBall(0, 3.0, 0);
+        this.scene.add(this.ball);
 
         // 7. Resize Handler
         window.addEventListener('resize', () => {
@@ -68,8 +76,9 @@ export class World {
 
 
             const time = Date.now() * 0.002;
-            this.player.position.x = Math.sin(time) * 3;
-
+            updatePlayerMotion(this.player1);
+            updateBallMotion(this.ball);
+            updatePlayerMotion(this.player2);
             this.controls.update();
             this.renderer.render(this.scene, this.camera);
         };
