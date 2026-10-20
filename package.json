@@ -5,9 +5,20 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build"
+    "build": "vite build",
+    "lint": "gts lint",
+    "clean": "gts clean",
+    "compile": "tsc",
+    "fix": "gts fix",
+    "prepare": "npm.cmd run compile",
+    "pretest": "npm.cmd run compile",
+    "posttest": "npm.cmd run lint"
   },
   "devDependencies": {
+    "@types/node": "^22.7.5",
+    "@types/three": "^0.186.0",
+    "gts": "^7.0.0",
+    "typescript": "^5.6.3",
     "vite": "^5.0.0"
   },
   "dependencies": {

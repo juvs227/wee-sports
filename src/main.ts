@@ -1,4 +1,4 @@
-import { World } from './World/World.js';
+import { World } from './World/World';
 import { io } from 'socket.io-client';
 
 // Automatically connects to your backend server on port 3000 using your current network hostname/IP
@@ -13,17 +13,22 @@ import { io } from 'socket.io-client';
 //     }, 1000);
 // });
 
-// socket.on('pong_test', (data) => {
+// socket.on('pong_test', (data: { clientTime: number }) => {
 //     const roundTrip = Date.now() - data.clientTime;
 //     console.log(`Round-trip delay: ${roundTrip} ms`);
 // });
 
-async function main() {
+async function main(): Promise<void> {
     const container = document.querySelector('#scene-container');
-    const world = new World(container);
+    if (!container) {
+        throw new Error('Could not find scene-container element');
+    }
+
+    // Cast container to HTMLElement so TypeScript is satisfied
+    const world = new World(container as HTMLElement);
     world.start();
 }
 
-main().catch((err) => {
+main().catch((err: unknown) => {
     console.error(err);
 });

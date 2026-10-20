@@ -1,12 +1,21 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { createGround } from './components/ground.js';
-import { createNet } from './components/net.js';
-import { createCourt } from './components/court.js';
-import { createPlayer, updatePlayerMotion } from './components/player.js';
-import { createBall, updateBallMotion } from './components/ball.js';
+import { createGround } from './components/ground';
+import { createNet } from './components/net';
+import { createCourt } from './components/court';
+import { createPlayer, updatePlayerMotion } from './components/player';
+import { createBall, updateBallMotion } from './components/ball';
+
 export class World {
-    constructor(container) {
+    public scene: THREE.Scene;
+    public camera: THREE.PerspectiveCamera;
+    public renderer: THREE.WebGLRenderer;
+    public controls: OrbitControls;
+    public player1: THREE.Mesh;
+    public player2: THREE.Mesh;
+    public ball: THREE.Mesh;
+
+    constructor(container: HTMLElement) {
         // 1. Scene
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color(0x202025);
@@ -51,11 +60,11 @@ export class World {
         this.scene.add(court);
 
         // Player
-        const player_Z = 5;
-        this.player1 = createPlayer(0, 0.75, player_Z,0x3b82f6); // Blue player block
+        const playerZ = 5;
+        this.player1 = createPlayer(0, 0.75, playerZ, 0x3b82f6); // Blue player block
         this.scene.add(this.player1);
 
-        this.player2 = createPlayer(0, 0.75, -player_Z,0xef4444); // Red player block
+        this.player2 = createPlayer(0, 0.75, -playerZ, 0xef4444); // Red player block
         this.scene.add(this.player2);
 
         // Ball - Spawned in the air above the court
@@ -70,12 +79,10 @@ export class World {
         });
     }
 
-    start() {
-        const animate = () => {
+    public start(): void {
+        const animate = (): void => {
             requestAnimationFrame(animate);
 
-
-            const time = Date.now() * 0.002;
             updatePlayerMotion(this.player1);
             updateBallMotion(this.ball);
             updatePlayerMotion(this.player2);

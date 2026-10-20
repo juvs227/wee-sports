@@ -1,0 +1,17 @@
+{
+  "extends": "./node_modules/gts/tsconfig-google.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "build",
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true, 
+    "noEmit": true                      
+  },
+  "include": [
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "components/**/*.ts",
+    "*.ts"
+  ]
+}

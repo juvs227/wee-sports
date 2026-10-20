@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 
 // import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-export function createPlayer(x, y, z, color=0x3b82f6) {
+export function createPlayer(x:number, y:number, z:number, color=0x3b82f6) {
     const geometry = new THREE.BoxGeometry(1, 1.5, 0.2);
     const material = new THREE.MeshStandardMaterial({ 
         color: color, 
@@ -19,7 +19,7 @@ export function createPlayer(x, y, z, color=0x3b82f6) {
     return player;
 }
 
-export function updatePlayerMotion(player, offset = 0) {
+export function updatePlayerMotion( player: THREE.Mesh, offset = 0) {
     const time = Date.now() * 0.002;
     // Moves back and forth starting from their own initial position
     player.position.x = player.userData.initialX + Math.sin(time + offset) * 1.5;
