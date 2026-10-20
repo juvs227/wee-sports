@@ -1,15 +1,15 @@
+import fs from 'fs';
+import path from 'path';
+import gts from 'gts';
+
 let customConfig = [];
-let hasIgnoresFile = false;
-try {
-  require.resolve('./eslint.ignores.js');
-  hasIgnoresFile = true;
-} catch {
-  // eslint.ignores.js doesn't exist
+const ignoresPath = path.resolve('./eslint.ignores.js');
+
+// Check if eslint.ignores.js exists before loading it
+if (fs.existsSync(ignoresPath)) {
+  // Use dynamic import for ES modules instead of require()
+  const ignoresModule = await import('./eslint.ignores.js');
+  customConfig = [{ ignores: ignoresModule.default || ignoresModule }];
 }
 
-if (hasIgnoresFile) {
-  const ignores = require('./eslint.ignores.js');
-  customConfig = [{ignores}];
-}
-
-module.exports = [...customConfig, ...require('gts')];
+export default [...customConfig, ...gts];
