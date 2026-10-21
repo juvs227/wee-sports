@@ -9,7 +9,10 @@ import {
     createPlayer,
     type PlayerController,
 } from './components/player';
-import { createBall } from './components/ball';
+import {
+    createBall,
+    updateBallMotion,
+} from './components/ball';
 
 import {
     NEUTRAL_INPUT,
@@ -182,20 +185,26 @@ export class World {
         input: PlayerInput,
         delta: number
     ): void {
-        // Swing commands have priority over walking.
-        if (input.swing) {
-            player.playAnimation(
-                input.swing === 'left'
-                    ? 'SwingLeft'
-                    : 'SwingRight'
-            );
+        player.move(input.moveX, input.moveZ, delta);
 
-            // Movement is still allowed during a swing.
-            player.move(input.moveX, input.moveZ, delta);
+        const swing = input.swing;
+        input.swing = undefined;
+        const moving =
+            Math.abs(input.moveX) + Math.abs(input.moveZ) > 0.01;
+
+        if (player.isSwinging) {
             return;
         }
 
-        player.move(input.moveX, input.moveZ, delta);
+        if (swing) {
+            player.playAnimation(
+                swing === 'left' ? 'SwingLeft' : 'SwingRight'
+            );
+        } else if (moving) {
+            player.playAnimation('WalkCycle');
+        } else {
+            player.stopAnimation();
+        }
     }
 
     public start(): void {
@@ -211,6 +220,9 @@ export class World {
             // Prevent unusually large movement after a paused tab.
             const delta = Math.min(this.clock.getDelta(), 0.05);
 
+            this.player1.update(delta);
+            this.player2.update(delta);
+
             this.updatePlayer(
                 this.player1,
                 this.player1Input,
@@ -223,8 +235,7 @@ export class World {
                 delta
             );
 
-            this.player1.update(delta);
-            this.player2.update(delta);
+            updateBallMotion(this.ball, delta);
 
             this.controls.update();
             this.renderer.render(this.scene, this.camera);

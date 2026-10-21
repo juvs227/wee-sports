@@ -1,4 +1,5 @@
 import { World } from './World/World';
+import { InputController } from './Controllers/inputController';
 import { io } from 'socket.io-client';
 
 // Automatically connects to your backend server on port 3000 using your current network hostname/IP
@@ -27,6 +28,9 @@ async function main(): Promise<void> {
     // Cast container to HTMLElement so TypeScript is satisfied
     const world = new World(container as HTMLElement);
     world.start();
+    const inputController = new InputController((input) => {
+    world.setPlayerInput(input, 1); // Updates Player 1 controls
+});
 }
 
 main().catch((err: unknown) => {

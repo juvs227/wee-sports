@@ -7,8 +7,10 @@ export interface PlayerController {
     mixer: THREE.AnimationMixer | null;
     actions: Record<string, THREE.AnimationAction>;
     currentAnimation: string | null;
+    isSwinging: boolean;
 
     playAnimation: (name: string) => void;
+    stopAnimation: () => void;
     update: (delta: number) => void;
     move: (dx: number, dz: number, delta: number) => void;
     setPosition: (x: number, z: number) => void;
@@ -55,6 +57,7 @@ export function createPlayer(
         mixer: null,
         actions: {},
         currentAnimation: null,
+        isSwinging: false,
 
         playAnimation(name: string): void {
             const next = this.actions[name];
@@ -63,7 +66,7 @@ export function createPlayer(
                 return;
             }
 
-            if (this.currentAnimation === name && next.isRunning()) {
+            if (this.currentAnimation === name) {
                 return;
             }
 
@@ -72,17 +75,32 @@ export function createPlayer(
                 : undefined;
 
             if (previous && previous !== next) {
-                previous.fadeOut(0.12);
+                previous.stop();
             }
 
             next.reset();
             next.enabled = true;
             next.setEffectiveTimeScale(1);
             next.setEffectiveWeight(1);
+            const isSwing = name.startsWith('Swing');
+            next.setLoop(
+                isSwing ? THREE.LoopOnce : THREE.LoopRepeat,
+                isSwing ? 1 : Infinity
+            );
+            next.clampWhenFinished = isSwing;
             next.fadeIn(0.12);
             next.play();
 
             this.currentAnimation = name;
+            this.isSwinging = isSwing;
+        },
+
+        stopAnimation(): void {
+            Object.values(this.actions).forEach((action) => {
+                action.stop();
+            });
+            this.currentAnimation = null;
+            this.isSwinging = false;
         },
 
         update(delta: number): void {
@@ -90,34 +108,27 @@ export function createPlayer(
         },
 
         move(dx: number, dz: number, delta: number): void {
-            const moving = Math.abs(dx) + Math.abs(dz) > 0.01;
-
-            if (moving) {
-                const length = Math.hypot(dx, dz);
-                const nx = dx / length;
-                const nz = dz / length;
-
-                this.group.position.x = THREE.MathUtils.clamp(
-                    this.group.position.x + nx * speed * delta,
-                    minX,
-                    maxX
-                );
-
-                this.group.position.z = THREE.MathUtils.clamp(
-                    this.group.position.z + nz * speed * delta,
-                    minZ,
-                    maxZ
-                );
-
-                // Face the direction of travel.
-                this.group.rotation.y = Math.atan2(nx, nz);
-
-                if (this.actions['WalkCycle']) {
-                    this.playAnimation('WalkCycle');
-                }
-            } else if (this.actions['Idle']) {
-                this.playAnimation('Idle');
+            if (Math.abs(dx) + Math.abs(dz) <= 0.01) {
+                return;
             }
+
+            const length = Math.hypot(dx, dz);
+            const nx = dx / length;
+            const nz = dz / length;
+
+            this.group.position.x = THREE.MathUtils.clamp(
+                this.group.position.x + nx * speed * delta,
+                minX,
+                maxX
+            );
+
+            this.group.position.z = THREE.MathUtils.clamp(
+                this.group.position.z + nz * speed * delta,
+                minZ,
+                maxZ
+            );
+
+            this.group.rotation.y = Math.atan2(nx, nz);
         },
 
         setPosition(newX: number, newZ: number): void {
@@ -173,6 +184,18 @@ export function createPlayer(
             // Set up animation clips.
             if (gltf.animations.length > 0) {
                 controller.mixer = new THREE.AnimationMixer(model);
+                controller.mixer.addEventListener('finished', (event) => {
+                    const action = event.action;
+
+                    if (
+                        action === controller.actions['SwingLeft'] ||
+                        action === controller.actions['SwingRight']
+                    ) {
+                        action.stop();
+                        controller.isSwinging = false;
+                        controller.currentAnimation = null;
+                    }
+                });
 
                 for (const clip of gltf.animations) {
                     controller.actions[clip.name] =

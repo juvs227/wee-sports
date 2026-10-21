@@ -24,24 +24,28 @@ export function createBall(x: number, y: number, z: number): THREE.Mesh {
         gravity: 0.006                              // Downward pull per frame
     } as BallUserData;
 
+    ball.userData.isSwinging = false;
+
     return ball;
 }
 
-export function updateBallMotion(ball: THREE.Mesh): void {
+export function updateBallMotion(ball: THREE.Mesh, delta: number): void {
     // Cast userData to our interface so TypeScript provides autocomplete and safety
     const userData = ball.userData as BallUserData;
+    const frameScale = delta * 60;
 
     // 1. Apply gravity to the vertical velocity
-    userData.velocity.y -= userData.gravity;
+    userData.velocity.y -= userData.gravity * frameScale;
 
     // 2. Update the ball's position using its velocity
-    ball.position.add(userData.velocity);
+    ball.position.addScaledVector(userData.velocity, frameScale);
 
     // 3. Ground Collision & Bounce (Ground is at y = 0, ball radius is 0.3)
     const ballRadius = 0.3;
     if (ball.position.y <= ballRadius) {
         ball.position.y = ballRadius; // Snap to ground level so it doesn't sink
-        userData.velocity.y = -userData.velocity.y * 0.75; // Reverse and dampen (bounce loss)
+        const bounceVelocity = -userData.velocity.y * 0.75;
+        userData.velocity.y = Math.max(bounceVelocity, 0.15);
         
         // Slightly slow down horizontal movement on impact (friction)
         userData.velocity.x *= 0.98;
@@ -50,9 +54,11 @@ export function updateBallMotion(ball: THREE.Mesh): void {
 
     // 4. Temporary court boundary bounces (keeps the ball inside the play area for now)
     if (Math.abs(ball.position.z) > 6) {
+        ball.position.z = THREE.MathUtils.clamp(ball.position.z, -6, 6);
         userData.velocity.z *= -1;
     }
     if (Math.abs(ball.position.x) > 3.5) {
+        ball.position.x = THREE.MathUtils.clamp(ball.position.x, -3.5, 3.5);
         userData.velocity.x *= -1;
     }
 }
