@@ -1,13 +1,16 @@
 import * as THREE from 'three';
-
+const BALL_RADIUS = 0.1; // Define the radius of the ball for collision detection
 // Define an interface for the custom physics properties stored in userData
 interface BallUserData {
     velocity: THREE.Vector3;
     gravity: number;
+    isWaitingForServe: boolean;   // Tracks if the ball is held/waiting
+    servePosition: THREE.Vector3; // Default position to reset to
 }
 
 export function createBall(x: number, y: number, z: number): THREE.Mesh {
-    const geometry = new THREE.SphereGeometry(0.3, 32, 32);
+    
+    const geometry = new THREE.SphereGeometry(BALL_RADIUS, 32, 32);
     const material = new THREE.MeshStandardMaterial({ 
         color: 0xfacc15, // Bright yellow ball
         roughness: 0.2,
@@ -15,23 +18,47 @@ export function createBall(x: number, y: number, z: number): THREE.Mesh {
     });
     
     const ball = new THREE.Mesh(geometry, material);
+
     ball.position.set(x, y, z);
     ball.castShadow = true;
 
-    // Initialize velocity and gravity parameters with explicit typing
+    // Initialize velocity, gravity, and serve properties with explicit typing
     ball.userData = {
-        velocity: new THREE.Vector3(0.04, 0.15, 0.02), // Initial movement vector (x, y, z)
-        gravity: 0.006                              // Downward pull per frame
+        velocity: new THREE.Vector3(0, 0, 0), // Starts stationary while waiting for serve
+        gravity: 0.006,                       // Downward pull per frame
+        isWaitingForServe: true,
+        servePosition: new THREE.Vector3(x, y, z)
     } as BallUserData;
 
-    ball.userData.isSwinging = false;
-
     return ball;
+}
+
+export function serveBall(ball: THREE.Mesh, initialVelocity: THREE.Vector3): void {
+    const userData = ball.userData as BallUserData;
+    
+    // Only serve if the ball is currently waiting
+    if (userData.isWaitingForServe) {
+        userData.isWaitingForServe = false;
+        userData.velocity.copy(initialVelocity);
+    }
+}
+
+export function resetBallForServe(ball: THREE.Mesh): void {
+    const userData = ball.userData as BallUserData;
+    userData.isWaitingForServe = true;
+    userData.velocity.set(0, 0, 0);
+    ball.position.copy(userData.servePosition);
 }
 
 export function updateBallMotion(ball: THREE.Mesh, delta: number): void {
     // Cast userData to our interface so TypeScript provides autocomplete and safety
     const userData = ball.userData as BallUserData;
+
+    // If the ball is waiting to be served, skip physics updates
+    if (userData.isWaitingForServe) {
+        return;
+    }
+
     const frameScale = delta * 60;
 
     // 1. Apply gravity to the vertical velocity
@@ -40,8 +67,8 @@ export function updateBallMotion(ball: THREE.Mesh, delta: number): void {
     // 2. Update the ball's position using its velocity
     ball.position.addScaledVector(userData.velocity, frameScale);
 
-    // 3. Ground Collision & Bounce (Ground is at y = 0, ball radius is 0.3)
-    const ballRadius = 0.3;
+    // 3. Ground Collision & Bounce (Ground is at y = 0, ball radius is BALL_RADIUS)
+    const ballRadius = BALL_RADIUS;
     if (ball.position.y <= ballRadius) {
         ball.position.y = ballRadius; // Snap to ground level so it doesn't sink
         const bounceVelocity = -userData.velocity.y * 0.75;
@@ -52,13 +79,9 @@ export function updateBallMotion(ball: THREE.Mesh, delta: number): void {
         userData.velocity.z *= 0.98;
     }
 
-    // 4. Temporary court boundary bounces (keeps the ball inside the play area for now)
-    if (Math.abs(ball.position.z) > 6) {
-        ball.position.z = THREE.MathUtils.clamp(ball.position.z, -6, 6);
-        userData.velocity.z *= -1;
-    }
-    if (Math.abs(ball.position.x) > 3.5) {
-        ball.position.x = THREE.MathUtils.clamp(ball.position.x, -3.5, 3.5);
-        userData.velocity.x *= -1;
+    // 4. Temporary court boundary bounces / resets (keeps the ball inside the play area)
+    if (Math.abs(ball.position.z) > 6 || Math.abs(ball.position.x) > 3.5) {
+        // Automatically reset for a new serve when it goes out of bounds
+        resetBallForServe(ball);
     }
 }
