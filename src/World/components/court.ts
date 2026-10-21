@@ -4,10 +4,16 @@ import * as THREE from 'three';
 export function createCourt() {
     const group = new THREE.Group();
 
+    // Standard Tennis Court dimensions in meters (78 ft x 27 ft)
+    const groundWidth = 20;  // 27 feet
+    const groundLength = 50; // 78 feet
+    const courtWidth = 8.23;
+    const courtLength = 23.77;
+
     // 1. Pure Green Court Placeholder
-    const geometry = new THREE.PlaneGeometry(12, 24);
+    const geometry = new THREE.PlaneGeometry(groundWidth, groundLength);
     const material = new THREE.MeshStandardMaterial({ 
-        color: 0x00ff00, // Pure green
+        color: 0x15803d, // Professional tennis court green
         roughness: 0.8,
         metalness: 0.1
     });
@@ -18,15 +24,15 @@ export function createCourt() {
     group.add(court);
 
     // 2. Grid lines for scale
-    const grid = new THREE.GridHelper(24, 12, 0xffffff, 0x444444);
+    const grid = new THREE.GridHelper(courtLength, 12, 0xffffff, 0x444444);
     grid.position.y = 0.01;
     group.add(grid);
 
-    // 3. Highlighted 12 x 7 Rectangle Border
-    const halfWidth = 3.5;  // 12 total width / 2
-    const halfLength = 6; // 7 total length / 2
+    // 3. Highlighted Official Court Border Lines (8.23m x 23.77m)
+    const halfWidth = courtWidth / 2;   // 4.115 meters
+    const halfLength = courtLength / 2; // 11.885 meters
 
-    // Define the 4 corners of the rectangle on the XZ plane (laying flat on the ground)
+    // Define the 4 corners of the rectangle on the XZ plane
     const points = [
         new THREE.Vector3(-halfWidth, 0.06, -halfLength), // Top-Left
         new THREE.Vector3(halfWidth, 0.06, -halfLength),  // Top-Right
@@ -37,7 +43,6 @@ export function createCourt() {
     const borderGeometry = new THREE.BufferGeometry().setFromPoints(points);
     const borderMaterial = new THREE.LineBasicMaterial({ 
         color: 0xffffff, // Bright white border line
-        linewidth: 3     // Note: linewidth > 1 may not work on some platforms due to WebGL limitations
     });
 
     const courtBorder = new THREE.LineLoop(borderGeometry, borderMaterial);

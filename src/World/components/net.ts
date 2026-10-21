@@ -28,13 +28,13 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 
 export function createNet() {
-    const geometry = new THREE.BoxGeometry(6, 1, 0.1);
+    const geometry = new THREE.BoxGeometry(8.23, 0.5, 0.1);
     const material = new THREE.MeshStandardMaterial({ 
         color: 0xffffff,
         roughness: 0.5 
     });
     const net = new THREE.Mesh(geometry, material);
-    net.position.set(0, 0.5, 0); // Position it on the ground
+    net.position.set(0, 0.3, 0); // Position it on the ground
     net.castShadow = true;
 
     return net;

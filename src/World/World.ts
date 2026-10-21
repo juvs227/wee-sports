@@ -35,8 +35,8 @@ export class World {
     private player1Input: PlayerInput = { ...NEUTRAL_INPUT };
     private player2Input: PlayerInput = { ...NEUTRAL_INPUT };
 
-    private readonly courtMinX = -4;
-    private readonly courtMaxX = 4;
+    private readonly courtMinX = -4.115;
+    private readonly courtMaxX = 4.115;
 
     constructor(container: HTMLElement) {
         this.scene = new THREE.Scene();
@@ -81,14 +81,14 @@ export class World {
             minX: this.courtMinX,
             maxX: this.courtMaxX,
             minZ: 1,
-            maxZ: 8,
+            maxZ: 11.5,
         });
         this.scene.add(this.player1.group);
 
         this.player2 = createPlayer(0, 0.25, -5, 0xef4444, {
             minX: this.courtMinX,
             maxX: this.courtMaxX,
-            minZ: -8,
+            minZ: -11.5,
             maxZ: -1,
         });
         this.scene.add(this.player2.group);
