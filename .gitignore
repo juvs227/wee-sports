@@ -1,0 +1,12 @@
+# Installed dependencies and generated build output
+/node_modules/
+/dist/
+
+# macOS metadata and logs
+.DS_Store
+*.log
+
+# Local environment settings and credentials
+.env
+.env.*
+!.env.example
