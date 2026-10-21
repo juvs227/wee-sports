@@ -1,3 +1,4 @@
+// components/ball.ts
 import * as THREE from 'three';
 const BALL_RADIUS = 0.1; // Define the radius of the ball for collision detection
 // Define an interface for the custom physics properties stored in userData

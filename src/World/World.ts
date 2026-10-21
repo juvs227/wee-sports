@@ -141,13 +141,51 @@ export class World {
 
     private handleKeyDown = (event: KeyboardEvent): void => {
         if (event.key.toLowerCase() === 'k') {
-            this.playerServe();
+            // Check distance for Player 1
+            const dist1 = this.player1.group.position.distanceTo(this.ball.position);
+            // Check distance for Player 2
+            const dist2 = this.player2.group.position.distanceTo(this.ball.position);
+
+            const SERVE_REACH = 1.5;
+
+            if (dist1 <= SERVE_REACH) {
+                // Player 1 serves toward opponent (-Z direction)
+                const randomServe = new THREE.Vector3(
+                    (Math.random() - 0.5) * 0.08,             // X: -0.04 to 0.04
+                    THREE.MathUtils.randFloat(0.15, 0.22),     // Y: Positive (0.15 to 0.22)
+                    -THREE.MathUtils.randFloat(0.18, 0.28)     // Z: Negative (-0.18 to -0.28)
+                );
+                serveBall(this.ball, randomServe);
+            } else if (dist2 <= SERVE_REACH) {
+                // Player 2 serves toward opponent (+Z direction)
+                const randomServe = new THREE.Vector3(
+                    (Math.random() - 0.5) * 0.08,             // X: -0.04 to 0.04
+                    THREE.MathUtils.randFloat(0.15, 0.22),     // Y: Positive (0.15 to 0.22)
+                    THREE.MathUtils.randFloat(0.18, 0.28)      // Z: Positive (0.18 to 0.28)
+                );
+                serveBall(this.ball, randomServe);
+            }
         }
     };
 
-    public playerServe(): void {
-        const serveVelocity = new THREE.Vector3(0.0, 0.18, -0.22);
-        serveBall(this.ball, serveVelocity);
+    public playerServe(playerNumber: 1 | 2 = 1): void {
+        const targetPlayer = playerNumber === 1 ? this.player1 : this.player2; // Note: adjust to match your player controllers
+
+        // Get the position of the player (assuming player has a group or position property)
+        // Adjust `targetPlayer.group.position` depending on how your player position is stored
+        const playerPosition = this.player1.group.position; // or check which player is serving
+
+        // Calculate distance from the player to the ball
+        const distance = playerPosition.distanceTo(this.ball.position);
+        const maxServeDistance = 1.5; // Maximum reach to be able to serve
+
+        if (distance <= maxServeDistance) {
+            // Player is close enough, execute the serve!
+            const serveVelocity = new THREE.Vector3(0.0, 0.18, -0.22);
+            serveBall(this.ball, serveVelocity);
+        } else {
+            console.log("Too far from the ball to serve!");
+        }
     }
 
     public start(): void {

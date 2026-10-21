@@ -1,3 +1,4 @@
+// components/ground.ts
 import * as THREE from 'three';
 
 function createGround() {

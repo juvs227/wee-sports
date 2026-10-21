@@ -1,3 +1,4 @@
+// src/main.ts
 import { World } from './World/World';
 import { InputController } from './Controllers/inputController';
 import { io } from 'socket.io-client';
