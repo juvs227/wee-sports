@@ -41,18 +41,43 @@ function reply(ack, value) {
   if (typeof ack === 'function') ack(value);
 }
 
+/** code -> the timeout that ends that room's open vote. */
+const voteTimers = new Map();
+
+function broadcastLobby(code) {
+  io.to(code).emit(EVENTS.LOBBY_UPDATE, store.lobby(code));
+}
+
+function clearVoteTimer(code) {
+  clearTimeout(voteTimers.get(code));
+  voteTimers.delete(code);
+}
+
+/** The store decides whether the deadline has passed; this only wakes it up. */
+function armVoteTimer(code, msLeft) {
+  clearVoteTimer(code);
+  voteTimers.set(
+    code,
+    setTimeout(() => {
+      voteTimers.delete(code);
+      if (store.expireVote(code)) broadcastLobby(code);
+    }, msLeft),
+  );
+}
+
 io.on('connection', (socket) => {
   /** Takes this socket out of its room and tells whoever is left. */
   const drop = () => {
     const result = store.remove(socket.id);
     if (!result) return;
+    if (result.closed || result.voteCancelled) clearVoteTimer(result.code);
     if (result.closed) {
       socket.to(result.code).emit(EVENTS.ROOM_CLOSED, { code: result.code });
       io.in(result.code).socketsLeave(result.code);
       return;
     }
     socket.leave(result.code);
-    io.to(result.code).emit(EVENTS.LOBBY_UPDATE, store.lobby(result.code));
+    broadcastLobby(result.code);
   };
 
   socket.on(EVENTS.HOST_CREATE, (payload, ack) => {
@@ -80,8 +105,21 @@ io.on('connection', (socket) => {
     if (result.ok) {
       socket.join(result.code);
       socket.to(result.code).emit(EVENTS.LOBBY_UPDATE, store.lobby(result.code));
+      if (result.voteOpened) armVoteTimer(result.code, result.vote.msLeft);
     }
     reply(ack, result);
+  });
+
+  socket.on(EVENTS.TUTORIAL_VOTE, (payload, ack) => {
+    const result = store.vote(socket.id, payload);
+    if (!result.ok) {
+      reply(ack, result);
+      return;
+    }
+    if (result.resolved) clearVoteTimer(result.code);
+    reply(ack, { ok: true });
+    // Everyone, the voter included, sees who has voted (or the reveal).
+    broadcastLobby(result.code);
   });
 
   socket.on(EVENTS.PLAYER_LEAVE, drop);

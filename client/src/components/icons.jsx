@@ -106,3 +106,39 @@ export function SwingIcon(props) {
     </svg>
   );
 }
+
+/* Tutorial vote marks. Vote state is told by shape and words, never by color,
+   because the seat colors already include red, green and yellow. */
+
+export function CheckIcon(props) {
+  return (
+    <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M10 25l9 9 19-20" />
+    </svg>
+  );
+}
+
+export function PlayIcon(props) {
+  return (
+    <svg viewBox="0 0 48 48" fill="currentColor" aria-hidden="true" {...props}>
+      <path d="M15 9.5v29a2 2 0 0 0 3 1.7l23-14.5a2 2 0 0 0 0-3.4L18 7.8a2 2 0 0 0-3 1.7z" />
+    </svg>
+  );
+}
+
+export function SkipIcon(props) {
+  return (
+    <svg viewBox="0 0 48 48" fill="currentColor" aria-hidden="true" {...props}>
+      <path d="M8 11v26a2 2 0 0 0 3.1 1.6L28 26.6a2 2 0 0 0 0-3.2L11.1 9.4A2 2 0 0 0 8 11z" />
+      <rect x="33" y="9" width="6" height="30" rx="2" />
+    </svg>
+  );
+}
+
+export function DashIcon(props) {
+  return (
+    <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" aria-hidden="true" {...props}>
+      <path d="M13 24h22" />
+    </svg>
+  );
+}

@@ -6,9 +6,10 @@
 
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { EVENTS, MAX_PLAYERS } from '@wee/shared/protocol.js';
+import { EVENTS, MAX_PLAYERS, PHASES } from '@wee/shared/protocol.js';
 import { QrCode } from '../components/QrCode.jsx';
 import { StubBanner } from '../components/StubBanner.jsx';
+import { TvVote } from '../components/TvVote.jsx';
 import { canReachFromPhones, joinUrl } from '../lib/joinUrl.js';
 import { cancelLeave, leaveSoon, request, socket } from '../lib/socket.js';
 import { sportName } from '../lib/sports.js';
@@ -72,6 +73,10 @@ export default function HostStub() {
       </main>
     );
   }
+
+  // The tutorial and game screens don't exist yet, so the vote's reveal is
+  // also the end state for 'tutorial' and 'game'.
+  if (lobby.phase !== PHASES.LOBBY) return <TvVote lobby={lobby} />;
 
   const url = joinUrl(code);
   const seats = Array.from(

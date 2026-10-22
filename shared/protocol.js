@@ -20,21 +20,49 @@ export const CODE_LENGTH = 4;
 export const MAX_PLAYERS = 4;
 export const NAME_MAX = 12;
 
+/** The tutorial vote opens when the lobby reaches this many players. */
+export const VOTE_AT_PLAYERS = 4;
+/** How long the vote stays open. Anyone who hasn't voted by then counts as No. */
+export const VOTE_SECONDS = 20;
+
 /** Sports a lobby can be opened for. Art and copy live in client/src/lib/sports.js. */
 export const OPEN_SPORTS = ['tennis'];
 
+/**
+ * Where a lobby is. 'lobby' -> 'vote' -> 'tutorial' | 'game'. A player
+ * leaving during the vote sends it back to 'lobby'.
+ */
+export const PHASES = {
+  LOBBY: 'lobby',
+  VOTE: 'vote',
+  TUTORIAL: 'tutorial',
+  GAME: 'game',
+};
+
+/**
+ * Every lobby snapshot below has this shape:
+ *
+ *   { code, sport, phase, players: [{ slot, name }], vote }
+ *
+ * vote is null in 'lobby'. While the vote is open it says who has voted but
+ * not what they picked: { msLeft, voted: [slot] }. msLeft is relative so that
+ * clock skew between devices doesn't matter. Once resolved, it reveals every
+ * pick: { picks: [{ slot, pick: 'yes' | 'no' | 'none' }] }.
+ */
 export const EVENTS = {
-  /** TV -> server: open a lobby. Ack: { ok, code, sport, players }. */
+  /** TV -> server: open a lobby. Ack: { ok, ...snapshot }. */
   HOST_CREATE: 'host:create',
   /** TV -> server: the TV page went away. */
   HOST_CLOSE: 'host:close',
-  /** TV -> server: current lobby, if this socket hosts it. Ack: { ok, code, sport, players }. */
+  /** TV -> server: current lobby, if this socket hosts it. Ack: { ok, ...snapshot }. */
   LOBBY_GET: 'lobby:get',
-  /** Phone -> server: take a seat. Ack: { ok, code, sport, slot, name, players }. */
+  /** Phone -> server: take a seat. Ack: { ok, slot, name, ...snapshot }. */
   PLAYER_JOIN: 'player:join',
   /** Phone -> server: give the seat back. */
   PLAYER_LEAVE: 'player:leave',
-  /** Server -> everyone in a lobby: { code, sport, players: [{ slot, name }] }. */
+  /** Phone -> server: { watch: boolean }. One final vote per player. Ack: { ok }. */
+  TUTORIAL_VOTE: 'tutorial:vote',
+  /** Server -> everyone in a lobby: the snapshot. */
   LOBBY_UPDATE: 'lobby:update',
   /** Server -> phones: the TV left, so there is nothing left to control. */
   ROOM_CLOSED: 'room:closed',
@@ -47,6 +75,18 @@ export const ERRORS = {
   BAD_VERSION: 'bad-version',
   BAD_SPORT: 'bad-sport',
   SERVER_BUSY: 'server-busy',
+  IN_PROGRESS: 'in-progress',
+  NOT_PLAYER: 'not-player',
+  NO_VOTE: 'no-vote',
+  BAD_VOTE: 'bad-vote',
+  ALREADY_VOTED: 'already-voted',
+};
+
+/** What a resolved vote shows for each player. */
+export const PICKS = {
+  YES: 'yes',
+  NO: 'no',
+  NONE: 'none',
 };
 
 export function isRoomCode(value) {
