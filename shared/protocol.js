@@ -20,21 +20,54 @@ export const CODE_LENGTH = 4;
 export const MAX_PLAYERS = 4;
 export const NAME_MAX = 12;
 
+/** The ready check starts when the lobby reaches this many players. */
+export const READY_AT_PLAYERS = 4;
+/** The 5, 4, 3, 2, 1 after the TV presses Play. */
+export const COUNTDOWN_SECONDS = 5;
+
 /** Sports a lobby can be opened for. Art and copy live in client/src/lib/sports.js. */
 export const OPEN_SPORTS = ['tennis'];
 
+/**
+ * Where a lobby is:
+ *
+ *   'lobby' -> 'ready' -> 'all-ready' -> (TV presses Play) -> 'countdown' -> 'tutorial'
+ *
+ * A player leaving anywhere before 'tutorial' sends it back to 'lobby'.
+ */
+export const PHASES = {
+  LOBBY: 'lobby',
+  READY: 'ready',
+  ALL_READY: 'all-ready',
+  COUNTDOWN: 'countdown',
+  TUTORIAL: 'tutorial',
+};
+
+/**
+ * Every lobby snapshot below has this shape:
+ *
+ *   { code, sport, phase, players: [{ slot, name, ready }], countdown }
+ *
+ * ready is always false outside the 'ready' phase. countdown is null except
+ * in 'countdown', where it is { msLeft }: time remaining, not a timestamp, so
+ * clock skew between devices doesn't matter.
+ */
 export const EVENTS = {
-  /** TV -> server: open a lobby. Ack: { ok, code, sport, players }. */
+  /** TV -> server: open a lobby. Ack: { ok, ...snapshot }. */
   HOST_CREATE: 'host:create',
   /** TV -> server: the TV page went away. */
   HOST_CLOSE: 'host:close',
-  /** TV -> server: current lobby, if this socket hosts it. Ack: { ok, code, sport, players }. */
+  /** TV -> server: current lobby, if this socket hosts it. Ack: { ok, ...snapshot }. */
   LOBBY_GET: 'lobby:get',
-  /** Phone -> server: take a seat. Ack: { ok, code, sport, slot, name, players }. */
+  /** Phone -> server: take a seat. Ack: { ok, slot, name, ...snapshot }. */
   PLAYER_JOIN: 'player:join',
+  /** TV -> server: Play, once everyone is ready. Starts the countdown. Ack: { ok }. */
+  HOST_START: 'host:start',
   /** Phone -> server: give the seat back. */
   PLAYER_LEAVE: 'player:leave',
-  /** Server -> everyone in a lobby: { code, sport, players: [{ slot, name }] }. */
+  /** Phone -> server: { ready: boolean }. Can be toggled until everyone is ready. Ack: { ok }. */
+  PLAYER_READY: 'player:ready',
+  /** Server -> everyone in a lobby: the snapshot. */
   LOBBY_UPDATE: 'lobby:update',
   /** Server -> phones: the TV left, so there is nothing left to control. */
   ROOM_CLOSED: 'room:closed',
@@ -47,6 +80,12 @@ export const ERRORS = {
   BAD_VERSION: 'bad-version',
   BAD_SPORT: 'bad-sport',
   SERVER_BUSY: 'server-busy',
+  IN_PROGRESS: 'in-progress',
+  NOT_PLAYER: 'not-player',
+  NO_READY_CHECK: 'no-ready-check',
+  BAD_READY: 'bad-ready',
+  NOT_HOST: 'not-host',
+  NOT_ALL_READY: 'not-all-ready',
 };
 
 export function isRoomCode(value) {

@@ -41,18 +41,43 @@ function reply(ack, value) {
   if (typeof ack === 'function') ack(value);
 }
 
+function broadcastLobby(code) {
+  io.to(code).emit(EVENTS.LOBBY_UPDATE, store.lobby(code));
+}
+
+/** code -> the timeout that ends that room's countdown. */
+const countdownTimers = new Map();
+
+function clearCountdownTimer(code) {
+  clearTimeout(countdownTimers.get(code));
+  countdownTimers.delete(code);
+}
+
+/** The store decides whether the deadline has passed; this only wakes it up. */
+function armCountdownTimer(code, msLeft) {
+  clearCountdownTimer(code);
+  countdownTimers.set(
+    code,
+    setTimeout(() => {
+      countdownTimers.delete(code);
+      if (store.finishCountdown(code)) broadcastLobby(code);
+    }, msLeft),
+  );
+}
+
 io.on('connection', (socket) => {
   /** Takes this socket out of its room and tells whoever is left. */
   const drop = () => {
     const result = store.remove(socket.id);
     if (!result) return;
+    if (result.closed || result.countdownCancelled) clearCountdownTimer(result.code);
     if (result.closed) {
       socket.to(result.code).emit(EVENTS.ROOM_CLOSED, { code: result.code });
       io.in(result.code).socketsLeave(result.code);
       return;
     }
     socket.leave(result.code);
-    io.to(result.code).emit(EVENTS.LOBBY_UPDATE, store.lobby(result.code));
+    broadcastLobby(result.code);
   };
 
   socket.on(EVENTS.HOST_CREATE, (payload, ack) => {
@@ -82,6 +107,28 @@ io.on('connection', (socket) => {
       socket.to(result.code).emit(EVENTS.LOBBY_UPDATE, store.lobby(result.code));
     }
     reply(ack, result);
+  });
+
+  socket.on(EVENTS.PLAYER_READY, (payload, ack) => {
+    const result = store.setReady(socket.id, payload);
+    if (!result.ok) {
+      reply(ack, result);
+      return;
+    }
+    reply(ack, { ok: true });
+    // Everyone, the sender included, sees who is ready (or the next phase).
+    broadcastLobby(result.code);
+  });
+
+  socket.on(EVENTS.HOST_START, (_payload, ack) => {
+    const result = store.start(socket.id);
+    if (!result.ok) {
+      reply(ack, result);
+      return;
+    }
+    armCountdownTimer(result.code, result.msLeft);
+    reply(ack, { ok: true });
+    broadcastLobby(result.code);
   });
 
   socket.on(EVENTS.PLAYER_LEAVE, drop);

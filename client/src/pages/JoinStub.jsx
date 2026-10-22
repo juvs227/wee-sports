@@ -10,11 +10,13 @@ import {
   CODE_LENGTH,
   EVENTS,
   NAME_MAX,
+  PHASES,
   PROTOCOL_VERSION,
   cleanName,
   isRoomCode,
   normalizeCode,
 } from '@wee/shared/protocol.js';
+import { PhoneReady } from '../components/PhoneReady.jsx';
 import { StubBanner } from '../components/StubBanner.jsx';
 import { errorText } from '../lib/errors.js';
 import { cancelLeave, leaveSoon, request, socket } from '../lib/socket.js';
@@ -44,7 +46,8 @@ export default function JoinStub() {
   const [code, setCode] = useState(() => normalizeCode(params.get('code')));
   const [name, setName] = useState(loadName);
   const [seat, setSeat] = useState(null);
-  const [players, setPlayers] = useState([]);
+  // The latest lobby snapshot: players, phase, and who is ready.
+  const [lobby, setLobby] = useState(null);
   const [error, setError] = useState(null);
   const [joining, setJoining] = useState(false);
   const seated = useRef(false);
@@ -52,12 +55,12 @@ export default function JoinStub() {
   useEffect(() => {
     cancelLeave(EVENTS.PLAYER_LEAVE);
 
-    const onUpdate = (lobby) => setPlayers(lobby?.players ?? []);
+    const onUpdate = (next) => setLobby(next ?? null);
     const lose = (reason) => () => {
       if (!seated.current) return;
       seated.current = false;
       setSeat(null);
-      setPlayers([]);
+      setLobby(null);
       setError(reason);
     };
     const onClosed = lose('closed');
@@ -90,17 +93,20 @@ export default function JoinStub() {
     seated.current = true;
     saveName(cleanName(name));
     setSeat(result);
-    setPlayers(result.players);
+    // Taking the last seat can start the ready check, so keep the whole snapshot.
+    setLobby(result);
   }
 
   function leave() {
     socket.emit(EVENTS.PLAYER_LEAVE);
     seated.current = false;
     setSeat(null);
-    setPlayers([]);
+    setLobby(null);
   }
 
   if (seat) {
+    const players = lobby?.players ?? [];
+    const phase = lobby?.phase ?? PHASES.LOBBY;
     return (
       <main className="stub">
         <StubBanner>Phone screen</StubBanner>
@@ -119,7 +125,11 @@ export default function JoinStub() {
             </p>
           </div>
         </div>
-        <p className="stub__status">Waiting for the host to start…</p>
+        {phase === PHASES.LOBBY ? (
+          <p className="stub__status">Waiting for the host to start…</p>
+        ) : (
+          <PhoneReady lobby={lobby} slot={seat.slot} />
+        )}
 
         <h2>In this lobby</h2>
         <ul className="seats" aria-live="polite">

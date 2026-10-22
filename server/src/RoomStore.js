@@ -8,21 +8,40 @@
  * code that runs in production.
  *
  * Ids are opaque strings (socket ids in production).
+ *
+ * There are no timers in here either. The countdown deadline is read from an
+ * injectable clock, and index.js owns the setTimeout that calls
+ * finishCountdown().
  */
 
 import {
   CODE_ALPHABET,
   CODE_LENGTH,
+  COUNTDOWN_SECONDS,
   ERRORS,
   MAX_PLAYERS,
   NAME_MAX,
   OPEN_SPORTS,
+  PHASES,
   PROTOCOL_VERSION,
+  READY_AT_PLAYERS,
   cleanName,
   isRoomCode,
 } from '@wee/shared/protocol.js';
 
 const MAX_CODE_ATTEMPTS = 50;
+
+/**
+ * Where a lobby goes once every player is ready. The one place to change if
+ * something (the tutorial vote, say) should come between the ready check and
+ * the TV's Play button.
+ */
+function nextPhaseAfterReady() {
+  return PHASES.ALL_READY;
+}
+
+/** Phases where a full lobby is part of the deal, so a leaver sends everyone back to 'lobby'. */
+const NEEDS_FULL_LOBBY = new Set([PHASES.READY, PHASES.ALL_READY, PHASES.COUNTDOWN]);
 
 export function randomCode(random = Math.random) {
   let code = '';
@@ -33,16 +52,22 @@ export function randomCode(random = Math.random) {
 }
 
 export class RoomStore {
-  /** code -> { code, sport, hostId, players: Map<id, { slot, name }> } */
+  /**
+   * code -> { code, sport, hostId, phase, players: Map<id, { slot, name, ready }>, deadline }
+   *
+   * deadline is when the countdown ends, or null when none is running.
+   */
   #rooms = new Map();
   /** id -> { code, role: 'host' | 'player' } */
   #members = new Map();
   #makeCode;
   #maxPlayers;
+  #now;
 
-  constructor({ makeCode = randomCode, maxPlayers = MAX_PLAYERS } = {}) {
+  constructor({ makeCode = randomCode, maxPlayers = MAX_PLAYERS, now = Date.now } = {}) {
     this.#makeCode = makeCode;
     this.#maxPlayers = maxPlayers;
+    this.#now = now;
   }
 
   get roomCount() {
@@ -64,7 +89,7 @@ export class RoomStore {
     }
     if (!code) return { ok: false, error: ERRORS.SERVER_BUSY };
 
-    this.#rooms.set(code, { code, sport, hostId, players: new Map() });
+    this.#rooms.set(code, { code, sport, hostId, phase: PHASES.LOBBY, players: new Map(), deadline: null });
     this.#members.set(hostId, { code, role: 'host' });
     return { ok: true, ...this.lobby(code) };
   }
@@ -79,11 +104,61 @@ export class RoomStore {
 
     const slot = this.#freeSlot(room);
     if (slot === null) return { ok: false, error: ERRORS.ROOM_FULL };
+    // Seats only change in the lobby. A newcomer can't drop into a ready check
+    // or a game that has started.
+    if (room.phase !== PHASES.LOBBY) return { ok: false, error: ERRORS.IN_PROGRESS };
 
     const unique = this.#uniqueName(room, cleaned);
-    room.players.set(playerId, { slot, name: unique });
+    room.players.set(playerId, { slot, name: unique, ready: false });
     this.#members.set(playerId, { code, role: 'player' });
+    if (room.players.size >= READY_AT_PLAYERS) room.phase = PHASES.READY;
     return { ok: true, slot, name: unique, ...this.lobby(code) };
+  }
+
+  /**
+   * Ready or not ready. Players can change their mind until everyone is
+   * ready; then the lobby moves on and the result says so.
+   */
+  setReady(playerId, payload) {
+    const member = this.#members.get(playerId);
+    if (member?.role !== 'player') return { ok: false, error: ERRORS.NOT_PLAYER };
+    const room = this.#rooms.get(member.code);
+    if (room?.phase !== PHASES.READY) return { ok: false, error: ERRORS.NO_READY_CHECK };
+    const ready = payload?.ready;
+    if (typeof ready !== 'boolean') return { ok: false, error: ERRORS.BAD_READY };
+
+    room.players.get(playerId).ready = ready;
+    const advanced = [...room.players.values()].every((player) => player.ready);
+    if (advanced) {
+      this.#clearReady(room);
+      room.phase = nextPhaseAfterReady();
+    }
+    return { ok: true, code: room.code, advanced };
+  }
+
+  /** The TV's Play button. Only the room's TV, and only once everyone is ready. */
+  start(hostId) {
+    const member = this.#members.get(hostId);
+    if (member?.role !== 'host') return { ok: false, error: ERRORS.NOT_HOST };
+    const room = this.#rooms.get(member.code);
+    if (room?.phase !== PHASES.ALL_READY) return { ok: false, error: ERRORS.NOT_ALL_READY };
+
+    room.phase = PHASES.COUNTDOWN;
+    room.deadline = this.#now() + COUNTDOWN_SECONDS * 1000;
+    return { ok: true, code: room.code, msLeft: COUNTDOWN_SECONDS * 1000 };
+  }
+
+  /**
+   * Moves on to the tutorial once the countdown's deadline has passed.
+   * Returns null and changes nothing otherwise, so a stale or early timer is
+   * harmless.
+   */
+  finishCountdown(code) {
+    const room = this.#rooms.get(code);
+    if (room?.phase !== PHASES.COUNTDOWN || this.#now() < room.deadline) return null;
+    room.phase = PHASES.TUTORIAL;
+    room.deadline = null;
+    return { code };
   }
 
   /** What the TV and phones render. Null when the room doesn't exist. */
@@ -91,9 +166,11 @@ export class RoomStore {
     const room = this.#rooms.get(code);
     if (!room) return null;
     const players = [...room.players.values()]
-      .map(({ slot, name }) => ({ slot, name }))
+      .map(({ slot, name, ready }) => ({ slot, name, ready }))
       .sort((a, b) => a.slot - b.slot);
-    return { code: room.code, sport: room.sport, players };
+    const countdown =
+      room.phase === PHASES.COUNTDOWN ? { msLeft: Math.max(0, room.deadline - this.#now()) } : null;
+    return { code: room.code, sport: room.sport, phase: room.phase, players, countdown };
   }
 
   /** The code this id is hosting, or null. */
@@ -124,7 +201,20 @@ export class RoomStore {
     }
 
     room.players.delete(id);
+    // Everything from the ready check to the countdown needs a full lobby, so a
+    // leaver ends it. The next player to fill the lobby starts a fresh check.
+    if (NEEDS_FULL_LOBBY.has(room.phase)) {
+      const countdownCancelled = room.phase === PHASES.COUNTDOWN;
+      room.phase = PHASES.LOBBY;
+      room.deadline = null;
+      this.#clearReady(room);
+      if (countdownCancelled) return { code: room.code, closed: false, countdownCancelled };
+    }
     return { code: room.code, closed: false };
+  }
+
+  #clearReady(room) {
+    for (const player of room.players.values()) player.ready = false;
   }
 
   /** Lowest open seat, so a seat freed by a leaver is the next one filled. */
