@@ -1,0 +1,102 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
+import { once } from 'node:events';
+import { spawn } from 'node:child_process';
+import { createInterface } from 'node:readline';
+import { WebSocket } from 'ws';
+import { attachRelay } from './relay.js';
+import { createPlayer, triggerPlayerSwing, updatePlayerMotion } from '../src/World/components/player.js';
+
+test('phone events reach only games in the same room; invalid events are rejected', async () => {
+  const server = createServer();
+  const relay = attachRelay(server);
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const base = `ws://127.0.0.1:${server.address().port}/swings`;
+  const clients = [];
+  async function connect(room, role) {
+    const socket = new WebSocket(`${base}?room=${room}&role=${role}`);
+    clients.push(socket);
+    await once(socket, 'open');
+    return socket;
+  }
+  const next = socket => once(socket, 'message', { signal: AbortSignal.timeout(2000) }).then(([data]) => JSON.parse(data));
+  try {
+    const game = await connect('room-one', 'game');
+    const phone = await connect('room-one', 'phone');
+    const other = await connect('room-two', 'game');
+    const otherMessages = [];
+    other.on('message', data => otherMessages.push(data));
+    const expected = { type: 'swing', id: 'test-1', label: 'Backhand', hand: 'Left' };
+    const received = next(game);
+    const ack = next(phone);
+    phone.send(JSON.stringify(expected));
+    assert.deepEqual(await received, expected);
+    assert.equal((await ack).receivers, 1);
+    const invalid = next(phone);
+    phone.send(JSON.stringify({ ...expected, label: 'Unknown' }));
+    assert.equal((await invalid).type, 'error');
+    const malformed = next(phone);
+    phone.send('not json');
+    assert.equal((await malformed).type, 'error');
+    const wrongRole = next(game);
+    game.send(JSON.stringify(expected));
+    assert.equal((await wrongRole).type, 'error');
+    await new Promise(resolve => setTimeout(resolve, 50));
+    assert.equal(otherMessages.length, 0);
+  } finally {
+    for (const client of clients) client.terminate();
+    for (const client of relay.clients) client.terminate();
+    await new Promise(resolve => relay.close(resolve));
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('stroke and playing hand control animation direction, then return to idle', () => {
+  const player = createPlayer();
+  triggerPlayerSwing(player, { label: 'Forehand', hand: 'Right' });
+  updatePlayerMotion(player, player.userData.swing.started + 162.5);
+  assert.ok(player.rotation.y > 0);
+  triggerPlayerSwing(player, { label: 'Backhand', hand: 'Right' });
+  updatePlayerMotion(player, player.userData.swing.started + 162.5);
+  assert.ok(player.rotation.y < 0);
+  triggerPlayerSwing(player, { label: 'Backhand', hand: 'Left' });
+  updatePlayerMotion(player, player.userData.swing.started + 162.5);
+  assert.ok(player.rotation.y > 0);
+  updatePlayerMotion(player, player.userData.swing.started + 650);
+  assert.equal(player.rotation.y, 0);
+  assert.equal(player.userData.swing, undefined);
+  player.geometry.dispose();
+  player.material.dispose();
+});
+
+test('combined server serves both pages and controller module', async () => {
+  const process = spawn(globalThis.process.execPath, ['server/main.js'], {
+    env: { ...globalThis.process.env, PORT: '0' }, stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let errors = '';
+  process.stderr.on('data', data => { errors += data; });
+  const lines = createInterface({ input: process.stdout });
+  const timeout = setTimeout(() => process.kill(), 10000);
+  try {
+    let port;
+    for await (const line of lines) {
+      const match = line.match(/^Game: http:\/\/localhost:(\d+)/);
+      if (match) { port = Number(match[1]); break; }
+    }
+    assert.ok(port, `Server failed to start: ${errors}`);
+    const base = `http://127.0.0.1:${port}`;
+    for (const path of ['/', '/controller.html?room=room-one', '/src/controller/main.js']) {
+      const response = await fetch(base + path);
+      assert.equal(response.status, 200, path);
+      assert.ok((await response.text()).length > 100);
+    }
+  } finally {
+    clearTimeout(timeout);
+    lines.close();
+    const exited = once(process, 'exit');
+    process.kill();
+    if (process.exitCode === null && process.signalCode === null) await exited;
+  }
+});

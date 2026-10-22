@@ -3,7 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { createGround } from './components/ground.js';
 import { createNet } from './components/net.js';
 import { createCourt } from './components/court.js';
-import { createPlayer, updatePlayerMotion } from './components/player.js';
+import { createPlayer, updatePlayerMotion, triggerPlayerSwing } from './components/player.js';
 
 export class World {
     constructor(container) {
@@ -62,13 +62,16 @@ export class World {
         });
     }
 
+    swing(event) {
+        triggerPlayerSwing(this.player, event);
+    }
+
     start() {
         const animate = () => {
             requestAnimationFrame(animate);
 
 
-            const time = Date.now() * 0.002;
-            this.player.position.x = Math.sin(time) * 3;
+            updatePlayerMotion(this.player);
 
             this.controls.update();
             this.renderer.render(this.scene, this.camera);

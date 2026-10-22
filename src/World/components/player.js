@@ -15,9 +15,24 @@ export function createPlayer() {
     return player;
 }
 
-export function updatePlayerMotion(player) {
-    const time = Date.now() * 0.002;
-    player.position.x = Math.sin(time) * 3;
+export function triggerPlayerSwing(player, { label, hand }) {
+    if (!['Forehand', 'Backhand'].includes(label)) return;
+    player.userData.swing = { started: performance.now(), label, hand };
+}
+
+export function updatePlayerMotion(player, now = performance.now()) {
+    const swing = player.userData.swing;
+    if (!swing) return;
+    const progress = Math.min((now - swing.started) / 650, 1);
+    const side = (swing.label === 'Forehand' ? 1 : -1) * (swing.hand === 'Left' ? -1 : 1);
+    player.rotation.y = side * Math.sin(progress * Math.PI * 2) * 0.9;
+    player.rotation.z = side * Math.sin(progress * Math.PI) * 0.12;
+    player.material.color.set(swing.label === 'Forehand' ? 0x22c55e : 0xa78bfa);
+    if (progress === 1) {
+        player.rotation.set(0, 0, 0);
+        player.material.color.set(0x3b82f6);
+        delete player.userData.swing;
+    }
 }
 
 

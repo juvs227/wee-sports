@@ -4,13 +4,15 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build"
+    "dev": "node server/main.js",
+    "build": "vite build",
+    "test": "node --test server/*.test.js"
   },
   "devDependencies": {
     "vite": "^5.0.0"
   },
   "dependencies": {
-    "three": "^0.160.0"
+    "three": "^0.160.0",
+    "ws": "^8.22.0"
   }
 }
