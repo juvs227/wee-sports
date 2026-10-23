@@ -1,3 +1,4 @@
+// components/world.ts
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
@@ -93,7 +94,7 @@ export class World {
         });
         this.scene.add(this.player2.group);
 
-        this.ball = createBall(0, 0.3, 5.0); // Place ball matching its radius on the court floor
+        this.ball = createBall(0, 0.3, 5.0); 
         this.scene.add(this.ball);
 
         window.addEventListener('resize', this.handleResize);
@@ -140,28 +141,37 @@ export class World {
     }
 
     private handleKeyDown = (event: KeyboardEvent): void => {
-        if (event.key.toLowerCase() === 'k') {
-            // Check distance for Player 1
+        const key = event.key.toLowerCase();
+
+        // 'K' = Standard Front Hit / Forehand, 'J' = Backhit / Backhand
+        if (key === 'k' || key === 'j') {
             const dist1 = this.player1.group.position.distanceTo(this.ball.position);
-            // Check distance for Player 2
             const dist2 = this.player2.group.position.distanceTo(this.ball.position);
+            const REACH = 1.5;
 
-            const SERVE_REACH = 1.5;
+            const isBackhand = key === 'j';
+            const animName = isBackhand ? 'SwingLeft' : 'SwingRight';
 
-            if (dist1 <= SERVE_REACH) {
-                // Player 1 serves toward opponent (-Z direction)
+            if (dist1 <= REACH) {
+                this.player1.playAnimation(animName);
+
+                // Backhit gets slightly wider angle/variance variations
+                const xForce = isBackhand ? (Math.random() - 0.5) * 0.12 : (Math.random() - 0.5) * 0.08;
                 const randomServe = new THREE.Vector3(
-                    (Math.random() - 0.5) * 0.08,             // X: -0.04 to 0.04
-                    THREE.MathUtils.randFloat(0.15, 0.22),     // Y: Positive (0.15 to 0.22)
-                    -THREE.MathUtils.randFloat(0.18, 0.28)     // Z: Negative (-0.18 to -0.28)
+                    xForce,
+                    THREE.MathUtils.randFloat(0.15, 0.22),
+                    -THREE.MathUtils.randFloat(0.18, 0.28)
                 );
                 serveBall(this.ball, randomServe);
-            } else if (dist2 <= SERVE_REACH) {
-                // Player 2 serves toward opponent (+Z direction)
+
+            } else if (dist2 <= REACH) {
+                this.player2.playAnimation(animName);
+
+                const xForce = isBackhand ? (Math.random() - 0.5) * 0.12 : (Math.random() - 0.5) * 0.08;
                 const randomServe = new THREE.Vector3(
-                    (Math.random() - 0.5) * 0.08,             // X: -0.04 to 0.04
-                    THREE.MathUtils.randFloat(0.15, 0.22),     // Y: Positive (0.15 to 0.22)
-                    THREE.MathUtils.randFloat(0.18, 0.28)      // Z: Positive (0.18 to 0.28)
+                    xForce,
+                    THREE.MathUtils.randFloat(0.15, 0.22),
+                    THREE.MathUtils.randFloat(0.18, 0.28)
                 );
                 serveBall(this.ball, randomServe);
             }
@@ -169,19 +179,14 @@ export class World {
     };
 
     public playerServe(playerNumber: 1 | 2 = 1): void {
-        const targetPlayer = playerNumber === 1 ? this.player1 : this.player2; // Note: adjust to match your player controllers
+        const targetPlayer = playerNumber === 1 ? this.player1 : this.player2;
+        const playerPosition = targetPlayer.group.position;
 
-        // Get the position of the player (assuming player has a group or position property)
-        // Adjust `targetPlayer.group.position` depending on how your player position is stored
-        const playerPosition = this.player1.group.position; // or check which player is serving
-
-        // Calculate distance from the player to the ball
         const distance = playerPosition.distanceTo(this.ball.position);
-        const maxServeDistance = 1.5; // Maximum reach to be able to serve
+        const maxServeDistance = 1.5;
 
         if (distance <= maxServeDistance) {
-            // Player is close enough, execute the serve!
-            const serveVelocity = new THREE.Vector3(0.0, 0.18, -0.22);
+            const serveVelocity = new THREE.Vector3(0.0, 0.18, playerNumber === 1 ? -0.22 : 0.22);
             serveBall(this.ball, serveVelocity);
         } else {
             console.log("Too far from the ball to serve!");
@@ -207,7 +212,15 @@ export class World {
             this.updatePlayer(this.player1, this.player1Input, delta);
             this.updatePlayer(this.player2, this.player2Input, delta);
 
-            updateBallMotion(this.ball, delta);
+            // Determine which player's racket is active for ball collision checks
+            let activeRacket: THREE.Object3D | undefined = undefined;
+            if (this.player1.isSwinging && this.player1.racket) {
+                activeRacket = this.player1.racket;
+            } else if (this.player2.isSwinging && this.player2.racket) {
+                activeRacket = this.player2.racket;
+            }
+
+            updateBallMotion(this.ball, delta, activeRacket);
 
             this.controls.update();
             this.renderer.render(this.scene, this.camera);
@@ -223,7 +236,7 @@ export class World {
         }
 
         window.removeEventListener('resize', this.handleResize);
-        window.removeEventListener('keydown', this.handleKeyDown); // Properly cleaned up
+        window.removeEventListener('keydown', this.handleKeyDown);
     }
 
     public dispose(): void {

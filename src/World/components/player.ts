@@ -4,6 +4,8 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 export interface PlayerController {
     group: THREE.Group;
+    racket: THREE.Object3D | null;
+    handSocket: THREE.Object3D | null;
     mixer: THREE.AnimationMixer | null;
     actions: Record<string, THREE.AnimationAction>;
     currentAnimation: string | null;
@@ -54,6 +56,8 @@ export function createPlayer(
 
     const controller: PlayerController = {
         group,
+        racket: null,
+        handSocket: null,
         mixer: null,
         actions: {},
         currentAnimation: null,
@@ -104,6 +108,7 @@ export function createPlayer(
         },
 
         update(delta: number): void {
+            // Only update the animation mixer; no manual quaternion hacks
             this.mixer?.update(delta);
         },
 
@@ -127,8 +132,8 @@ export function createPlayer(
                 minZ,
                 maxZ
             );
-
-            this.group.rotation.y = Math.atan2(nx, nz);
+            // unnecessary rotation for now, as the player model is facing forward by default
+            // this.group.rotation.y = Math.atan2(nx, nz);
         },
 
         setPosition(newX: number, newZ: number): void {
@@ -159,8 +164,6 @@ export function createPlayer(
                 child.castShadow = true;
                 child.receiveShadow = true;
 
-                // Clone materials so recoloring one player does not
-                // unintentionally recolor another player.
                 const recolor = (material: THREE.Material) => {
                     const cloned = material.clone();
 
@@ -202,7 +205,6 @@ export function createPlayer(
                         controller.mixer.clipAction(clip);
                 }
 
-                // Prefer the requested animation names if present.
                 const initialAnimation = controller.actions['Idle']
                     ? 'Idle'
                     : controller.actions['WalkCycle']
@@ -214,17 +216,20 @@ export function createPlayer(
                 }
             }
 
-            // Attach the racket to the animated hand socket.
+            // Find the HandSocket bone/object inside the model hierarchy
             const handSocket = model.getObjectByName('HandSocket');
 
             if (handSocket) {
+                controller.handSocket = handSocket;
+
                 loader.load(
                     racketPath,
                     (racketGltf) => {
-
                         const racketScene = racketGltf.scene;
                         racketScene.scale.set(racketScale, racketScale, racketScale);
+                        
                         handSocket.add(racketScene);
+                        controller.racket = racketScene;
                     },
                     undefined,
                     (error) => {

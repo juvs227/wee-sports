@@ -1,13 +1,70 @@
 // components/ball.ts
 import * as THREE from 'three';
 const BALL_RADIUS = 0.1; // Define the radius of the ball for collision detection
+const RACKET_HIT_BUFFER = 0.5;
 // Define an interface for the custom physics properties stored in userData
 interface BallUserData {
     velocity: THREE.Vector3;
+    pendingVelocity: THREE.Vector3;
     gravity: number;
     isWaitingForServe: boolean;   // Tracks if the ball is held/waiting
+    waitingForRacketHit: boolean;
     servePosition: THREE.Vector3; // Default position to reset to
     slideTimer?: number;
+}
+
+function racketTouchesBall(
+    racket: THREE.Object3D,
+    ballPosition: THREE.Vector3
+): boolean {
+    racket.updateWorldMatrix(true, true);
+    const closestPoint = new THREE.Vector3();
+    const a = new THREE.Vector3();
+    const b = new THREE.Vector3();
+    const c = new THREE.Vector3();
+    const worldMatrix = new THREE.Matrix4();
+
+    let touching = false;
+    racket.traverse((object) => {
+        if (touching || !(object instanceof THREE.Mesh)) {
+            return;
+        }
+
+        const position = object.geometry.getAttribute('position');
+        const index = object.geometry.getIndex();
+        if (!position) {
+            return;
+        }
+
+        worldMatrix.copy(object.matrixWorld);
+        const triangleCount = index ? index.count / 3 : position.count / 3;
+
+        for (let triangle = 0; triangle < triangleCount; triangle++) {
+            const first = triangle * 3;
+            const indexA = index ? index.getX(first) : first;
+            const indexB = index ? index.getX(first + 1) : first + 1;
+            const indexC = index ? index.getX(first + 2) : first + 2;
+
+            a.fromBufferAttribute(position, indexA).applyMatrix4(worldMatrix);
+            b.fromBufferAttribute(position, indexB).applyMatrix4(worldMatrix);
+            c.fromBufferAttribute(position, indexC).applyMatrix4(worldMatrix);
+
+            new THREE.Triangle(a, b, c).closestPointToPoint(
+                ballPosition,
+                closestPoint
+            );
+
+            if (
+                ballPosition.distanceToSquared(closestPoint) <=
+                RACKET_HIT_BUFFER * RACKET_HIT_BUFFER
+            ) {
+                touching = true;
+                return;
+            }
+        }
+    });
+
+    return touching;
 }
 
 export function createBall(x: number, y: number, z: number): THREE.Mesh {
@@ -27,8 +84,10 @@ export function createBall(x: number, y: number, z: number): THREE.Mesh {
     // Initialize velocity, gravity, and serve properties with explicit typing
     ball.userData = {
         velocity: new THREE.Vector3(0, 0, 0), // Starts stationary while waiting for serve
+        pendingVelocity: new THREE.Vector3(0, 0, 0),
         gravity: 0.006,                       // Downward pull per frame
         isWaitingForServe: true,
+        waitingForRacketHit: false,
         servePosition: new THREE.Vector3(x, y, z)
     } as BallUserData;
 
@@ -41,7 +100,9 @@ export function serveBall(ball: THREE.Mesh, initialVelocity: THREE.Vector3): voi
     // Only serve if the ball is currently waiting
     if (userData.isWaitingForServe) {
         userData.isWaitingForServe = false;
-        userData.velocity.copy(initialVelocity);
+        userData.velocity.set(0, 0, 0);
+        userData.pendingVelocity.copy(initialVelocity);
+        userData.waitingForRacketHit = true;
     }
 }
 
@@ -49,11 +110,17 @@ export function resetBallForServe(ball: THREE.Mesh): void {
     const userData = ball.userData as BallUserData;
     userData.isWaitingForServe = true;
     userData.velocity.set(0, 0, 0);
+    userData.pendingVelocity.set(0, 0, 0);
+    userData.waitingForRacketHit = false;
     userData.slideTimer = 0; // Reset the slide timer
     ball.position.copy(userData.servePosition);
 }
 
-export function updateBallMotion(ball: THREE.Mesh, delta: number): void {
+export function updateBallMotion(
+    ball: THREE.Mesh,
+    delta: number,
+    racket?: THREE.Object3D
+): void {
     const userData = ball.userData as BallUserData;
 
     if (userData.isWaitingForServe) {
@@ -61,6 +128,14 @@ export function updateBallMotion(ball: THREE.Mesh, delta: number): void {
     }
 
     const frameScale = delta * 60;
+
+    if (userData.waitingForRacketHit) {
+        if (!racket || !racketTouchesBall(racket, ball.position)) {
+            return;
+        }
+        userData.velocity.copy(userData.pendingVelocity);
+        userData.waitingForRacketHit = false;
+    }
 
     // 1. Apply gravity to vertical velocity
     userData.velocity.y -= userData.gravity * frameScale;
