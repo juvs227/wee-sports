@@ -13,6 +13,7 @@ import {
     createBall,
     updateBallMotion,
     serveBall,
+    type BallPlayer,
 } from './components/ball';
 
 import {
@@ -162,7 +163,7 @@ export class World {
                     THREE.MathUtils.randFloat(0.15, 0.22),
                     -THREE.MathUtils.randFloat(0.18, 0.28)
                 );
-                serveBall(this.ball, randomServe);
+                serveBall(this.ball, randomServe, 'player1');
 
             } else if (dist2 <= REACH) {
                 this.player2.playAnimation(animName);
@@ -173,7 +174,7 @@ export class World {
                     THREE.MathUtils.randFloat(0.15, 0.22),
                     THREE.MathUtils.randFloat(0.18, 0.28)
                 );
-                serveBall(this.ball, randomServe);
+                serveBall(this.ball, randomServe, 'player2');
             }
         }
     };
@@ -187,10 +188,14 @@ export class World {
 
         if (distance <= maxServeDistance) {
             const serveVelocity = new THREE.Vector3(0.0, 0.18, playerNumber === 1 ? -0.22 : 0.22);
-            serveBall(this.ball, serveVelocity);
+            serveBall(this.ball, serveVelocity, this.toBallPlayer(playerNumber));
         } else {
             console.log("Too far from the ball to serve!");
         }
+    }
+
+    private toBallPlayer(playerNumber: 1 | 2): BallPlayer {
+        return playerNumber === 1 ? 'player1' : 'player2';
     }
 
     public start(): void {

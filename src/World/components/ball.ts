@@ -2,8 +2,9 @@
 import * as THREE from 'three';
 const BALL_RADIUS = 0.1; // Define the radius of the ball for collision detection
 const RACKET_HIT_BUFFER = 0.5;
+const COURT_BOUNDS = { width: 4.115, length: 11.885 };
 // Define an interface for the custom physics properties stored in userData
-interface BallUserData {
+export interface BallUserData {
     velocity: THREE.Vector3;
     pendingVelocity: THREE.Vector3;
     gravity: number;
@@ -11,8 +12,13 @@ interface BallUserData {
     waitingForRacketHit: boolean;
     servePosition: THREE.Vector3; // Default position to reset to
     slideTimer?: number;
+    scorePlayer1: number;         // Score tracking for Player 1 (+ve side)
+    scorePlayer2: number;         // Score tracking for Player 2 (-ve side)
+    bounceCount: number;          // How many times ball hit the ground
+    firstBounceInBounds: boolean; // Was the 1st bounce inside court bounds?
+    lastHitBy?: 'player1' | 'player2'; // Who last hit/served the ball
 }
-
+export type BallPlayer = 'player1' | 'player2';
 function racketTouchesBall(
     racket: THREE.Object3D,
     ballPosition: THREE.Vector3
@@ -88,13 +94,19 @@ export function createBall(x: number, y: number, z: number): THREE.Mesh {
         gravity: 0.006,                       // Downward pull per frame
         isWaitingForServe: true,
         waitingForRacketHit: false,
-        servePosition: new THREE.Vector3(x, y, z)
+        servePosition: new THREE.Vector3(x, y, z),
+        scorePlayer1: 0,
+        scorePlayer2: 0
     } as BallUserData;
 
     return ball;
 }
 
-export function serveBall(ball: THREE.Mesh, initialVelocity: THREE.Vector3): void {
+export function serveBall(
+    ball: THREE.Mesh,
+    initialVelocity: THREE.Vector3,
+    player?: BallPlayer
+): void {
     const userData = ball.userData as BallUserData;
 
     // Only serve if the ball is currently waiting
@@ -103,16 +115,64 @@ export function serveBall(ball: THREE.Mesh, initialVelocity: THREE.Vector3): voi
         userData.velocity.set(0, 0, 0);
         userData.pendingVelocity.copy(initialVelocity);
         userData.waitingForRacketHit = true;
+        userData.lastHitBy = player;
     }
 }
 
-export function resetBallForServe(ball: THREE.Mesh): void {
+export function resetBallForServe(
+    ball: THREE.Mesh,
+    courtBounds: { width: number; length: number } = COURT_BOUNDS
+): void {
     const userData = ball.userData as BallUserData;
+
+    // Ensure properties exist
+    userData.scorePlayer1 = userData.scorePlayer1 ?? 0;
+    userData.scorePlayer2 = userData.scorePlayer2 ?? 0;
+    userData.bounceCount = userData.bounceCount ?? 0;
+    userData.firstBounceInBounds = userData.firstBounceInBounds ?? false;
+
+    const zPos = ball.position.z;
+    let pointWinner: 'player1' | 'player2';
+
+    // A valid landing that is not returned gives the point to the hitter.
+    if (userData.firstBounceInBounds) {
+        if (userData.lastHitBy) {
+            pointWinner = userData.lastHitBy;
+        } else {
+            pointWinner = zPos > 0 ? 'player2' : 'player1';
+        }
+    }
+    // 2. Ball went out, hit net, or failed to land in bounds -> Point goes to
+    // the opponent of the player who hit the ball.
+    else {
+        if (userData.lastHitBy) {
+            pointWinner = userData.lastHitBy === 'player1' ? 'player2' : 'player1';
+        } else if (zPos > 0) {
+            pointWinner = 'player2';
+        } else {
+            pointWinner = 'player1';
+        }
+    }
+
+    // Award score and log
+    if (pointWinner === 'player1') {
+        userData.scorePlayer1++;
+        console.log(`[SCORE] Player 1 scored! Current Score -> Player 1: ${userData.scorePlayer1} | Player 2: ${userData.scorePlayer2}`);
+    } else {
+        userData.scorePlayer2++;
+        console.log(`[SCORE] Player 2 scored! Current Score -> Player 1: ${userData.scorePlayer1} | Player 2: ${userData.scorePlayer2}`);
+    }
+
+    // Reset ball state for serve
     userData.isWaitingForServe = true;
     userData.velocity.set(0, 0, 0);
     userData.pendingVelocity.set(0, 0, 0);
     userData.waitingForRacketHit = false;
-    userData.slideTimer = 0; // Reset the slide timer
+    userData.slideTimer = 0;
+    userData.bounceCount = 0;
+    userData.firstBounceInBounds = false;
+    userData.lastHitBy = undefined;
+
     ball.position.copy(userData.servePosition);
 }
 
@@ -146,7 +206,7 @@ export function updateBallMotion(
     // 3. Ground Collision, Bouncing, and Sliding
     if (ball.position.y <= BALL_RADIUS) {
         ball.position.y = BALL_RADIUS; // Snap to ground level
-
+        handleGroundBounce(ball);
         // If bounce velocity is low, treat it as sliding/rolling on the floor
         if (Math.abs(userData.velocity.y) < 0.04) {
             userData.velocity.y = 0;
@@ -178,8 +238,24 @@ export function updateBallMotion(
         }
     }
 
-    // 4. Out of bounds fallback check (if it flies past court edges)
-    // if (Math.abs(ball.position.z) > 6 || Math.abs(ball.position.x) > 3.5) {
-    //     resetBallForServe(ball);
-    // }
+}
+
+export function handleGroundBounce(
+    ball: THREE.Mesh,
+    courtBounds: { width: number; length: number } = COURT_BOUNDS
+): void {
+    const userData = ball.userData as BallUserData;
+
+    userData.bounceCount = (userData.bounceCount ?? 0) + 1;
+
+    const xPos = ball.position.x;
+    const zPos = ball.position.z;
+
+    // Check if the bounce is inside the valid court area
+    const isInside = Math.abs(xPos) <= courtBounds.width && Math.abs(zPos) <= courtBounds.length;
+
+    if (userData.bounceCount === 1) {
+        // Record whether the first bounce landed inside
+        userData.firstBounceInBounds = isInside;
+    }
 }
