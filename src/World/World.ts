@@ -51,7 +51,7 @@ export class World {
             1000
         );
 
-        this.camera.position.set(0, 5, 10);
+        this.camera.position.set(0, 4, 15);
         this.camera.lookAt(0, 0, 0);
 
         this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -79,7 +79,7 @@ export class World {
         this.scene.add(createNet());
         this.scene.add(createCourt());
 
-        this.player1 = createPlayer(0, 0.25, 5, 0x3b82f6, {
+        this.player1 = createPlayer(0, 0.25, 10, 0x3b82f6, {
             minX: this.courtMinX,
             maxX: this.courtMaxX,
             minZ: 1,
@@ -87,7 +87,7 @@ export class World {
         });
         this.scene.add(this.player1.group);
 
-        this.player2 = createPlayer(0, 0.25, -5, 0xef4444, {
+        this.player2 = createPlayer(0, 0.25, -10, 0xef4444, {
             minX: this.courtMinX,
             maxX: this.courtMaxX,
             minZ: -11.5,
@@ -95,7 +95,7 @@ export class World {
         });
         this.scene.add(this.player2.group);
 
-        this.ball = createBall(0, 0.3, 5.0); 
+        this.ball = createBall(0, 0.3, 10.0); 
         this.scene.add(this.ball);
 
         window.addEventListener('resize', this.handleResize);
@@ -160,7 +160,7 @@ export class World {
                 const xForce = isBackhand ? (Math.random() - 0.5) * 0.12 : (Math.random() - 0.5) * 0.08;
                 const randomServe = new THREE.Vector3(
                     xForce,
-                    THREE.MathUtils.randFloat(0.15, 0.22),
+                    THREE.MathUtils.randFloat(0.18, 0.25),
                     -THREE.MathUtils.randFloat(0.18, 0.28)
                 );
                 serveBall(this.ball, randomServe, 'player1');
@@ -171,8 +171,8 @@ export class World {
                 const xForce = isBackhand ? (Math.random() - 0.5) * 0.12 : (Math.random() - 0.5) * 0.08;
                 const randomServe = new THREE.Vector3(
                     xForce,
-                    THREE.MathUtils.randFloat(0.15, 0.22),
-                    THREE.MathUtils.randFloat(0.18, 0.28)
+                    THREE.MathUtils.randFloat(0.15, 0.23),
+                    THREE.MathUtils.randFloat(0.20, 0.32)
                 );
                 serveBall(this.ball, randomServe, 'player2');
             }
