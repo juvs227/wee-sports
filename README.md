@@ -5,7 +5,8 @@ laptop into the TV, pick a sport, and everyone joins by scanning a QR code. No
 console, no app install. The goal is zero to playing in under two minutes.
 
 This branch (`week4-reconnect`) builds on `ready-check` with a focused Week 4
-reconnect change. It keeps the existing screens and four-player ready flow.
+reconnect change and a separate Week 5 server stress-test command. It keeps the
+existing screens and four-player ready flow.
 
 ### Week 4 reconnect behavior
 
@@ -44,6 +45,65 @@ For a device check, join from four separate phones/browser profiles, then:
 5. Reopen the same controller in a second tab; verify only the new tab has control.
 6. Stop/restart the server; verify the old session reports that the game has ended.
 
+### Week 5: measure concurrent lobby capacity
+
+```bash
+npm run stress
+```
+
+The runner starts the existing server in a separate process on an unused local
+port. It opens **10, 25, 50, 100, then 200 lobbies**, retaining earlier connections.
+Each lobby has **four simulated phones and one TV**. One phone per lobby toggles
+ready every 250 ms; the other three remain not ready so the lobby stays in the
+ready phase. Each toggle uses the real Socket.io handler and broadcasts to the
+whole lobby. Each stage measures 10 seconds of traffic after connections finish.
+
+Latency runs from the phone's send to its matching TV update, using the same
+clock in the load generator. A stage passes when at least **90% of scheduled
+updates arrive within 75 ms**, with **zero setup errors, failed updates, missed
+sends, or unexpected disconnects**. Missed sends count as failures even if the
+load generator is the bottleneck. Automatic client reconnection is disabled so
+it cannot hide a dropped connection. Setup time is recorded separately.
+
+The runner stops at the first failed stage and writes a JSON report to
+`stress-results/latest.json` (ignored by Git). It reports the **highest passing
+tested load**, not an exact maximum. If every stage passes, increase the cap;
+if a stage fails, try smaller steps between the last passing and failing loads:
+
+```bash
+npm run stress -- --lobbies 100,200,400,800 --seconds 30
+npm run stress -- --lobbies 100 --seconds 60 --interval-ms 100 --output stress-results/faster-input.json
+npm run stress -- --help
+```
+
+Exit codes are `0` for all requested stages passing, `1` for a failed stage, `2`
+for invalid options or a runner error, and `130` for interruption. The runner
+cleans up its connections and local server on completion or Ctrl+C. It does not
+connect to the running development server or a hosted deployment.
+
+**Scope:** these are local lobby/ready measurements, with both processes sharing
+one computer. Four phones are connected per lobby, but only one sends updates.
+Results depend on the hardware, event rate, and duration. They do not establish
+tennis capacity, phone-motion-to-render latency, Wi-Fi behavior, reconnect-storm
+capacity, or the document's ten-minute gameplay reliability requirement. Repeat
+the measurement with real game events and deployment hardware after integration.
+
+Local reference run on **2026-10-26**, Apple M4 / 16 GiB / Node 22.23.1, 10 seconds
+per stage and one update every 250 ms per lobby:
+
+| Lobbies | Connected phones | Total connections (including TVs) | TV delivery p90 | Result |
+| --- | --- | --- | --- | --- |
+| 100 | 400 | 500 | 1.11 ms | Pass |
+| 400 | 1,600 | 2,000 | 2.40 ms | Pass |
+| 800 | 3,200 | 4,000 | 2.83 ms | Pass |
+| 2,000 | 8,000 | 10,000 | 6.93 ms | Pass |
+
+All seven tested stages passed with no errors, missed sends, or disconnects.
+**The run reached its 2,000-lobby cap, so the maximum remains unknown.** These
+short, synthetic results are not a supported production player limit. See the
+[full recorded report](server/benchmarks/local-capacity.json), including the server
+revision, all stages, workload, and machine details.
+
 The underlying platform foundation includes:
 
 - **Homepage** (`/`): the polished entry point for the TV and for phones.
@@ -79,6 +139,7 @@ the QR code uses that instead.
 | Command | What it does |
 | --- | --- |
 | `npm test` | Room rules tests (`node --test`) |
+| `npm run stress` | Local concurrent lobby load test and JSON capacity report |
 | `npm run build` | Production build of the web app into `client/dist` |
 | `npm start` | Game server only, no watch |
 
@@ -98,6 +159,7 @@ shared/protocol.js     Event names, room-code alphabet, limits, name cleaning. I
 server/src/RoomStore.js  All lobby rules, no networking, so tests cover what's deployed.
 server/src/app.js        Socket.io wiring: who hears about each change.
 server/src/index.js      Starts the server.
+server/scripts/stress.js Local Week 5 load generator; stress-server.js runs the server separately.
 client/src/pages/        Home (polished), HostStub and JoinStub (placeholders).
 client/src/components/   Sport tiles, join box, QR code, placeholder icons.
 client/src/lib/          Shared socket, join URL, sports catalog, error text.
@@ -122,11 +184,11 @@ stack (TS, Next.js, Cloudflare Durable Objects).
 | gameboystudio piece | Lands in Wee Sports |
 | --- | --- |
 | Room codes; QR + code + link invite; relay validation; host leaving closes the room; room logic testable without a network | **Week 1 (this branch)** |
-| `measure-room-latency.mjs` (round trip ÷ 2, p50/p95) | Week 2: check the 100 ms responsiveness requirement |
+| Input latency measurement | Week 5 runner measures phone-to-TV lobby delivery against the document's 75 ms / 90% target. Actual motion-to-render verification remains pending. |
 | Typed input channel. Send swing *events*, not raw sensor streams, which also keeps raw motion data off the server (privacy requirement). | Week 2–3 |
 | Controller page: screen wake lock; release input on `visibilitychange`/`pagehide`; keep React `setState` out of the hot input path | Week 2–3 phone controller |
 | Seat memory and a reconnect token; a grace period before a host drop closes the lobby | Implemented here for the existing lobby/ready flow. Match recovery remains an integration task. |
-| Token-bucket rate limit; origin allowlist | Week 5 stress test |
+| Concurrent sessions/load testing | Week 5: `npm run stress`. Origin allowlist is configurable; token-bucket limiting remains future work. |
 | SDK contract: a game supplies `init` / `update` / `render`; a manifest declares `players` and `inputs` | Week 6 SDK |
 | Forge: an LLM writes games against the SDK; a play pointer only advances when a revision passes checks | Stretch / Use Case 7 |
 

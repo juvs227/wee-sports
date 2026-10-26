@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "concurrently -n server,client -c blue,magenta \"npm run dev -w @wee/server\" \"npm run dev -w @wee/client\"",
     "test": "npm test -w @wee/server",
+    "stress": "node server/scripts/stress.js",
     "build": "npm run build -w @wee/client",
     "start": "npm start -w @wee/server"
   },
