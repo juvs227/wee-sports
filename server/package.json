@@ -12,5 +12,8 @@
   "dependencies": {
     "@wee/shared": "*",
     "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.1"
   }
 }

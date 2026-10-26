@@ -14,45 +14,17 @@ import { TvReady } from '../components/TvReady.jsx';
 import { TvTutorial } from '../components/TvTutorial.jsx';
 import { errorText } from '../lib/errors.js';
 import { canReachFromPhones, joinUrl } from '../lib/joinUrl.js';
-import { cancelLeave, leaveSoon, request, socket } from '../lib/socket.js';
+import { request } from '../lib/socket.js';
+import { useReconnect } from '../lib/useReconnect.js';
+import { ReconnectNotice } from '../components/ReconnectNotice.jsx';
 import { sportName } from '../lib/sports.js';
 
 export default function HostStub() {
   const { code } = useParams();
   const navigate = useNavigate();
-  const [lobby, setLobby] = useState(null);
-  const [closed, setClosed] = useState(false);
+  const { snapshot: lobby, reconnecting, ended, storageWarning, leave } = useReconnect('host', code);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState(null);
-
-  useEffect(() => {
-    cancelLeave(EVENTS.HOST_CLOSE);
-    let live = true;
-
-    request(EVENTS.LOBBY_GET, { code }).then((result) => {
-      if (!live) return;
-      if (result.ok) setLobby(result);
-      else setClosed(true);
-    });
-
-    const onUpdate = (next) => {
-      if (next?.code === code) setLobby(next);
-    };
-    // The lobby belongs to this socket. If the socket drops, the server has
-    // already closed the lobby and told the phones.
-    const onDisconnect = () => setClosed(true);
-    socket.on(EVENTS.LOBBY_UPDATE, onUpdate);
-    socket.on('disconnect', onDisconnect);
-
-    return () => {
-      live = false;
-      socket.off(EVENTS.LOBBY_UPDATE, onUpdate);
-      socket.off('disconnect', onDisconnect);
-      // Leaving the page takes the lobby with it, so phones aren't left
-      // waiting on a screen that is gone.
-      leaveSoon(EVENTS.HOST_CLOSE);
-    };
-  }, [code]);
 
   // A failed Play (say, someone left first) is old news once the phase moves.
   const phase = lobby?.phase;
@@ -67,13 +39,13 @@ export default function HostStub() {
     if (!result.ok) setStartError(result.error);
   }
 
-  if (closed) {
+  if (ended || (!lobby && !reconnecting)) {
     return (
       <main className="stub">
         <StubBanner>TV lobby</StubBanner>
         <h1>Lobby closed</h1>
         <p className="stub__muted">
-          A lobby closes when its TV page reloads or leaves. Start a new one from the homepage.
+          {ended === 'replaced' ? 'This lobby was opened in another tab. Continue there or reload to take control.' : 'This game has ended or the reconnect window expired. Start a new lobby from the homepage.'}
         </p>
         <div className="stub__actions">
           <Link className="btn btn--primary" to="/">
@@ -83,6 +55,8 @@ export default function HostStub() {
       </main>
     );
   }
+
+  if (reconnecting || lobby?.paused) return <ReconnectNotice lobby={lobby} reconnecting={reconnecting} code={code} />;
 
   if (!lobby) {
     return (
@@ -106,6 +80,7 @@ export default function HostStub() {
     <main className="stub">
       <StubBanner>TV lobby</StubBanner>
       <h1>{sportName(lobby.sport)} lobby</h1>
+      {storageWarning ? <p className="alert">Browser storage is unavailable. Keep this tab open to preserve your session.</p> : null}
       <p className="stub__muted">Scan with your phone camera, or open the link and type the code.</p>
 
       <div className="stub__row">
@@ -165,7 +140,7 @@ export default function HostStub() {
         >
           {starting ? 'Starting…' : 'Play'}
         </button>
-        <button type="button" className="btn btn--ghost" onClick={() => navigate('/')}>
+        <button type="button" className="btn btn--ghost" onClick={async () => { if (await leave()) navigate('/'); else setStartError('disconnected'); }}>
           Close lobby
         </button>
       </div>

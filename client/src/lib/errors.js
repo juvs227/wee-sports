@@ -19,7 +19,10 @@ const TEXT = {
   'not-all-ready': 'Wait until every player is ready, then press Play.',
   timeout: "Couldn't reach the game server. Check your Wi-Fi and try again.",
   closed: 'The game ended on the TV.',
-  disconnected: 'Lost connection to the game. Join again to get back in.',
+  disconnected: 'Reconnecting… Keep this page open. Your seat is held for 60 seconds.',
+  paused: 'Waiting for everyone to reconnect.',
+  'bad-session': 'Your reconnect window expired. Join again.',
+  'already-in-room': 'Leave your current lobby before joining another.',
 };
 
 export function errorText(code) {

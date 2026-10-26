@@ -6,7 +6,10 @@
  */
 
 /** Bumped when a message shape changes incompatibly. */
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
+
+/** A dropped connection keeps its seat for one minute. */
+export const RECONNECT_MS = 60_000;
 
 /**
  * No vowels, so a code can never spell a word. No lookalikes (0/O, 1/I, 8/B,
@@ -46,7 +49,11 @@ export const PHASES = {
 /**
  * Every lobby snapshot below has this shape:
  *
- *   { code, sport, phase, players: [{ slot, name, ready }], countdown }
+ *   { code, sport, phase, players: [{ slot, name, ready }], countdown,
+ *     paused, reconnecting: [{ name, msLeft }] }
+ *
+ * Create/join/resume acknowledgements additionally contain a private token
+ * and role. Never send those fields in LOBBY_UPDATE or include them in a URL.
  *
  * ready is always false outside the 'ready' phase. countdown is null except
  * in 'countdown', where it is { msLeft }: time remaining, not a timestamp, so
@@ -55,7 +62,10 @@ export const PHASES = {
 export const EVENTS = {
   /** TV -> server: open a lobby. Ack: { ok, ...snapshot }. */
   HOST_CREATE: 'host:create',
-  /** TV -> server: the TV page went away. */
+  SESSION_RESUME: 'session:resume',
+  SESSION_AWAY: 'session:away',
+  SESSION_REPLACED: 'session:replaced',
+  /** TV -> server: explicitly close the lobby. Refreshes use session recovery. */
   HOST_CLOSE: 'host:close',
   /** TV -> server: current lobby, if this socket hosts it. Ack: { ok, ...snapshot }. */
   LOBBY_GET: 'lobby:get',
@@ -69,7 +79,7 @@ export const EVENTS = {
   PLAYER_READY: 'player:ready',
   /** Server -> everyone in a lobby: the snapshot. */
   LOBBY_UPDATE: 'lobby:update',
-  /** Server -> phones: the TV left, so there is nothing left to control. */
+  /** Server -> phones: the TV closed the lobby or its reconnect window expired. */
   ROOM_CLOSED: 'room:closed',
 };
 
@@ -86,6 +96,9 @@ export const ERRORS = {
   BAD_READY: 'bad-ready',
   NOT_HOST: 'not-host',
   NOT_ALL_READY: 'not-all-ready',
+  BAD_SESSION: 'bad-session',
+  ALREADY_IN_ROOM: 'already-in-room',
+  PAUSED: 'paused',
 };
 
 export function isRoomCode(value) {

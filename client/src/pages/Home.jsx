@@ -7,6 +7,7 @@ import { JoinBox } from '../components/JoinBox.jsx';
 import { CreateTile, SportTile } from '../components/SportTile.jsx';
 import { errorText } from '../lib/errors.js';
 import { request, useConnection } from '../lib/socket.js';
+import { saveToken } from '../lib/reconnect.js';
 import { SPORTS } from '../lib/sports.js';
 
 /**
@@ -29,6 +30,7 @@ export default function Home() {
     const result = await request(EVENTS.HOST_CREATE, { v: PROTOCOL_VERSION, sport: sport.id });
     setOpening(null);
     if (result?.ok) {
+      saveToken('host', result.code, result.token);
       navigate(`/host/${result.code}`);
       return;
     }

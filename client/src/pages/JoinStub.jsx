@@ -4,7 +4,7 @@
  * (leave), with every failure said in plain words.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   CODE_LENGTH,
@@ -19,7 +19,9 @@ import {
 import { PhoneReady } from '../components/PhoneReady.jsx';
 import { StubBanner } from '../components/StubBanner.jsx';
 import { errorText } from '../lib/errors.js';
-import { cancelLeave, leaveSoon, request, socket } from '../lib/socket.js';
+import { request } from '../lib/socket.js';
+import { useReconnect } from '../lib/useReconnect.js';
+import { ReconnectNotice } from '../components/ReconnectNotice.jsx';
 import { sportName } from '../lib/sports.js';
 
 const NAME_KEY = 'wee:name';
@@ -42,41 +44,13 @@ function saveName(name) {
 }
 
 export default function JoinStub() {
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const [code, setCode] = useState(() => normalizeCode(params.get('code')));
   const [name, setName] = useState(loadName);
-  const [seat, setSeat] = useState(null);
-  // The latest lobby snapshot: players, phase, and who is ready.
-  const [lobby, setLobby] = useState(null);
+  const { snapshot: seat, reconnecting, ended, storageWarning, accept, leave: leaveSession } = useReconnect('player', code);
+  const lobby = seat;
   const [error, setError] = useState(null);
   const [joining, setJoining] = useState(false);
-  const seated = useRef(false);
-
-  useEffect(() => {
-    cancelLeave(EVENTS.PLAYER_LEAVE);
-
-    const onUpdate = (next) => setLobby(next ?? null);
-    const lose = (reason) => () => {
-      if (!seated.current) return;
-      seated.current = false;
-      setSeat(null);
-      setLobby(null);
-      setError(reason);
-    };
-    const onClosed = lose('closed');
-    const onDisconnect = lose('disconnected');
-
-    socket.on(EVENTS.LOBBY_UPDATE, onUpdate);
-    socket.on(EVENTS.ROOM_CLOSED, onClosed);
-    socket.on('disconnect', onDisconnect);
-    return () => {
-      socket.off(EVENTS.LOBBY_UPDATE, onUpdate);
-      socket.off(EVENTS.ROOM_CLOSED, onClosed);
-      socket.off('disconnect', onDisconnect);
-      leaveSoon(EVENTS.PLAYER_LEAVE);
-    };
-  }, []);
-
   const canJoin = isRoomCode(code) && cleanName(name) !== '' && !joining;
 
   async function join(event) {
@@ -90,19 +64,16 @@ export default function JoinStub() {
       setError(result.error);
       return;
     }
-    seated.current = true;
     saveName(cleanName(name));
-    setSeat(result);
-    // Taking the last seat can start the ready check, so keep the whole snapshot.
-    setLobby(result);
+    accept(result);
+    setParams({ code }, { replace: true });
   }
 
-  function leave() {
-    socket.emit(EVENTS.PLAYER_LEAVE);
-    seated.current = false;
-    setSeat(null);
-    setLobby(null);
+  async function leave() {
+    if (!(await leaveSession())) setError('disconnected');
   }
+
+  if (reconnecting || lobby?.paused) return <ReconnectNotice lobby={lobby} reconnecting={reconnecting} />;
 
   if (seat) {
     const players = lobby?.players ?? [];
@@ -110,6 +81,8 @@ export default function JoinStub() {
     return (
       <main className="stub">
         <StubBanner>Phone screen</StubBanner>
+        {storageWarning ? <p className="alert">Browser storage is unavailable. Keep this tab open to preserve your seat.</p> : null}
+        {error ? <p className="alert" role="alert">{errorText(error)}</p> : null}
         <div className="you">
           <span
             className="seat__badge seat__badge--big"
@@ -161,6 +134,10 @@ export default function JoinStub() {
     <main className="stub">
       <StubBanner>Phone screen</StubBanner>
       <h1>Join a game</h1>
+      {ended ? <p className="alert" role="alert">{ended === 'replaced'
+        ? 'This controller is active in another tab. Continue there or reload this page.'
+        : ended === 'expired' ? 'Your reconnect window expired. Join again if the lobby is still open.'
+        : 'This game has ended. Check the TV for a new lobby.'}</p> : null}
       <p className="stub__muted">The code is on the TV, under the QR code.</p>
 
       {error ? (
