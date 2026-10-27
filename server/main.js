@@ -7,7 +7,7 @@ const vite = await createViteServer({
   server: {
     middlewareMode: true,
     hmr: false,
-    allowedHosts: process.env.NGROK_HOST ? [process.env.NGROK_HOST] : [],
+    allowedHosts: true,
   },
 });
 const server = createServer((request, response) => vite.middlewares(request, response));

@@ -7,6 +7,9 @@ export default defineConfig({
       process.env.NGROK_HOST ? `https://${process.env.NGROK_HOST}` : '',
     ),
   },
+  server: {
+    allowedHosts: true, // Allows your ngrok tunnel and other external hosts during development
+  },
   build: {
     rollupOptions: {
       input: {

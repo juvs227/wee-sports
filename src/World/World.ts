@@ -147,27 +147,41 @@ export class World {
 
         // 'K' = Standard Front Hit / Forehand, 'J' = Backhit / Backhand
         if (key === 'k' || key === 'j') {
-            const dist1 = this.player1.group.position.distanceTo(this.ball.position);
-            const dist2 = this.player2.group.position.distanceTo(this.ball.position);
-            const REACH = 1.5;
-
-            const isBackhand = key === 'j';
-            const animName = isBackhand ? 'SwingLeft' : 'SwingRight';
-
-            if (dist1 <= REACH) {
-                this.player1.playAnimation(animName);
-
-                const randomServe = calculateRandomServe(1, isBackhand);
-                serveBall(this.ball, randomServe, 'player1');
-
-            } else if (dist2 <= REACH) {
-                this.player2.playAnimation(animName);
-
-                const randomServe = calculateRandomServe(2, isBackhand);
-                serveBall(this.ball, randomServe, 'player2');
-            }
+            this.performSwing(key === 'j');
         }
     };
+
+    private performSwing(isBackhand: boolean): void {
+        const dist1 = this.player1.group.position.distanceTo(this.ball.position);
+        const dist2 = this.player2.group.position.distanceTo(this.ball.position);
+        const REACH = 1.5;
+        const animName = isBackhand ? 'SwingLeft' : 'SwingRight';
+
+        if (dist1 <= REACH) {
+            this.player1.playAnimation(animName);
+            serveBall(
+                this.ball,
+                calculateRandomServe(1, isBackhand),
+                'player1',
+                false
+            );
+        } else if (dist2 <= REACH) {
+            this.player2.playAnimation(animName);
+            serveBall(
+                this.ball,
+                calculateRandomServe(2, isBackhand),
+                'player2',
+                false
+            );
+        }
+    }
+
+    public swing(event: {
+        label: 'Forehand' | 'Backhand';
+        hand: 'Left' | 'Right';
+    }): void {
+        this.performSwing(event.label === 'Backhand');
+    }
 
     public playerServe(playerNumber: 1 | 2 = 1): void {
         const targetPlayer = playerNumber === 1 ? this.player1 : this.player2;

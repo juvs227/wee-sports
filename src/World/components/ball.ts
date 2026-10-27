@@ -105,16 +105,23 @@ export function createBall(x: number, y: number, z: number): THREE.Mesh {
 export function serveBall(
     ball: THREE.Mesh,
     initialVelocity: THREE.Vector3,
-    player?: BallPlayer
+    player?: BallPlayer,
+    waitForRacketHit = true
 ): void {
     const userData = ball.userData as BallUserData;
 
     // Only serve if the ball is currently waiting
     if (userData.isWaitingForServe) {
         userData.isWaitingForServe = false;
-        userData.velocity.set(0, 0, 0);
-        userData.pendingVelocity.copy(initialVelocity);
-        userData.waitingForRacketHit = true;
+        if (waitForRacketHit) {
+            userData.velocity.set(0, 0, 0);
+            userData.pendingVelocity.copy(initialVelocity);
+            userData.waitingForRacketHit = true;
+        } else {
+            userData.velocity.copy(initialVelocity);
+            userData.pendingVelocity.set(0, 0, 0);
+            userData.waitingForRacketHit = false;
+        }
         userData.lastHitBy = player;
     }
 }
