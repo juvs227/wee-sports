@@ -1,0 +1,211 @@
+{
+  "generatedAt": "2026-10-26T19:13:47.390Z",
+  "serverRevision": "7252861058e87ca2b12501265719143d3fde0765",
+  "environment": {
+    "node": "v22.23.1",
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M4",
+    "logicalCpus": 10,
+    "memoryGiB": 16
+  },
+  "workload": {
+    "transport": "websocket",
+    "phonesPerLobby": 4,
+    "activePhonesPerLobby": 1,
+    "intervalMs": 250,
+    "secondsPerStage": 10,
+    "requestedStages": [
+      100,
+      200,
+      400,
+      800,
+      1200,
+      1600,
+      2000
+    ],
+    "metric": "Phone emit to matching TV lobby update; both simulated clients share a clock",
+    "scope": "Local lobby/ready traffic only. No motion sensing, rendering, Wi-Fi, tennis, or match recovery. Server and load generator are separate processes on the same machine."
+  },
+  "passRule": {
+    "targetMs": 75,
+    "minimumFraction": 0.9,
+    "allowedErrors": 0,
+    "allowedSkippedSends": 0,
+    "allowedDisconnects": 0
+  },
+  "highestPassingLobbies": 2000,
+  "highestPassingPlayers": 8000,
+  "firstFailingLobbies": null,
+  "stoppedBecause": "configured-cap",
+  "stages": [
+    {
+      "lobbies": 100,
+      "establishedLobbies": 100,
+      "players": 400,
+      "connections": 500,
+      "seconds": 10,
+      "setupMs": 137,
+      "setupErrors": 0,
+      "setupErrorCounts": {},
+      "unexpectedDisconnects": 0,
+      "attempted": 4000,
+      "skipped": 0,
+      "errors": 0,
+      "errorCounts": {},
+      "delivered": 4000,
+      "withinTargetFraction": 1,
+      "latencyMs": {
+        "p50": 0.57,
+        "p90": 1.11,
+        "p95": 1.31,
+        "p99": 3.17
+      },
+      "passed": true
+    },
+    {
+      "lobbies": 200,
+      "establishedLobbies": 200,
+      "players": 800,
+      "connections": 1000,
+      "seconds": 10,
+      "setupMs": 98,
+      "setupErrors": 0,
+      "setupErrorCounts": {},
+      "unexpectedDisconnects": 0,
+      "attempted": 8000,
+      "skipped": 0,
+      "errors": 0,
+      "errorCounts": {},
+      "delivered": 8000,
+      "withinTargetFraction": 1,
+      "latencyMs": {
+        "p50": 0.78,
+        "p90": 1.56,
+        "p95": 1.85,
+        "p99": 6.92
+      },
+      "passed": true
+    },
+    {
+      "lobbies": 400,
+      "establishedLobbies": 400,
+      "players": 1600,
+      "connections": 2000,
+      "seconds": 10,
+      "setupMs": 144,
+      "setupErrors": 0,
+      "setupErrorCounts": {},
+      "unexpectedDisconnects": 0,
+      "attempted": 16000,
+      "skipped": 0,
+      "errors": 0,
+      "errorCounts": {},
+      "delivered": 16000,
+      "withinTargetFraction": 1,
+      "latencyMs": {
+        "p50": 1.1,
+        "p90": 2.4,
+        "p95": 2.87,
+        "p99": 4.18
+      },
+      "passed": true
+    },
+    {
+      "lobbies": 800,
+      "establishedLobbies": 800,
+      "players": 3200,
+      "connections": 4000,
+      "seconds": 10,
+      "setupMs": 319,
+      "setupErrors": 0,
+      "setupErrorCounts": {},
+      "unexpectedDisconnects": 0,
+      "attempted": 32000,
+      "skipped": 0,
+      "errors": 0,
+      "errorCounts": {},
+      "delivered": 32000,
+      "withinTargetFraction": 1,
+      "latencyMs": {
+        "p50": 1.61,
+        "p90": 2.83,
+        "p95": 3.18,
+        "p99": 4.28
+      },
+      "passed": true
+    },
+    {
+      "lobbies": 1200,
+      "establishedLobbies": 1200,
+      "players": 4800,
+      "connections": 6000,
+      "seconds": 10,
+      "setupMs": 334,
+      "setupErrors": 0,
+      "setupErrorCounts": {},
+      "unexpectedDisconnects": 0,
+      "attempted": 48000,
+      "skipped": 0,
+      "errors": 0,
+      "errorCounts": {},
+      "delivered": 48000,
+      "withinTargetFraction": 1,
+      "latencyMs": {
+        "p50": 2.06,
+        "p90": 3.66,
+        "p95": 4.15,
+        "p99": 6.61
+      },
+      "passed": true
+    },
+    {
+      "lobbies": 1600,
+      "establishedLobbies": 1600,
+      "players": 6400,
+      "connections": 8000,
+      "seconds": 10,
+      "setupMs": 389,
+      "setupErrors": 0,
+      "setupErrorCounts": {},
+      "unexpectedDisconnects": 0,
+      "attempted": 64000,
+      "skipped": 0,
+      "errors": 0,
+      "errorCounts": {},
+      "delivered": 64000,
+      "withinTargetFraction": 1,
+      "latencyMs": {
+        "p50": 2.63,
+        "p90": 4.69,
+        "p95": 5.41,
+        "p99": 23.02
+      },
+      "passed": true
+    },
+    {
+      "lobbies": 2000,
+      "establishedLobbies": 2000,
+      "players": 8000,
+      "connections": 10000,
+      "seconds": 10,
+      "setupMs": 393,
+      "setupErrors": 0,
+      "setupErrorCounts": {},
+      "unexpectedDisconnects": 0,
+      "attempted": 80000,
+      "skipped": 0,
+      "errors": 0,
+      "errorCounts": {},
+      "delivered": 80000,
+      "withinTargetFraction": 1,
+      "latencyMs": {
+        "p50": 3.93,
+        "p90": 6.93,
+        "p95": 7.87,
+        "p99": 34.77
+      },
+      "passed": true
+    }
+  ]
+}

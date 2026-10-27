@@ -106,3 +106,12 @@ export function SwingIcon(props) {
     </svg>
   );
 }
+
+/** Ready mark. State is told by shape and words, never by color, because the seat colors already include red, green and yellow. */
+export function CheckIcon(props) {
+  return (
+    <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M10 25l9 9 19-20" />
+    </svg>
+  );
+}

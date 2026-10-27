@@ -1,19 +1,33 @@
-import { createServer } from 'node:http';
-import { createServer as createViteServer } from 'vite';
+import { createServer as createViteServer, preview } from 'vite';
+import { createGameServer } from './src/app.js';
 import { attachRelay } from './relay.js';
 
 const port = Number(process.env.PORT || 5173);
-const vite = await createViteServer({
+const builtPreview = process.argv.includes('--preview');
+const vite = builtPreview ? await preview({ preview: { port: 0 } }) : await createViteServer({
   server: {
     middlewareMode: true,
     hmr: false,
     allowedHosts: true,
   },
 });
-const server = createServer((request, response) => vite.middlewares(request, response));
-attachRelay(server);
-server.listen(port, '0.0.0.0', () => {
-  const listeningPort = server.address().port;
+// preview supplies the same built pages; only the combined server accepts traffic.
+if (builtPreview) await new Promise(resolve => vite.httpServer.close(resolve));
+const origins = (process.env.CLIENT_ORIGIN ?? '').split(',').map(value => value.trim()).filter(Boolean);
+const app = createGameServer({ origins, requestHandler: vite.middlewares });
+const relay = attachRelay(app.http);
+app.http.listen(port, '0.0.0.0', () => {
+  const listeningPort = app.http.address().port;
   console.log(`Game: http://localhost:${listeningPort}`);
+  console.log(`Homepage and lobby: http://localhost:${listeningPort}`);
+  console.log(`Standalone tennis: http://localhost:${listeningPort}/game.html`);
   console.log(`Tunnel this port for iPhone: ngrok http ${listeningPort}`);
+});
+
+for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, async () => {
+  for (const client of relay.clients) client.terminate();
+  await new Promise(resolve => relay.close(resolve));
+  await app.close();
+  if (!builtPreview) await vite.close();
+  process.exit(0);
 });

@@ -339,6 +339,7 @@ export class World {
         }
 
         this.clock.start();
+        window.addEventListener('resize', this.handleResize);
         window.addEventListener('keydown', this.handleKeyDown);
 
         const animate = (): void => {

@@ -11,9 +11,18 @@ const TEXT = {
   'bad-version': 'This page is out of date. Reload and try again.',
   'bad-sport': "That sport isn't open yet.",
   'server-busy': 'The server is busy. Try again in a moment.',
+  'in-progress': 'That game has already started.',
+  'not-player': "You're not in this game. Join again to get back in.",
+  'no-ready-check': "It's not time to get ready yet.",
+  'bad-ready': "That didn't go through. Tap Ready again.",
+  'not-host': 'Only the TV can start the game.',
+  'not-all-ready': 'Wait until every player is ready, then press Play.',
   timeout: "Couldn't reach the game server. Check your Wi-Fi and try again.",
   closed: 'The game ended on the TV.',
-  disconnected: 'Lost connection to the game. Join again to get back in.',
+  disconnected: 'Reconnecting… Keep this page open. Your seat is held for 60 seconds.',
+  paused: 'Waiting for everyone to reconnect.',
+  'bad-session': 'Your reconnect window expired. Join again.',
+  'already-in-room': 'Leave your current lobby before joining another.',
 };
 
 export function errorText(code) {

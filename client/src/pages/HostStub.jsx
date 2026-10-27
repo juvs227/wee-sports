@@ -6,55 +6,46 @@
 
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { EVENTS, MAX_PLAYERS } from '@wee/shared/protocol.js';
+import { EVENTS, MAX_PLAYERS, PHASES } from '@wee/shared/protocol.js';
 import { QrCode } from '../components/QrCode.jsx';
 import { StubBanner } from '../components/StubBanner.jsx';
+import { TvCountdown } from '../components/TvCountdown.jsx';
+import { TvReady } from '../components/TvReady.jsx';
+import { TvTutorial } from '../components/TvTutorial.jsx';
+import { errorText } from '../lib/errors.js';
 import { canReachFromPhones, joinUrl } from '../lib/joinUrl.js';
-import { cancelLeave, leaveSoon, request, socket } from '../lib/socket.js';
+import { request } from '../lib/socket.js';
+import { useReconnect } from '../lib/useReconnect.js';
+import { ReconnectNotice } from '../components/ReconnectNotice.jsx';
 import { sportName } from '../lib/sports.js';
 
 export default function HostStub() {
   const { code } = useParams();
   const navigate = useNavigate();
-  const [lobby, setLobby] = useState(null);
-  const [closed, setClosed] = useState(false);
+  const { snapshot: lobby, reconnecting, ended, storageWarning, leave } = useReconnect('host', code);
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState(null);
 
-  useEffect(() => {
-    cancelLeave(EVENTS.HOST_CLOSE);
-    let live = true;
+  // A failed Play (say, someone left first) is old news once the phase moves.
+  const phase = lobby?.phase;
+  useEffect(() => setStartError(null), [phase]);
 
-    request(EVENTS.LOBBY_GET, { code }).then((result) => {
-      if (!live) return;
-      if (result.ok) setLobby(result);
-      else setClosed(true);
-    });
+  async function play() {
+    setStarting(true);
+    setStartError(null);
+    const result = await request(EVENTS.HOST_START, {});
+    setStarting(false);
+    // On success the lobby update switches the screen to the countdown.
+    if (!result.ok) setStartError(result.error);
+  }
 
-    const onUpdate = (next) => {
-      if (next?.code === code) setLobby(next);
-    };
-    // The lobby belongs to this socket. If the socket drops, the server has
-    // already closed the lobby and told the phones.
-    const onDisconnect = () => setClosed(true);
-    socket.on(EVENTS.LOBBY_UPDATE, onUpdate);
-    socket.on('disconnect', onDisconnect);
-
-    return () => {
-      live = false;
-      socket.off(EVENTS.LOBBY_UPDATE, onUpdate);
-      socket.off('disconnect', onDisconnect);
-      // Leaving the page takes the lobby with it, so phones aren't left
-      // waiting on a screen that is gone.
-      leaveSoon(EVENTS.HOST_CLOSE);
-    };
-  }, [code]);
-
-  if (closed) {
+  if (ended || (!lobby && !reconnecting)) {
     return (
       <main className="stub">
         <StubBanner>TV lobby</StubBanner>
         <h1>Lobby closed</h1>
         <p className="stub__muted">
-          A lobby closes when its TV page reloads or leaves. Start a new one from the homepage.
+          {ended === 'replaced' ? 'This lobby was opened in another tab. Continue there or reload to take control.' : 'This game has ended or the reconnect window expired. Start a new lobby from the homepage.'}
         </p>
         <div className="stub__actions">
           <Link className="btn btn--primary" to="/">
@@ -65,6 +56,15 @@ export default function HostStub() {
     );
   }
 
+  // Keep the game mounted through a temporary drop, so its local state survives.
+  if (lobby?.phase === PHASES.TUTORIAL) return <TvTutorial lobby={lobby}
+    paused={reconnecting || lobby.paused} error={startError ? errorText(startError) : null} onClose={async () => {
+      if (await leave()) navigate('/');
+      else setStartError('disconnected');
+    }} />;
+
+  if (reconnecting || lobby?.paused) return <ReconnectNotice lobby={lobby} reconnecting={reconnecting} code={code} />;
+
   if (!lobby) {
     return (
       <main className="stub">
@@ -73,16 +73,20 @@ export default function HostStub() {
     );
   }
 
+  if (lobby.phase === PHASES.COUNTDOWN) return <TvCountdown lobby={lobby} />;
+
   const url = joinUrl(code);
   const seats = Array.from(
     { length: MAX_PLAYERS },
     (_, slot) => lobby.players.find((player) => player.slot === slot) ?? null,
   );
+  const canPlay = lobby.phase === PHASES.ALL_READY && !starting;
 
   return (
     <main className="stub">
       <StubBanner>TV lobby</StubBanner>
       <h1>{sportName(lobby.sport)} lobby</h1>
+      {storageWarning ? <p className="alert">Browser storage is unavailable. Keep this tab open to preserve your session.</p> : null}
       <p className="stub__muted">Scan with your phone camera, or open the link and type the code.</p>
 
       <div className="stub__row">
@@ -102,29 +106,47 @@ export default function HostStub() {
         </p>
       )}
 
-      <h2>
-        Players {lobby.players.length}/{MAX_PLAYERS}
-      </h2>
-      <ul className="seats" aria-live="polite">
-        {seats.map((player, slot) => (
-          <li key={slot} className="seat" data-empty={player === null}>
-            <span
-              className="seat__badge"
-              data-slot={slot}
-              style={player ? { '--player': `var(--p${slot + 1})` } : undefined}
-            >
-              P{slot + 1}
-            </span>
-            {player ? player.name : 'Open seat'}
-          </li>
-        ))}
-      </ul>
+      {/* The ready check happens right here in the lobby, in place of the seat list. */}
+      {lobby.phase === PHASES.LOBBY ? (
+        <>
+          <h2>
+            Players {lobby.players.length}/{MAX_PLAYERS}
+          </h2>
+          <ul className="seats" aria-live="polite">
+            {seats.map((player, slot) => (
+              <li key={slot} className="seat" data-empty={player === null}>
+                <span
+                  className="seat__badge"
+                  data-slot={slot}
+                  style={player ? { '--player': `var(--p${slot + 1})` } : undefined}
+                >
+                  P{slot + 1}
+                </span>
+                {player ? player.name : 'Open seat'}
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        <TvReady lobby={lobby} />
+      )}
+
+      {startError ? (
+        <p className="alert" role="alert">
+          {errorText(startError)}
+        </p>
+      ) : null}
 
       <div className="stub__actions">
-        <button type="button" className="btn btn--primary" disabled>
-          Start (week 3)
+        <button
+          type="button"
+          className="btn btn--primary btn--play"
+          disabled={!canPlay}
+          onClick={play}
+        >
+          {starting ? 'Starting…' : 'Play'}
         </button>
-        <button type="button" className="btn btn--ghost" onClick={() => navigate('/')}>
+        <button type="button" className="btn btn--ghost" onClick={async () => { if (await leave()) navigate('/'); else setStartError('disconnected'); }}>
           Close lobby
         </button>
       </div>
