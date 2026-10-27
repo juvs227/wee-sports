@@ -2,6 +2,11 @@ import { defineConfig } from 'vite';
 import { fileURLToPath } from 'node:url';
 
 export default defineConfig({
+  define: {
+    'import.meta.env.PUBLIC_ORIGIN': JSON.stringify(
+      process.env.NGROK_HOST ? `https://${process.env.NGROK_HOST}` : '',
+    ),
+  },
   build: {
     rollupOptions: {
       input: {

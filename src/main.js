@@ -22,11 +22,15 @@ async function main() {
     const result = document.createElement('p');
     result.textContent = 'Waiting for a phone swing…';
     const link = document.createElement('a');
-    link.href = `/controller.html?room=${encodeURIComponent(room)}`;
+    const controllerUrl = new URL('/controller.html', import.meta.env.PUBLIC_ORIGIN || location.origin);
+    controllerUrl.searchParams.set('room', room);
+    link.href = controllerUrl.href;
     link.textContent = 'Open phone controller';
     link.style.color = '#86efac';
     const instructions = document.createElement('p');
-    instructions.textContent = 'Open this game through your HTTPS tunnel. Send the controller link above to your phone.';
+    instructions.textContent = controllerUrl.protocol === 'https:'
+      ? 'Send the controller link above to your phone. Both devices use this room.'
+      : 'For an iPhone link, restart the app with NGROK_HOST set to your tunnel hostname, then refresh this page.';
     panel.append(heading, code, status, result, link, instructions);
     document.body.append(panel);
     const connection = connectSwings({ room, role: 'game',

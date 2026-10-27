@@ -4,42 +4,111 @@ The phone detects a completed tennis stroke and sends one event to the Mac relay
 The Three.js World receives it and triggers a preset forehand/backhand animation.
 It does not reconstruct the phone's exact motion or perform ball collision logic.
 
-## Run
+## Open the game and connect your iPhone
+
+Use **two terminals on your Mac**. Leave both running for the whole session.
+There is one app server and one ngrok tunnel; you do not restart ngrok to connect
+the phone.
+
+### 1. Terminal A: start ngrok
 
 ```sh
-npm install
-npm run dev
+ngrok http 5173
 ```
 
-Open `http://localhost:5173` on your Mac. The game creates a room and displays a
-phone-controller link. Open that link in a second browser tab and use **Send
-Forehand** / **Send Backhand** to test the relay and player animation without sensors.
-The socket and HTTP pages share port 5173; a separate WebSocket tunnel is unnecessary.
+Look for the Forwarding line, for example:
 
-## Use your iPhone
+```text
+Forwarding https://example.ngrok-free.dev -> http://localhost:5173
+```
 
-Start `ngrok http 5173` in a second terminal. Stop and restart the app with the
-exact ngrok hostname allowed (hostname only, no https://):
+Keep this terminal open. Copy your actual HTTPS address. `example.ngrok-free.dev`
+is a placeholder, not an address you can use. Ngrok must already be installed
+and authenticated. A tunnel error before the app starts is expected; continue
+with step 2.
+
+### 2. Terminal B: start the app
+
+Open another terminal in this repository:
 
 ```sh
-NGROK_HOST=your-host.ngrok-free.dev npm run dev
+cd /Users/juvesanchez/403/wee-sports
 ```
 
-Open the HTTPS ngrok URL **on your Mac**, then send that page's phone-controller
-link to your iPhone. Both pages must have the same room code. Opening the game
-through ngrok ensures the controller link uses the reachable HTTPS hostname.
-The socket automatically uses `wss://` for HTTPS pages and `ws://` for localhost.
+If this is your first run or dependencies changed, run `npm install` once.
+Then use the hostname from Terminal A, without `https://` or a trailing slash:
 
-On your phone, choose Left or Right, tap **Enable motion**, set it down and tap
-**Calibrate**, then pick it up securely and tap **Start swings**. Perform controlled
-swings. Completed Forehand/Backhand predictions are sent once per detected window;
-Unknown is displayed but not sent. Listening continues until you tap Stop, readings stop, or the page is hidden.
-The WebSocket stays connected independently of sensor listening. Completed
-windows are consumed and old idle samples are discarded to bound memory. Use a wrist strap and clear your swing area.
+```sh
+NGROK_HOST=example.ngrok-free.dev npm run dev
+```
 
-The game shows the received hand and stroke. Green is Forehand; purple is
-Backhand. The player rotates through a 650 ms animation; hand reverses its
-animation direction. A new stroke replaces an animation already in progress.
+Replace `example.ngrok-free.dev` with your actual hostname. Wait for:
+
+```text
+Game: http://localhost:5173
+```
+
+Leave this terminal running too. If you already started the app without the
+correct hostname, press Ctrl-C in its terminal and rerun the command above.
+Leave ngrok running.
+
+### 3. Mac browser: open the game through ngrok
+
+Open the **HTTPS Forwarding address from Terminal A** on your Mac, for example
+`https://example.ngrok-free.dev`. Continue past an ngrok visit-site screen if shown.
+You should see the court, a room code, and **Open phone controller**.
+
+`http://localhost:5173` also works on your Mac. When the app starts with
+`NGROK_HOST`, its phone-controller link automatically uses that HTTPS hostname,
+even if the game is open on localhost. Restart the app and refresh the game
+after changing `NGROK_HOST`. Without it, links use the current page address.
+
+### 4. iPhone: open the controller link from that game
+
+On the Mac, right-click **Open phone controller**, copy its link, and send it to
+your iPhone (for example, with AirDrop or Messages). Open it in Safari.
+
+The link should look like:
+
+```text
+https://example.ngrok-free.dev/controller.html?room=078a4f09
+```
+
+Use the hostname and room from your current game. **Do not open a localhost link
+on your iPhone**: localhost there refers to the phone, not your Mac. Both pages
+must display the same room code and Connected status.
+
+### 5. Test, then swing
+
+First expand **Test the connection without sensors** on the phone and tap
+**Send Forehand**. The Mac player should animate. Then:
+
+1. Select Left or Right and your preferred Response mode.
+2. Leave Suppress return motions enabled initially.
+3. Tap Enable motion and allow access.
+4. Set the phone down, tap Calibrate, and keep it still for two seconds.
+5. Pick it up securely, tap Start swings, and swing in a clear space with a wrist strap.
+
+Listening continues until you tap Stop, readings stop, or the page is hidden.
+Keep Safari visible and the phone unlocked. The WebSocket remains connected
+independently of sensor listening. Unknown predictions are not sent to the game.
+Green means Forehand; purple means Backhand. This is a preset 650 ms animation,
+not an exact reconstruction of your phone's movement.
+
+### If it does not connect
+
+| Symptom | Check |
+| --- | --- |
+| iPhone cannot connect | Its address must start with ngrok's current HTTPS hostname, not localhost. |
+| Ngrok says upstream connection failed | Terminal B must still show the running app on port 5173. |
+| Blocked hostname message | Restart only the app with `NGROK_HOST` matching Terminal A's hostname. |
+| Address already in use / EADDRINUSE | Stop the older app server with Ctrl-C before starting another. |
+| Connected but no animation | Match the room codes; try the manual Send Forehand button first. |
+| No motion readings | Use HTTPS, allow permission, and keep Safari visible and unlocked. |
+
+To stop, press Ctrl-C in both terminals. On the next session, repeat from step 1;
+use the new ngrok hostname if it changes. You do not need `npm run build` or a
+separate WebSocket server to follow these steps.
 
 ## Files and protocol
 
@@ -48,7 +117,7 @@ animation direction. A new stroke replaces an animation already in progress.
 - `src/network/swingConnection.js`: shared browser WebSocket client, reconnect,
   message IDs, and bounded duplicate protection in the game.
 - `src/controller/main.js`: phone permissions, gyro calibration, detection, and sending.
-- `src/controller/classifySwing.js`: unchanged `gyro-handed-v6` classifier copied
+- `src/controller/classifySwing.js`: `gyro-handed-v6` directional rules originally copied
   from branch `juve-swing-classification`. Future classifier edits must be synced
   deliberately; Git branches do not share live files.
 - `src/World/World.js`: receives strokes via `world.swing(event)` and updates animation.
