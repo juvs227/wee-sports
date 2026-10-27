@@ -4,6 +4,7 @@
     "rootDir": ".",
     "outDir": "build",
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "types": ["node"],
     "skipLibCheck": true,
     "allowImportingTsExtensions": true, 
     "noEmit": true                      

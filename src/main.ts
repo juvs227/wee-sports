@@ -39,16 +39,34 @@ async function main(): Promise<void> {
 
     const status = document.createElement('p');
     const result = document.createElement('p');
-    result.textContent = 'Waiting for a phone swing…';
+    result.textContent = 'J/K: swing · B: practice feed · H: hitboxes';
+    world.onSwingFeedback = message => { result.textContent = message; };
+    const help = document.createElement('p');
+    help.style.fontSize = '12px';
+    help.textContent = 'Disable Auto position for WASD movement · J/K: backhand/forehand · B: forehand feed · Shift+B: backhand feed · N / Shift+N: feed bot · H: hitboxes. Amber: inactive, blue: strike window, green: hit.';
 
     const link = document.createElement('a');
-    const controllerUrl = new URL('/controller.html', location.origin);
+    const controllerUrl = new URL('/controller.html', __PUBLIC_ORIGIN__ || location.origin);
     controllerUrl.searchParams.set('room', room);
     link.href = controllerUrl.href;
     link.textContent = 'Open phone controller';
     link.style.color = '#86efac';
 
-    panel.append(heading, code, status, result, link);
+    const autoLabel = document.createElement('label');
+    autoLabel.style.cssText = 'display:block;margin:12px 0';
+    const autoToggle = document.createElement('input');
+    autoToggle.type = 'checkbox';
+    autoToggle.checked = world.autoPositionEnabled;
+    autoToggle.addEventListener('change', () => { world.autoPositionEnabled = autoToggle.checked; });
+    autoLabel.append(autoToggle, ' Auto position · both players');
+    const botLabel = document.createElement('label');
+    botLabel.style.cssText = 'display:block;margin:12px 0';
+    const botToggle = document.createElement('input');
+    botToggle.type = 'checkbox';
+    botToggle.checked = world.botEnabled;
+    botToggle.addEventListener('change', () => { world.botEnabled = botToggle.checked; });
+    botLabel.append(botToggle, ' Player 2 bot');
+    panel.append(heading, code, status, result, autoLabel, botLabel, link, help);
     document.body.append(panel);
 
     const connection = connectSwings({
@@ -59,7 +77,7 @@ async function main(): Promise<void> {
         },
         onSwing: (event) => {
             world.swing(event);
-            result.textContent = `${event.hand} · ${event.label}`;
+
         },
     });
 

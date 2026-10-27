@@ -1,7 +1,6 @@
 // components/ball.ts
 import * as THREE from 'three';
-const BALL_RADIUS = 0.1; // Define the radius of the ball for collision detection
-const RACKET_HIT_BUFFER = 0.5;
+export const BALL_RADIUS = 0.1; // Define the radius of the ball for collision detection
 const COURT_BOUNDS = { width: 4.115, length: 11.885 };
 // Define an interface for the custom physics properties stored in userData
 export interface BallUserData {
@@ -19,60 +18,6 @@ export interface BallUserData {
     lastHitBy?: 'player1' | 'player2'; // Who last hit/served the ball
 }
 export type BallPlayer = 'player1' | 'player2';
-function racketTouchesBall(
-    racket: THREE.Object3D,
-    ballPosition: THREE.Vector3
-): boolean {
-    racket.updateWorldMatrix(true, true);
-    const closestPoint = new THREE.Vector3();
-    const a = new THREE.Vector3();
-    const b = new THREE.Vector3();
-    const c = new THREE.Vector3();
-    const worldMatrix = new THREE.Matrix4();
-
-    let touching = false;
-    racket.traverse((object) => {
-        if (touching || !(object instanceof THREE.Mesh)) {
-            return;
-        }
-
-        const position = object.geometry.getAttribute('position');
-        const index = object.geometry.getIndex();
-        if (!position) {
-            return;
-        }
-
-        worldMatrix.copy(object.matrixWorld);
-        const triangleCount = index ? index.count / 3 : position.count / 3;
-
-        for (let triangle = 0; triangle < triangleCount; triangle++) {
-            const first = triangle * 3;
-            const indexA = index ? index.getX(first) : first;
-            const indexB = index ? index.getX(first + 1) : first + 1;
-            const indexC = index ? index.getX(first + 2) : first + 2;
-
-            a.fromBufferAttribute(position, indexA).applyMatrix4(worldMatrix);
-            b.fromBufferAttribute(position, indexB).applyMatrix4(worldMatrix);
-            c.fromBufferAttribute(position, indexC).applyMatrix4(worldMatrix);
-
-            new THREE.Triangle(a, b, c).closestPointToPoint(
-                ballPosition,
-                closestPoint
-            );
-
-            if (
-                ballPosition.distanceToSquared(closestPoint) <=
-                RACKET_HIT_BUFFER * RACKET_HIT_BUFFER
-            ) {
-                touching = true;
-                return;
-            }
-        }
-    });
-
-    return touching;
-}
-
 export function createBall(x: number, y: number, z: number): THREE.Mesh {
 
     const geometry = new THREE.SphereGeometry(BALL_RADIUS, 32, 32);
@@ -96,7 +41,9 @@ export function createBall(x: number, y: number, z: number): THREE.Mesh {
         waitingForRacketHit: false,
         servePosition: new THREE.Vector3(x, y, z),
         scorePlayer1: 0,
-        scorePlayer2: 0
+        scorePlayer2: 0,
+        bounceCount: 0,
+        firstBounceInBounds: false,
     } as BallUserData;
 
     return ball;
@@ -124,6 +71,20 @@ export function serveBall(
         }
         userData.lastHitBy = player;
     }
+}
+
+// Used for rally returns as well as releasing a prepared serve. Values retain
+// the existing game's velocity units (world units per 60 Hz tick).
+export function hitBall(ball: THREE.Mesh, velocity: THREE.Vector3, player: BallPlayer): void {
+    const data = ball.userData as BallUserData;
+    data.isWaitingForServe = false;
+    data.waitingForRacketHit = false;
+    data.velocity.copy(velocity);
+    data.pendingVelocity.set(0, 0, 0);
+    data.lastHitBy = player;
+    data.bounceCount = 0;
+    data.firstBounceInBounds = false;
+    data.slideTimer = 0;
 }
 
 export function resetBallForServe(
@@ -186,7 +147,6 @@ export function resetBallForServe(
 export function updateBallMotion(
     ball: THREE.Mesh,
     delta: number,
-    racket?: THREE.Object3D
 ): void {
     const userData = ball.userData as BallUserData;
 
@@ -196,13 +156,8 @@ export function updateBallMotion(
 
     const frameScale = delta * 60;
 
-    if (userData.waitingForRacketHit) {
-        if (!racket || !racketTouchesBall(racket, ball.position)) {
-            return;
-        }
-        userData.velocity.copy(userData.pendingVelocity);
-        userData.waitingForRacketHit = false;
-    }
+    // Contact is handled in World for both players, during the swing window.
+    if (userData.waitingForRacketHit) return;
 
     // 1. Apply gravity to vertical velocity
     userData.velocity.y -= userData.gravity * frameScale;

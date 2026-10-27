@@ -1,5 +1,6 @@
 // components/player.ts
 import * as THREE from 'three';
+import { RacketHitbox, contactWindowCrossed } from './racketContact';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 export interface PlayerController {
@@ -10,6 +11,11 @@ export interface PlayerController {
     actions: Record<string, THREE.AnimationAction>;
     currentAnimation: string | null;
     isSwinging: boolean;
+    hitbox: RacketHitbox | null;
+    contactActive: boolean;
+    hitConsumed: boolean;
+    swingBackhand: boolean;
+    strikeOffsets: Record<string, THREE.Vector3>;
 
     playAnimation: (name: string) => void;
     stopAnimation: () => void;
@@ -62,6 +68,11 @@ export function createPlayer(
         actions: {},
         currentAnimation: null,
         isSwinging: false,
+        hitbox: null,
+        contactActive: false,
+        hitConsumed: false,
+        swingBackhand: false,
+        strikeOffsets: {},
 
         playAnimation(name: string): void {
             const next = this.actions[name];
@@ -97,6 +108,8 @@ export function createPlayer(
 
             this.currentAnimation = name;
             this.isSwinging = isSwing;
+            this.contactActive = false;
+            if (isSwing) this.hitConsumed = false;
         },
 
         stopAnimation(): void {
@@ -105,10 +118,14 @@ export function createPlayer(
             });
             this.currentAnimation = null;
             this.isSwinging = false;
+            this.contactActive = false;
         },
 
         update(delta: number): void {
-            // Only update the animation mixer; no manual quaternion hacks
+            const action = this.currentAnimation ? this.actions[this.currentAnimation] : undefined;
+            const duration = action?.getClip().duration ?? 0;
+            this.contactActive = this.isSwinging && !this.hitConsumed && !!action && duration > 0 &&
+                contactWindowCrossed(action.time / duration, (action.time + delta) / duration);
             this.mixer?.update(delta);
         },
 
@@ -118,8 +135,8 @@ export function createPlayer(
             }
 
             const length = Math.hypot(dx, dz);
-            const nx = dx / length;
-            const nz = dz / length;
+            const nx = dx / Math.max(1, length);
+            const nz = dz / Math.max(1, length);
 
             this.group.position.x = THREE.MathUtils.clamp(
                 this.group.position.x + nx * speed * delta,
@@ -230,6 +247,26 @@ export function createPlayer(
                         
                         handSocket.add(racketScene);
                         controller.racket = racketScene;
+                        controller.hitbox = new RacketHitbox(racketScene);
+                        // Cache the racket's strike position relative to the feet,
+                        // so assisted movement aligns the racket, not the body.
+                        const restore = controller.currentAnimation;
+                        controller.stopAnimation();
+                        for (const name of ['SwingLeft', 'SwingRight']) {
+                            const action = controller.actions[name];
+                            if (!action) continue;
+                            controller.playAnimation(name);
+                            action.stopFading();
+                            action.setEffectiveWeight(1);
+                            action.time = action.getClip().duration * 0.45;
+                            controller.update(0);
+                            const center = controller.hitbox.bounds.getCenter(new THREE.Vector3())
+                                .applyMatrix4(controller.hitbox.pose());
+                            controller.strikeOffsets[name] = center.sub(group.getWorldPosition(new THREE.Vector3()));
+                            controller.stopAnimation();
+                            controller.update(0);
+                        }
+                        if (restore) controller.playAnimation(restore);
                     },
                     undefined,
                     (error) => {

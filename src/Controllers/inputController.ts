@@ -9,7 +9,7 @@ export class InputController {
         window.addEventListener('keyup', this.handleKeyUp);
     }
 
-    private updateInputFromKeys(): void {
+    private updateInputFromKeys(swing?: 'left' | 'right'): void {
         // Reset movement directions
         let moveX = 0;
         let moveZ = 0;
@@ -23,14 +23,9 @@ export class InputController {
         this.input.moveX = moveX;
         this.input.moveZ = moveZ;
 
-        // Swing mapping (e.g., J for left swing, K for right swing)
-        if (this.keysPressed['j']) {
-            this.input.swing = 'left';
-        } else if (this.keysPressed['k']) {
-            this.input.swing = 'right';
-        } else {
-            this.input.swing = undefined;
-        }
+        // Swing is an edge event, not a held key. Movement updates must not
+        // retrigger a stroke while J/K remains held.
+        this.input.swing = swing;
 
         // Notify listener
         this.onInputChange(this.input);
@@ -41,7 +36,7 @@ export class InputController {
         const key = event.key.toLowerCase();
         if (this.keysPressed[key]) return; // Prevent repeat triggers from holding down
         this.keysPressed[key] = true;
-        this.updateInputFromKeys();
+        this.updateInputFromKeys(key === 'j' ? 'left' : key === 'k' ? 'right' : undefined);
     };
 
     private handleKeyUp = (event: KeyboardEvent): void => {

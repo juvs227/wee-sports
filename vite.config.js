@@ -3,6 +3,9 @@ import { fileURLToPath } from 'node:url';
 
 export default defineConfig({
   define: {
+    '__PUBLIC_ORIGIN__': JSON.stringify(
+      process.env.NGROK_HOST ? `https://${process.env.NGROK_HOST}` : '',
+    ),
     'import.meta.env.PUBLIC_ORIGIN': JSON.stringify(
       process.env.NGROK_HOST ? `https://${process.env.NGROK_HOST}` : '',
     ),

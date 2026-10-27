@@ -13,6 +13,9 @@ import {
     createBall,
     updateBallMotion,
     serveBall,
+    hitBall,
+    BALL_RADIUS,
+    type BallUserData,
     type BallPlayer,
 } from './components/ball';
 
@@ -20,7 +23,9 @@ import {
     NEUTRAL_INPUT,
     type PlayerInput,
 } from '../Controllers/playerInput';
-import { calculateRandomServe } from './randomServe';
+import { chooseBotStroke, type BotStroke } from './botPlayer';
+import { predictBaselineIntercept, lateralSteering } from './autoPosition';
+import { sweptRacketContact } from './components/racketContact';
 
 export class World {
     public scene: THREE.Scene;
@@ -32,6 +37,13 @@ export class World {
     public player2: PlayerController;
     public ball: THREE.Mesh;
 
+    public onSwingFeedback: (message: string) => void = () => {};
+    private showHitboxes = true;
+    public autoPositionEnabled = true;
+    public botEnabled = true;
+    private botAttempted = false;
+    private autoTargets: [number, number] = [0, 0];
+    private readonly targetMarkers: THREE.Mesh[] = [];
     private clock = new THREE.Clock();
     private animationFrameId: number | null = null;
 
@@ -99,6 +111,13 @@ export class World {
         this.ball = createBall(0, 0.3, 10.0); 
         this.scene.add(this.ball);
 
+        for (const color of [0x60a5fa, 0xf87171]) {
+            const marker = new THREE.Mesh(new THREE.RingGeometry(0.22, 0.3, 24),
+                new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, transparent: true, opacity: 0.8, depthWrite: false }));
+            marker.rotation.x = -Math.PI / 2;
+            this.scene.add(marker);
+            this.targetMarkers.push(marker);
+        }
         window.addEventListener('resize', this.handleResize);
     }
 
@@ -122,19 +141,20 @@ export class World {
         }
     }
 
-    private updatePlayer(player: PlayerController, input: PlayerInput, delta: number): void {
-        player.move(input.moveX, input.moveZ, delta);
-
+    private updatePlayer(player: PlayerController, input: PlayerInput, delta: number, number: 1 | 2): void {
         const swing = input.swing;
         input.swing = undefined;
-        const moving = Math.abs(input.moveX) + Math.abs(input.moveZ) > 0.01;
-
-        if (player.isSwinging) {
-            return;
-        }
+        // Hold position during the complete stroke, including a newly requested one.
+        if (player.isSwinging) return;
+        const assisted = this.autoPositionEnabled || (number === 2 && this.botEnabled);
+        const moveX = assisted
+            ? lateralSteering(player.group.position.x, this.autoTargets[number - 1]) : input.moveX;
+        const moveZ = assisted ? 0 : input.moveZ;
+        if (!swing) player.move(moveX, moveZ, delta);
+        const moving = !swing && Math.abs(moveX) + Math.abs(moveZ) > 0.01;
 
         if (swing) {
-            player.playAnimation(swing === 'left' ? 'SwingLeft' : 'SwingRight');
+            this.performSwing(swing === 'left', number);
         } else if (moving) {
             player.playAnimation('WalkCycle');
         } else {
@@ -142,45 +162,139 @@ export class World {
         }
     }
 
-    private handleKeyDown = (event: KeyboardEvent): void => {
-        const key = event.key.toLowerCase();
+    private updateAutoTargets(): void {
+        const data = this.ball.userData as BallUserData;
+        for (const [player, number] of [[this.player1, 1], [this.player2, 2]] as const) {
+            let target = player.group.position.x;
+            if (!data.isWaitingForServe && !data.waitingForRacketHit && !player.isSwinging) {
+                const approaching = number === 1 ? data.velocity.z > 0 : data.velocity.z < 0;
+                if (approaching && data.lastHitBy !== this.toBallPlayer(number)) {
+                    const offsets = Object.values(player.strikeOffsets);
+                    let bestDistance = Infinity;
+                    for (const offset of offsets) {
+                        const intercept = predictBaselineIntercept({ position: this.ball.position,
+                            velocity: data.velocity, gravity: data.gravity }, player.group.position.z + offset.z);
+                        if (!intercept) continue;
+                        const candidate = THREE.MathUtils.clamp(intercept.x - offset.x, this.courtMinX, this.courtMaxX);
+                        const distance = Math.abs(candidate - player.group.position.x);
+                        if (distance < bestDistance) { bestDistance = distance; target = candidate; }
+                    }
+                } else {
+                    target = 0; // Recover toward center while the ball travels away.
+                }
+            }
+            this.autoTargets[number - 1] = target;
+            const marker = this.targetMarkers[number - 1];
+            marker.visible = (this.autoPositionEnabled || (number === 2 && this.botEnabled)) && this.showHitboxes && !data.isWaitingForServe;
+            marker.position.set(target, 0.075, player.group.position.z);
+        }
+    }
 
-        // 'K' = Standard Front Hit / Forehand, 'J' = Backhit / Backhand
-        if (key === 'k' || key === 'j') {
-            this.performSwing(key === 'j');
+    private updateBot(): void {
+        const data = this.ball.userData as BallUserData;
+        if (data.isWaitingForServe || data.waitingForRacketHit || data.lastHitBy !== 'player1') {
+            this.botAttempted = false;
+            return;
+        }
+        if (!this.botEnabled || this.botAttempted || this.player2.isSwinging || !this.player2.hitbox) return;
+        const strokes: BotStroke[] = [];
+        for (const [name, backhand] of [['SwingRight', false], ['SwingLeft', true]] as const) {
+            const action = this.player2.actions[name];
+            const offset = this.player2.strikeOffsets[name];
+            if (action && offset) strokes.push({ backhand, offset, duration: action.getClip().duration });
+        }
+        const stroke = chooseBotStroke({ position: this.ball.position, velocity: data.velocity, gravity: data.gravity },
+            this.player2.group.position, strokes);
+        if (!stroke) return;
+        this.performSwing(stroke.backhand, 2);
+        this.botAttempted = this.player2.isSwinging;
+    }
+
+    private handleKeyDown = (event: KeyboardEvent): void => {
+        if (event.repeat || (event.target instanceof HTMLElement &&
+            (event.target.isContentEditable || ['INPUT', 'SELECT', 'BUTTON', 'TEXTAREA'].includes(event.target.tagName)))) return;
+        const key = event.key.toLowerCase();
+        if (key === 'h') this.showHitboxes = !this.showHitboxes;
+        if (key === 'b') this.feedPracticeBall(event.shiftKey);
+        if (key === 'n') this.feedPracticeBall(event.shiftKey, 2);
+        if (event.code === 'Space') {
+            event.preventDefault();
+            this.playerServe();
         }
     };
 
-    private performSwing(isBackhand: boolean): void {
-        const dist1 = this.player1.group.position.distanceTo(this.ball.position);
-        const dist2 = this.player2.group.position.distanceTo(this.ball.position);
-        const REACH = 1.5;
-        const animName = isBackhand ? 'SwingLeft' : 'SwingRight';
-
-        if (dist1 <= REACH) {
-            this.player1.playAnimation(animName);
-            serveBall(
-                this.ball,
-                calculateRandomServe(1, isBackhand),
-                'player1',
-                false
-            );
-        } else if (dist2 <= REACH) {
-            this.player2.playAnimation(animName);
-            serveBall(
-                this.ball,
-                calculateRandomServe(2, isBackhand),
-                'player2',
-                false
-            );
+    private performSwing(isBackhand: boolean, number: 1 | 2 = 1, hand: 'Left' | 'Right' = 'Right'): void {
+        const player = number === 1 ? this.player1 : this.player2;
+        if (player.isSwinging) return;
+        const leftAnimation = isBackhand !== (hand === 'Left');
+        const animation = leftAnimation ? 'SwingLeft' : 'SwingRight';
+        if (!player.actions[animation] || !player.hitbox) {
+            this.onSwingFeedback('Player/racket still loading or missing swing animation');
+            return;
         }
+        player.swingBackhand = isBackhand;
+        player.playAnimation(animation);
+        this.onSwingFeedback(`Player ${number}: ${isBackhand ? 'Backhand' : 'Forehand'} · swinging`);
     }
 
     public swing(event: {
         label: 'Forehand' | 'Backhand';
         hand: 'Left' | 'Right';
+        player?: 1 | 2;
     }): void {
-        this.performSwing(event.label === 'Backhand');
+        this.performSwing(event.label === 'Backhand', event.player ?? 1, event.hand);
+    }
+
+    // B launches a predictable incoming ball toward player 1's current racket
+    // position. This is an explicit practice reset and never awards a point.
+    public feedPracticeBall(backhand = false, number: 1 | 2 = 1): void {
+        const player = number === 1 ? this.player1 : this.player2;
+        const hitbox = player.hitbox;
+        if (!hitbox) { this.onSwingFeedback('Wait for the racket to load'); return; }
+        player.stopAnimation();
+        player.update(0);
+        // Sample the middle of the chosen stroke before rendering, then restore
+        // idle. Aim the practice feed at the strike pose, not the resting racket.
+        const animation = backhand ? 'SwingLeft' : 'SwingRight';
+        player.playAnimation(animation);
+        const action = player.actions[animation];
+        if (!action) { this.onSwingFeedback('Swing animation is unavailable'); return; }
+        action.stopFading();
+        action.setEffectiveWeight(1);
+        action.time = action.getClip().duration * 0.45;
+        player.update(0);
+        const target = hitbox.bounds.getCenter(new THREE.Vector3()).applyMatrix4(hitbox.pose());
+        player.stopAnimation();
+        player.update(0);
+        const origin = target.clone().add(new THREE.Vector3(0, 1, number === 1 ? -4 : 4));
+        const ticks = 45;
+        const velocity = target.clone().sub(origin).divideScalar(ticks);
+        const data = this.ball.userData as BallUserData;
+        velocity.y += data.gravity * (ticks + 1) / 2;
+        this.ball.position.copy(origin);
+        hitBall(this.ball, velocity, number === 1 ? 'player2' : 'player1');
+        this.botAttempted = false;
+        this.onSwingFeedback(`Player ${number} practice ${backhand ? 'backhand' : 'forehand'} feed · swing as the ball reaches your racket`);
+    }
+
+    private checkRacketContact(player: PlayerController, number: 1 | 2,
+        previousPose: THREE.Matrix4 | undefined, previousBall: THREE.Vector3): void {
+        const hitbox = player.hitbox;
+        if (!hitbox || !previousPose || !player.contactActive || player.hitConsumed) return;
+        const id = this.toBallPlayer(number);
+        const data = this.ball.userData as BallUserData;
+        // Prevent the same player repeatedly returning their own outgoing shot.
+        if (!data.isWaitingForServe && !data.waitingForRacketHit && data.lastHitBy === id) return;
+        if (data.waitingForRacketHit && data.lastHitBy && data.lastHitBy !== id) return;
+        if (!sweptRacketContact(hitbox.bounds, previousPose, hitbox.pose(),
+            previousBall, this.ball.position, BALL_RADIUS)) return;
+        const direction = number === 1 ? -1 : 1;
+        const velocity = data.waitingForRacketHit ? data.pendingVelocity.clone()
+            : new THREE.Vector3(player.swingBackhand ? -0.04 : 0.04, 0.22, direction * 0.24);
+        hitBall(this.ball, velocity, id);
+        player.hitConsumed = true;
+        player.contactActive = false;
+        this.onSwingFeedback(`Player ${number}: Hit!`);
     }
 
     public playerServe(playerNumber: 1 | 2 = 1): void {
@@ -215,21 +329,40 @@ export class World {
 
             const delta = Math.min(this.clock.getDelta(), 0.05);
 
-            this.player1.update(delta);
-            this.player2.update(delta);
+            this.updateAutoTargets();
 
-            this.updatePlayer(this.player1, this.player1Input, delta);
-            this.updatePlayer(this.player2, this.player2Input, delta);
-
-            // Determine which player's racket is active for ball collision checks
-            let activeRacket: THREE.Object3D | undefined = undefined;
-            if (this.player1.isSwinging && this.player1.racket) {
-                activeRacket = this.player1.racket;
-            } else if (this.player2.isSwinging && this.player2.racket) {
-                activeRacket = this.player2.racket;
+            // Substep animation and ball together, at most 1/120 s per step.
+            const steps = Math.max(1, Math.ceil(delta * 120));
+            const step = delta / steps;
+            for (let i = 0; i < steps; i++) {
+                const previousBall = this.ball.position.clone();
+                const pose1 = this.player1.hitbox?.pose();
+                const pose2 = this.player2.hitbox?.pose();
+                this.updateBot();
+                this.updatePlayer(this.player1, this.player1Input, step, 1);
+                this.updatePlayer(this.player2, this.player2Input, step, 2);
+                const swinging1 = this.player1.isSwinging;
+                const swinging2 = this.player2.isSwinging;
+                this.player1.update(step);
+                this.player2.update(step);
+                this.scene.updateMatrixWorld(true);
+                const wasWaiting = (this.ball.userData as BallUserData).isWaitingForServe;
+                updateBallMotion(this.ball, step);
+                const resetDuringStep = !wasWaiting && (this.ball.userData as BallUserData).isWaitingForServe;
+                // A point reset teleports the ball; that is not a swept contact.
+                if (!resetDuringStep) {
+                    this.checkRacketContact(this.player1, 1, pose1, previousBall);
+                    this.checkRacketContact(this.player2, 2, pose2, previousBall);
+                }
+                for (const [player, wasSwinging, number] of [
+                    [this.player1, swinging1, 1], [this.player2, swinging2, 2],
+                ] as const) {
+                    player.hitbox?.updateDebug(this.showHitboxes, player.contactActive, player.hitConsumed);
+                    if (wasSwinging && !player.isSwinging && !player.hitConsumed) {
+                        this.onSwingFeedback(`Player ${number}: Miss · no racket contact during the strike window`);
+                    }
+                }
             }
-
-            updateBallMotion(this.ball, delta, activeRacket);
 
             this.controls.update();
             this.renderer.render(this.scene, this.camera);
@@ -250,6 +383,13 @@ export class World {
 
     public dispose(): void {
         this.stop();
+        for (const marker of this.targetMarkers) {
+            marker.geometry.dispose();
+            (marker.material as THREE.Material).dispose();
+            marker.removeFromParent();
+        }
+        this.player1.hitbox?.dispose();
+        this.player2.hitbox?.dispose();
         this.controls.dispose();
         this.renderer.dispose();
         this.renderer.domElement.remove();
