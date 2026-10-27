@@ -37,6 +37,14 @@ async function main(): Promise<void> {
     const code = document.createElement('p');
     code.textContent = `Room: ${room}`;
 
+    const score = document.createElement('p');
+    score.style.fontWeight = 'bold';
+    const updateScore = (): void => {
+        const currentScore = world.getScore();
+        score.textContent = `Score: Player 1 ${currentScore.player1} - ${currentScore.player2} Player 2`;
+    };
+    updateScore();
+
     const status = document.createElement('p');
     const result = document.createElement('p');
     result.textContent = 'J/K: swing · B: practice feed · H: hitboxes';
@@ -66,8 +74,9 @@ async function main(): Promise<void> {
     botToggle.checked = world.botEnabled;
     botToggle.addEventListener('change', () => { world.botEnabled = botToggle.checked; });
     botLabel.append(botToggle, ' Player 2 bot');
-    panel.append(heading, code, status, result, autoLabel, botLabel, link, help);
+    panel.append(heading, code, score, status, result, autoLabel, botLabel, link, help);
     document.body.append(panel);
+    const scoreTimer = window.setInterval(updateScore, 250);
 
     const connection = connectSwings({
         room,
@@ -81,7 +90,10 @@ async function main(): Promise<void> {
         },
     });
 
-    window.addEventListener('pagehide', () => connection.close(), { once: true });
+    window.addEventListener('pagehide', () => {
+        window.clearInterval(scoreTimer);
+        connection.close();
+    }, { once: true });
 }
 
 main().catch((err: unknown) => {

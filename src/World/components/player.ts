@@ -137,7 +137,8 @@ export function createPlayer(
             const action = this.currentAnimation ? this.actions[this.currentAnimation] : undefined;
             const duration = action?.getClip().duration ?? 0;
             this.contactActive = this.isSwinging && !this.hitConsumed && !!action && duration > 0 &&
-                contactWindowCrossed(action.time / duration, (action.time + delta) / duration);
+                contactWindowCrossed(action.time / duration, (action.time + delta) / duration,
+                    this.swingBackhand);
             this.mixer?.update(delta);
             if (this.isSwinging && action && duration > 0 && handBone?.parent) {
                 const drop = forehandDrop(action.time / duration, this.swingBackhand, forehandDropAmount);
