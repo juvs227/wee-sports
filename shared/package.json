@@ -1,0 +1,9 @@
+{
+  "name": "@wee/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./protocol.js": "./protocol.js"
+  }
+}

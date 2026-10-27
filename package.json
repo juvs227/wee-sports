@@ -1,24 +1,34 @@
 {
-  "name": "threejs-modular-template",
+  "name": "wee-sports",
   "private": true,
-  "version": "1.0.0",
+  "version": "0.1.0",
   "type": "module",
+  "workspaces": [
+    "shared",
+    "server",
+    "client"
+  ],
   "scripts": {
-    "dev": "node server/main.js",
-    "build": "vite build && node scripts/verify-build.mjs",
+    "dev": "concurrently -n server,client -c blue,magenta \"npm run dev -w @wee/server\" \"npm run dev -w @wee/client\"",
+    "dev:game": "node server/main.js",
+    "build": "npm run build -w @wee/client",
+    "build:game": "vite build && node scripts/verify-build.mjs",
     "check": "gts check",
     "lint": "gts lint",
     "clean": "gts clean",
     "compile": "tsc",
     "fix": "gts fix",
     "prepare": "npm run compile",
+    "test": "npm test -w @wee/server",
     "test:physics": "vitest run test/",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "test:all": "npm run test:physics && npm test -w @wee/server",
+    "test:watch": "vitest",
+    "start": "npm start -w @wee/server"
   },
   "devDependencies": {
     "@types/node": "^22.7.5",
     "@types/three": "^0.186.0",
+    "concurrently": "^9.1.0",
     "gts": "^7.0.0",
     "typescript": "^5.6.3",
     "vite": "^6.4.5",
