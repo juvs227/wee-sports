@@ -10,15 +10,19 @@
   lobby updates. Blocked storage is reported; such sessions cannot survive a reload.
 - The ready flow pauses while anyone is missing. A running countdown retains its
   remaining duration and continues only after everyone returns.
-- If a phone does not return, its seat is released and the ready flow resets.
+- If a phone does not return, its seat is released. Before play, readiness resets;
+  during play, losing P1 returns to the lobby, while a spectator can expire without
+  restarting the game.
   If the TV does not return, the lobby closes. Explicit **Leave game** and
   **Close lobby** still take effect immediately.
 - A second tab using the same saved session takes control; the older tab stops
   participating. A server restart ends in-memory lobbies and shows an ended-game
   message rather than silently creating a different session.
 
-**Integration scope:** the countdown now opens main's existing tennis and phone
-controller, including its calibration controls. The TV's game stays mounted and
+**Integration scope:** one phone can start tennis from the homepage lobby. P1's
+controller and calibration controls open before Play and stay loaded through the
+countdown. Embedded swings use the same lobby session; standalone prototypes
+retain their separate relay. The TV's game stays mounted and
 pauses during a lobby disconnect. TV refresh still resets its local tennis world;
 score recovery and restarting the interrupted point remain future work.
 `tutorial-vote` remains separate. See the root README for the combined flow.
@@ -28,7 +32,8 @@ score recovery and restarting the interrupted point remain future work.
 Run `npm test` for the existing room tests plus reconnect and real Socket.io tests,
 and `npm run build` for the client build. The socket tests open local loopback ports.
 
-For a device check, join from four separate phones/browser profiles, then:
+For a device check, start with one phone, then repeat with up to four separate
+phones/browser profiles (P1 controls tennis; the others watch):
 
 1. Refresh a phone and the TV; verify the same room, names, seats, and readiness.
 2. Temporarily disable a phone's network; verify the waiting screen and reconnect.

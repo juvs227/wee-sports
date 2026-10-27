@@ -74,26 +74,12 @@ export default function JoinStub() {
     if (!(await leaveSession())) setError('disconnected');
   }
 
-  if (seat?.phase === PHASES.TUTORIAL) return (
-    <main className="tennis-session">
-      <h1>{seat.name} · P{seat.slot + 1}</h1>
-      {error ? <p className="alert" role="alert">{errorText(error)}</p> : null}
-      {seat.slot === 0 ? <PrototypeFrame code={seat.code} controller paused={reconnecting || seat.paused} /> : (
-        <p role="status">{reconnecting || seat.paused ? 'Waiting for everyone to reconnect.' :
-          'Watch the TV. P1 controls the racket in this version; your lobby seat is saved.'}</p>
-      )}
-      <button type="button" className="btn btn--ghost" onClick={leave}>Leave game</button>
-    </main>
-  );
-
-  if (reconnecting || lobby?.paused) return <ReconnectNotice lobby={lobby} reconnecting={reconnecting} />;
-
   if (seat) {
     const players = lobby?.players ?? [];
     const phase = lobby?.phase ?? PHASES.LOBBY;
     return (
-      <main className="stub">
-        <StubBanner>Phone screen</StubBanner>
+      <main className={phase === PHASES.TUTORIAL ? "tennis-session" : "stub"}>
+        <p className="eyebrow">Homepage lobby · {seat.code}</p>
         {storageWarning ? <p className="alert">Browser storage is unavailable. Keep this tab open to preserve your seat.</p> : null}
         {error ? <p className="alert" role="alert">{errorText(error)}</p> : null}
         <div className="you">
@@ -111,12 +97,23 @@ export default function JoinStub() {
             </p>
           </div>
         </div>
-        {phase === PHASES.LOBBY ? (
-          <p className="stub__status">Waiting for the host to start…</p>
+        {phase === PHASES.TUTORIAL ? (
+          <p role="status">{seat.slot === 0 ? 'Tennis is ready. Tap Start swings below, then watch the TV.' : 'Watch the TV. P1 controls the racket against the bot; your seat is saved.'}</p>
+        ) : phase === PHASES.LOBBY ? (
+          <p className="stub__status">Waiting for a player to join the P1 controller seat…</p>
         ) : (
-          <PhoneReady lobby={lobby} slot={seat.slot} />
+          <PhoneReady lobby={lobby} slot={seat.slot} disabled={reconnecting || lobby.paused} />
         )}
 
+        {seat.slot === 0 ? (
+          <>
+            {phase !== PHASES.TUTORIAL ? <p>Enable motion and calibrate below, then press Ready. Your setup stays with you when the host presses Play.</p> : null}
+            <PrototypeFrame code={seat.code} controller
+              paused={phase !== PHASES.TUTORIAL || reconnecting || seat.paused}
+              showPause={reconnecting || seat.paused} />
+          </>
+        ) : <p>P1 plays against the bot. Other seats can watch.</p>}
+        {reconnecting || lobby.paused ? <ReconnectNotice lobby={lobby} reconnecting={reconnecting} /> : null}
         <h2>In this lobby</h2>
         <ul className="seats" aria-live="polite">
           {players.map((player) => (
@@ -142,6 +139,8 @@ export default function JoinStub() {
       </main>
     );
   }
+
+  if (reconnecting) return <ReconnectNotice reconnecting />;
 
   return (
     <main className="stub">

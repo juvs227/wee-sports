@@ -18,20 +18,28 @@ For a phone tunnel, set `NGROK_HOST` to the tunnel hostname before starting the
 server. `VITE_PUBLIC_URL` can also set the QR's public origin. Real phone motion
 requires HTTPS. Same-Wi-Fi joining still works over HTTP.
 
-1. Choose Tennis, then join its QR/code from four separate phones or browser profiles.
-2. Mark all four ready and press Play on the TV. The five-second countdown opens tennis.
-3. P1 gets the existing phone controller with Enable motion, Calibrate, and Start swings.
-   P2–P4 retain their lobby seats and watch. Main currently supports one phone against
-   the bot; this merge does not add four-player tennis or tutorial voting.
-4. A temporary lobby connection loss pauses the embedded game. Rejoining preserves
-   the seat and the running game while the TV page stays open. After a motion pause,
-   tap Start swings again. Closing the lobby ends its embedded game/controllers.
+1. Choose Tennis and join its QR/code from one phone. Up to three friends can join
+   to watch before the countdown starts; all joined phones press Ready.
+2. P1 can Enable motion and Calibrate in the lobby. Press Ready, then Play on the TV.
+   The five-second countdown opens tennis against the bot. The same controller stays
+   loaded, preserving calibration and hand selection. Tap Start swings to play.
+3. Phone strokes use the homepage lobby's Socket.io session. There is no second
+   room or controller link to pair. Only P1 can send strokes, and the server routes
+   them only to that lobby's TV. The game acknowledges receipt; loading or paused
+   games report a retry message instead of silently accepting input.
+4. A temporary connection loss pauses the embedded game. Rejoining preserves the
+   seat and running game while the TV page stays open. After a motion pause, tap
+   Start swings again. Closing the lobby ends its embedded game/controllers.
 
-The existing protocol still calls the post-countdown phase `tutorial`; that former
-placeholder now contains the existing tennis page. Its relay room is `lobby-<CODE>`,
-so four-character lobby codes map to the existing relay's room format. The outer
-lobby page stays mounted to retain its reconnect token. If P1 explicitly leaves,
-the remaining players return to the lobby so someone can fill the controller seat.
+The existing protocol still calls the post-countdown phase `tutorial`; it contains
+main's tennis page. Tutorial voting and two-player tennis remain separate work.
+The outer lobby owns membership, readiness, reconnects, and swing delivery. A small
+same-origin bridge forwards strokes into the existing game without changing its
+physics or classifier. The standalone `/swings` relay remains available for the
+game team's direct prototype URLs. If P1 leaves, the game returns to the lobby to
+refill that controller seat. Joining/leaving before play resets readiness and cancels
+any countdown; the remaining group can start again as soon as P1 is present and
+all joined phones are ready.
 
 **Recovery limit:** refreshing the TV restores the lobby but starts a fresh tennis
 world. Scores/points are still local to that page; authoritative match recovery and

@@ -23,8 +23,8 @@ export const CODE_LENGTH = 4;
 export const MAX_PLAYERS = 4;
 export const NAME_MAX = 12;
 
-/** The ready check starts when the lobby reaches this many players. */
-export const READY_AT_PLAYERS = 4;
+/** One controller can play the current tennis prototype against the bot. */
+export const READY_AT_PLAYERS = 1;
 /** The 5, 4, 3, 2, 1 after the TV presses Play. */
 export const COUNTDOWN_SECONDS = 5;
 
@@ -36,7 +36,7 @@ export const OPEN_SPORTS = ['tennis'];
  *
  *   'lobby' -> 'ready' -> 'all-ready' -> (TV presses Play) -> 'countdown' -> 'tutorial'
  *
- * A player leaving anywhere before 'tutorial' sends it back to 'lobby'.
+ * Seat changes before play reset readiness; an empty P1 seat waits in 'lobby'.
  */
 export const PHASES = {
   LOBBY: 'lobby',
@@ -77,11 +77,20 @@ export const EVENTS = {
   PLAYER_LEAVE: 'player:leave',
   /** Phone -> server: { ready: boolean }. Can be toggled until everyone is ready. Ack: { ok }. */
   PLAYER_READY: 'player:ready',
+  /** Joined P1 -> server -> its TV. Uses the lobby session, not a second room. */
+  PLAYER_SWING: 'player:swing',
+  GAME_SWING: 'game:swing',
   /** Server -> everyone in a lobby: the snapshot. */
   LOBBY_UPDATE: 'lobby:update',
   /** Server -> phones: the TV closed the lobby or its reconnect window expired. */
   ROOM_CLOSED: 'room:closed',
 };
+
+export function isSwing(event) {
+  return event?.type === 'swing' && typeof event.id === 'string' && event.id.length > 0 &&
+    event.id.length <= 100 && ['Forehand', 'Backhand'].includes(event.label) &&
+    ['Left', 'Right'].includes(event.hand);
+}
 
 export const ERRORS = {
   NO_ROOM: 'no-room',

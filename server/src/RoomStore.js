@@ -31,6 +31,7 @@ import {
   RECONNECT_MS,
   cleanName,
   isRoomCode,
+  isSwing,
 } from '@wee/shared/protocol.js';
 
 const MAX_CODE_ATTEMPTS = 50;
@@ -44,8 +45,7 @@ function nextPhaseAfterReady() {
   return PHASES.ALL_READY;
 }
 
-/** Phases where a full lobby is part of the deal, so a leaver sends everyone back to 'lobby'. */
-const NEEDS_FULL_LOBBY = new Set([PHASES.READY, PHASES.ALL_READY, PHASES.COUNTDOWN]);
+const BEFORE_PLAY = new Set([PHASES.LOBBY, PHASES.READY, PHASES.ALL_READY]);
 
 export function randomCode(random = Math.random) {
   let code = '';
@@ -125,14 +125,13 @@ export class RoomStore {
 
     const slot = this.#freeSlot(room);
     if (slot === null) return { ok: false, error: ERRORS.ROOM_FULL };
-    // Seats only change in the lobby. A newcomer can't drop into a ready check
-    // or a game that has started.
-    if (room.phase !== PHASES.LOBBY) return { ok: false, error: ERRORS.IN_PROGRESS };
+    // More friends can join until the host starts the countdown.
+    if (!BEFORE_PLAY.has(room.phase)) return { ok: false, error: ERRORS.IN_PROGRESS };
 
     const unique = this.#uniqueName(room, cleaned);
     const memberId = this.#addSession(playerId, code, 'player');
     room.players.set(memberId, { slot, name: unique, ready: false });
-    if (room.players.size >= READY_AT_PLAYERS) room.phase = PHASES.READY;
+    this.#resetReady(room);
     return this.#sessionView(memberId);
   }
 
@@ -171,6 +170,20 @@ export class RoomStore {
     room.phase = PHASES.COUNTDOWN;
     room.deadline = this.#now() + COUNTDOWN_SECONDS * 1000;
     return { ok: true, code: room.code, msLeft: COUNTDOWN_SECONDS * 1000 };
+  }
+
+  /** Resolve the target from the authenticated seat; clients cannot choose another room. */
+  swingTarget(socketId, event) {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    const room = member && this.#rooms.get(member.code);
+    if (member?.role !== 'player' || room?.players.get(member.id)?.slot !== 0) {
+      return { ok: false, error: 'not-controller' };
+    }
+    if (!isSwing(event)) return { ok: false, error: 'bad-swing' };
+    if (room.pausedAt !== null) return { ok: false, error: ERRORS.PAUSED };
+    if (room.phase !== PHASES.TUTORIAL) return { ok: false, error: 'not-playing' };
+    return { ok: true, hostSocketId: this.#members.get(room.hostId)?.socketId,
+      event: { type: 'swing', id: event.id, label: event.label, hand: event.hand } };
   }
 
   /**
@@ -244,13 +257,12 @@ export class RoomStore {
       room.phase = PHASES.LOBBY;
       this.#clearReady(room);
     }
-    // Everything from the ready check to the countdown needs a full lobby, so a
-    // leaver ends it. The next player to fill the lobby starts a fresh check.
-    if (NEEDS_FULL_LOBBY.has(room.phase)) {
+    // Any seat change before play cancels the countdown and asks the remaining
+    // players to confirm again. P1 must exist, even if spectator seats remain.
+    if (BEFORE_PLAY.has(room.phase) || room.phase === PHASES.COUNTDOWN) {
       const countdownCancelled = room.phase === PHASES.COUNTDOWN;
-      room.phase = PHASES.LOBBY;
       room.deadline = null;
-      this.#clearReady(room);
+      this.#resetReady(room);
       if (countdownCancelled) return { code: room.code, closed: false, countdownCancelled };
     }
     return { code: room.code, closed: false };
@@ -330,13 +342,7 @@ export class RoomStore {
     for (const member of [...this.#members.values()]) {
       if (member.disconnectedAt === null || this.#now() - member.disconnectedAt < this.#graceMs) continue;
       const result = this.#removeMember(member.id);
-      if (result) {
-        // The tutorial is still a placeholder. Return remaining players to the
-        // lobby instead of stranding them in a flow that lost a participant.
-        const room = this.#rooms.get(result.code);
-        if (room?.phase === PHASES.TUTORIAL) { room.phase = PHASES.LOBBY; this.#clearReady(room); }
-        changes.push(result);
-      }
+      if (result) changes.push(result);
     }
     return changes;
   }
@@ -352,6 +358,12 @@ export class RoomStore {
 
   #clearReady(room) {
     for (const player of room.players.values()) player.ready = false;
+  }
+
+  #resetReady(room) {
+    this.#clearReady(room);
+    room.phase = room.players.size >= READY_AT_PLAYERS &&
+      [...room.players.values()].some(player => player.slot === 0) ? PHASES.READY : PHASES.LOBBY;
   }
 
   /** Lowest open seat, so a seat freed by a leaver is the next one filled. */

@@ -1,5 +1,10 @@
-// Both browser clients use the page's origin, so HTTPS automatically uses WSS.
+import { connectLobbySwings } from './lobbyConnection.js';
+
+// Standalone prototypes retain their relay; embedded tennis uses its lobby.
 export function connectSwings({ room, role, onSwing = () => {}, onStatus = () => {}, onAck = () => {} }) {
+  if (window.parent !== window && new URLSearchParams(location.search).has('lobby')) {
+    return connectLobbySwings({ role, onSwing, onStatus, onAck });
+  }
   let socket;
   let retry;
   let stopped = false;

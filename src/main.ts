@@ -41,12 +41,14 @@ async function main(): Promise<void> {
         'background:#182329ee;color:white;padding:18px;border-radius:12px;' +
         'font:15px system-ui;z-index:1';
 
+    const embedded = window.parent !== window;
     const heading = document.createElement('h2');
-    heading.textContent = 'Phone swing controller';
+    heading.textContent = embedded ? 'Tennis controls' : 'Phone swing controller';
     heading.style.margin = '0 0 12px';
 
     const code = document.createElement('p');
     code.textContent = `Room: ${room}`;
+    code.hidden = embedded;
 
     const status = document.createElement('p');
     const result = document.createElement('p');

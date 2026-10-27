@@ -7,7 +7,7 @@
  * solid), a check mark, and a word.
  */
 
-import { PHASES, READY_AT_PLAYERS } from '@wee/shared/protocol.js';
+import { PHASES } from '@wee/shared/protocol.js';
 import { CheckIcon } from './icons.jsx';
 
 /**
@@ -27,7 +27,7 @@ export function TvReady({ lobby }) {
         <h2 className="ready__title">{title}</h2>
         <p className="ready__count" aria-hidden="true">
           <span className="ready__number">
-            {readyCount}/{READY_AT_PLAYERS}
+            {readyCount}/{lobby.players.length}
           </span>{' '}
           ready
         </p>
@@ -54,7 +54,7 @@ export function TvReady({ lobby }) {
       </ul>
 
       <p className="visually-hidden" role="status" aria-live="polite">
-        {checking ? `${readyCount} of ${READY_AT_PLAYERS} players ready.` : title}
+        {checking ? `${readyCount} of ${lobby.players.length} players ready.` : title}
       </p>
     </section>
   );

@@ -42,7 +42,7 @@ export default function HostStub() {
   if (ended || (!lobby && !reconnecting)) {
     return (
       <main className="stub">
-        <StubBanner>TV lobby</StubBanner>
+        <p className="eyebrow">TV lobby</p>
         <h1>Lobby closed</h1>
         <p className="stub__muted">
           {ended === 'replaced' ? 'This lobby was opened in another tab. Continue there or reload to take control.' : 'This game has ended or the reconnect window expired. Start a new lobby from the homepage.'}
@@ -84,8 +84,9 @@ export default function HostStub() {
 
   return (
     <main className="stub">
-      <StubBanner>TV lobby</StubBanner>
+      <p className="eyebrow">TV lobby</p>
       <h1>{sportName(lobby.sport)} lobby</h1>
+      <p className="stub__muted">One phone is enough to play against the bot. P1 controls the racket; up to three more people can join to watch.</p>
       {storageWarning ? <p className="alert">Browser storage is unavailable. Keep this tab open to preserve your session.</p> : null}
       <p className="stub__muted">Scan with your phone camera, or open the link and type the code.</p>
 

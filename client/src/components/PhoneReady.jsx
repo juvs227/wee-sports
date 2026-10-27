@@ -5,13 +5,13 @@
  */
 
 import { useState } from 'react';
-import { EVENTS, PHASES, READY_AT_PLAYERS } from '@wee/shared/protocol.js';
+import { EVENTS, PHASES } from '@wee/shared/protocol.js';
 import { errorText } from '../lib/errors.js';
 import { request } from '../lib/socket.js';
 import { useCountdown } from '../lib/useCountdown.js';
 
 /** lobby is the latest snapshot; slot is this phone's seat. */
-export function PhoneReady({ lobby, slot }) {
+export function PhoneReady({ lobby, slot, disabled = false }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
   const secondsLeft = useCountdown(lobby.countdown?.msLeft ?? null);
@@ -39,7 +39,7 @@ export function PhoneReady({ lobby, slot }) {
   if (lobby.phase === PHASES.TUTORIAL) {
     return (
       <section className="phone-ready" aria-live="polite">
-        <h2 className="phone-ready__title">Tutorial time</h2>
+        <h2 className="phone-ready__title">Tennis is ready</h2>
         <p className="stub__status">Watch the TV</p>
       </section>
     );
@@ -69,13 +69,13 @@ export function PhoneReady({ lobby, slot }) {
         type="button"
         className={`btn ${ready ? 'btn--ghost' : 'btn--primary'} phone-ready__btn`}
         aria-pressed={ready}
-        disabled={sending}
+        disabled={sending || disabled}
         onClick={toggle}
       >
         {ready ? 'Ready ✓ (tap to undo)' : 'Ready'}
       </button>
       <p className="phone-ready__count" aria-live="polite">
-        {readyCount}/{READY_AT_PLAYERS} ready
+        {readyCount}/{lobby.players.length} ready
       </p>
     </section>
   );

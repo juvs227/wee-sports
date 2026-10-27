@@ -5,10 +5,14 @@ const element = id => document.getElementById(id);
 let lobbyPaused = window.parent !== window;
 const room = new URLSearchParams(location.search).get('room');
 if (!/^[a-zA-Z0-9-]{6,40}$/.test(room ?? '')) throw new Error('Open the controller link from the game to join its room.');
-element('room').textContent = `Room: ${room}`;
+const lobbyCode = new URLSearchParams(location.search).get('lobby');
+element('room').textContent = lobbyCode && window.parent !== window ? `Homepage lobby: ${lobbyCode} · P1` : `Room: ${room}`;
+if (lobbyCode && window.parent !== window) element('connection-help').textContent = 'These buttons control the tennis game on your TV. No second room to join.';
 const connection = connectSwings({ room, role: 'phone',
   onStatus: text => { element('connection').textContent = text; },
-  onAck: event => { element('delivery').textContent = event.receivers
+  onAck: event => { element('delivery').textContent = event.ok === false
+    ? (event.error === 'game-loading' ? 'Tennis is still loading. Try again when it appears on the TV.' : 'Game paused or disconnected. Try again after reconnecting.')
+    : event.receivers
     ? 'Delivered to game.' : 'No game connected in this room. Open the game first.'; },
 });
 function send(label) {

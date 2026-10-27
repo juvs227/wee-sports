@@ -56,6 +56,18 @@ export function createGameServer({ store = new RoomStore(), origins = [], tickMs
       reply(ack, result);
       if (result.ok) broadcast(result.code);
     });
+    socket.on(EVENTS.PLAYER_SWING, (event, ack) => {
+      const result = store.swingTarget(socket.id, event);
+      if (!result.ok) return reply(ack, result);
+      const host = io.sockets.sockets.get(result.hostSocketId);
+      if (!host) return reply(ack, { ok: false, error: 'disconnected' });
+      // No retries or buffering: a late stroke must never replay after reconnect.
+      host.timeout(1500).emit(EVENTS.GAME_SWING, result.event, (error, received) => {
+        reply(ack, !error && received?.ok
+          ? { ok: true, id: result.event.id, receivers: 1 }
+          : { ok: false, error: 'game-loading' });
+      });
+    });
     const leave = (_payload, ack) => {
       const result = store.remove(socket.id);
       socket.leave(result?.code ?? '');

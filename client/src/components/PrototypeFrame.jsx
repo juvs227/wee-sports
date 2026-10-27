@@ -1,21 +1,60 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { EVENTS, isSwing } from '@wee/shared/protocol.js';
+import { request, socket, useConnection } from '../lib/socket.js';
 
 /** Keep the existing game/controller alive while the outer page owns the lobby session. */
-export function PrototypeFrame({ code, controller = false, paused = false }) {
+export function PrototypeFrame({ code, controller = false, paused = false, showPause = paused }) {
   const frame = useRef(null);
+  const ready = useRef(false);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const connection = useConnection();
   const room = `lobby-${code}`;
-  const src = `/${controller ? 'controller' : 'game'}.html?room=${encodeURIComponent(room)}`;
+  const src = `/${controller ? 'controller' : 'game'}.html?room=${encodeURIComponent(room)}&lobby=${code}`;
   function publishState() {
-    frame.current?.contentWindow?.postMessage({ type: 'wee:lobby-state', paused }, window.location.origin);
+    frame.current?.contentWindow?.postMessage({ type: 'wee:lobby-state',
+      paused: paused || connection !== 'online', connected: connection === 'online' }, window.location.origin);
   }
   useEffect(() => {
-    frame.current?.contentWindow?.postMessage({ type: 'wee:lobby-state', paused }, window.location.origin);
-  }, [paused, src]);
+    ready.current = false;
+    setLoading(true); setFailed(false);
+    const timer = setTimeout(() => { if (!ready.current) setFailed(true); }, 15000);
+    return () => clearTimeout(timer);
+  }, [src, attempt]);
+  useEffect(() => {
+    const post = message => frame.current?.contentWindow?.postMessage(message, window.location.origin);
+    const receive = async event => {
+      if (event.source !== frame.current?.contentWindow || event.origin !== window.location.origin) return;
+      if (event.data?.type === 'wee:bridge-ready') {
+        ready.current = true; setLoading(false); setFailed(false);
+        publishState();
+      } else if (controller && event.data?.type === 'wee:player-swing' && isSwing(event.data.event)) {
+        const result = paused || connection !== 'online' ? { ok: false, error: 'paused' }
+          : await request(EVENTS.PLAYER_SWING, event.data.event);
+        post({ type: 'wee:swing-ack', result });
+      }
+    };
+    const swing = (event, ack) => {
+      const ok = !controller && ready.current && !paused && connection === 'online' && isSwing(event);
+      if (ok) post({ type: 'wee:game-swing', event });
+      if (typeof ack === 'function') ack({ ok });
+    };
+    window.addEventListener('message', receive);
+    if (!controller) socket.on(EVENTS.GAME_SWING, swing);
+    publishState();
+    return () => {
+      window.removeEventListener('message', receive);
+      socket.off(EVENTS.GAME_SWING, swing);
+    };
+  }, [paused, connection, src, controller, attempt]);
   return (
     <div className="prototype-frame">
-      <iframe ref={frame} src={src} title={controller ? 'Tennis phone controller' : 'Tennis game'}
+      {loading ? <p role="status">{failed ? 'Taking too long to load.' : `Loading ${controller ? 'controller' : 'tennis'}…`}
+        {failed ? <button type="button" className="btn btn--ghost" onClick={() => setAttempt(value => value + 1)}>Retry loading</button> : null}</p> : null}
+      <iframe key={attempt} ref={frame} src={src} title={controller ? 'Tennis phone controller' : 'Tennis game'}
         allow="accelerometer; gyroscope" onLoad={publishState} />
-      {paused ? <div className="prototype-frame__pause" role="status">Paused — waiting for everyone to reconnect.</div> : null}
+      {showPause ? <div className="prototype-frame__pause" role="status">Paused — waiting for everyone to reconnect.</div> : null}
     </div>
   );
 }
