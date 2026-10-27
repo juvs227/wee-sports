@@ -91,3 +91,20 @@ test('recovery requires both cooldown and continuous quiet, and sensor gaps rese
   }
   assert.equal(stream.phase, 'ready');
 });
+
+test('fast confirmation accelerates strong peaks but keeps weaker swings on completion', () => {
+  for (const strength of [1, 2]) {
+    const stream = createSwingStream('Right', { fast: true });
+    const events = [];
+    for (let i = 0; i < 40; i++) {
+      const active = i < 10;
+      stream.push({ timeMs: i * 20, rotationAlpha: active ? 300 * strength : 0,
+        rotationBeta: active ? 600 * strength : 0, rotationGamma: 0 });
+      events.push(...stream.analyze().map(event => ({ ...event, emitted: i * 20 })));
+    }
+    assert.equal(events.length, 1);
+    assert.equal(events[0].label, 'Forehand');
+    assert.equal(Boolean(events[0].fast), strength === 2);
+    assert.equal(events[0].emitted, strength === 2 ? 240 : 300);
+  }
+});

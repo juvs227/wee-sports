@@ -26,6 +26,15 @@ let recording = false;
 let started = 0;
 let lastReading = 0;
 let calibrationStarted = 0;
+let currentRates = null;
+let trace = null;
+let lastTracedPhase = null;
+
+function traceEvent(event) {
+  if (!trace) return;
+  trace.events.push({ timeMs: performance.now() - started, ...event });
+  if (trace.events.length > 200) trace.events.shift();
+}
 
 
 function controls() {
@@ -39,19 +48,28 @@ function controls() {
 }
 function analyze(final = false) {
   for (const swing of stream?.analyze(final) ?? []) {
-    element('latest').textContent = `${swing.label}${swing.early ? ' · early' : ''}`;
-    element('timing').textContent = swing.early
+    element('latest').textContent = `${swing.label}${swing.early ? ' · early' : swing.fast ? ' · fast' : ''}`;
+    element('reason').textContent = swing.reason;
+    traceEvent({ type: 'prediction', ...swing });
+    element('timing').textContent = swing.early || swing.fast
       ? `Prediction ${Math.round(swing.detectionDelayMs)} ms after motion threshold; excludes network and rendering.`
       : 'Stroke classified after completion.';
-    if ((swing.complete || swing.early) && swing.label !== 'Unknown') send(swing.label);
+    if ((swing.complete || swing.early || swing.fast) && swing.label !== 'Unknown') send(swing.label);
   }
   element('detector-state').textContent = !recording ? 'Detector idle' : stream?.phase === 'recovering'
-    ? 'Recovering · return to rest before the next stroke' : 'Ready for a swing';
+    ? 'Recovering · return to rest before the next stroke'
+    : stream?.phase === 'waiting-for-rest' ? 'Long movement · hold still to reset detection'
+    : stream?.phase === 'tracking' ? 'Tracking motion…' : 'Ready for a swing';
+  if (recording && stream?.phase !== lastTracedPhase) {
+    lastTracedPhase = stream.phase;
+    traceEvent({ type: 'state', phase: lastTracedPhase });
+  }
 }
 function stop(message = 'Recording stopped. Ready for another session.') {
   if (!recording) return;
   recording = false;
   analyze(true);
+  traceEvent({ type: 'stopped', message });
   element('motion').textContent = message;
   controls();
 }
@@ -60,12 +78,17 @@ function motion(event) {
   const axes = ['alpha', 'beta', 'gamma'];
   if (!rate || !axes.every(axis => Number.isFinite(rate[axis]))) return;
   lastReading = performance.now();
+  currentRates = { alpha: rate.alpha - (bias?.alpha ?? 0), beta: rate.beta - (bias?.beta ?? 0), gamma: rate.gamma - (bias?.gamma ?? 0) };
   if (calibrating && calibrationSamples.length < 1000) calibrationSamples.push(Object.fromEntries(axes.map(axis => [axis, rate[axis]])));
   if (!recording) return;
   const timeMs = performance.now() - started;
-  stream.push({ timeMs, rotationAlpha: rate.alpha - bias.alpha,
-    rotationBeta: rate.beta - bias.beta, rotationGamma: rate.gamma - bias.gamma });
-  if (element('response').value === 'early') analyze();
+  const sample = { timeMs, rotationAlpha: currentRates.alpha,
+    rotationBeta: currentRates.beta, rotationGamma: currentRates.gamma };
+  trace.samples.push({ ...sample, phase: stream.phase });
+  if (trace.samples.length > 3000) trace.samples.shift();
+  element('download-trace').disabled = false;
+  stream.push(sample);
+  if (element('response').value !== 'complete') analyze();
 }
 element('enable').onclick = async () => {
   try {
@@ -94,16 +117,37 @@ element('record').onclick = () => {
   }
   stream = createSwingStream(element('hand').value, {
     early: element('response').value === 'early',
+    fast: element('response').value === 'fast',
     suppressReturns: element('suppress-returns').checked,
   });
   started = performance.now();
+  trace = { version: 1, recordedAt: new Date().toISOString(), hand: element('hand').value,
+    response: element('response').value, suppressReturns: element('suppress-returns').checked,
+    calibration: { ...bias }, units: { timeMs: 'ms', rotationRates: 'degrees/second, bias corrected' },
+    samples: [], events: [] };
+  lastTracedPhase = null;
+  element('download-trace').disabled = true;
+  element('reason').textContent = '';
   recording = true;
   element('latest').textContent = 'Listening…';
   element('motion').textContent = 'Listening continuously. Swing now; tap Stop when finished.';
   controls();
 };
 element('stop').onclick = () => stop();
+element('download-trace').onclick = () => {
+  if (!trace?.samples.length) return;
+  const url = URL.createObjectURL(new Blob([JSON.stringify(trace, null, 2)], { type: 'application/json' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `swing-diagnostic-${Date.now()}.json`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
 setInterval(() => {
+  if (currentRates) {
+    element('gyro').textContent = performance.now() - lastReading > 1500 ? 'Gyro readings are stale'
+      : `Gyro · α ${Math.round(currentRates.alpha)} · β ${Math.round(currentRates.beta)} · γ ${Math.round(currentRates.gamma)} °/s`;
+  }
   if (calibrating && performance.now() - calibrationStarted >= 2000) {
     calibrating = false;
     const axes = ['alpha', 'beta', 'gamma'];

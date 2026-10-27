@@ -161,7 +161,7 @@ to evaluate accuracy.
 ## Early prediction experiment
 
 Branch `experiment/early-swing-prediction` adds a Response selector on the phone:
-**Early · experimental** (default) and **Wait for completion**. Select before
+**Early · experimental** and **Wait for completion** (now the default). Select before
 starting. Early mode checks on every valid sensor event, requires at least 80 ms
 of motion and 30 ms of repeated directional agreement, and sends immediately
 without waiting for the 100 ms end-of-swing quiet period. It latches one event
@@ -204,3 +204,39 @@ Stop listening to change the checkbox. Disable it to compare the original rearm
 behavior. Suppression can miss rapid intentional strokes and cannot guarantee
 rejection of a return performed after recovery has ended. Refresh the controller
 to load the changes and test the option against your normal playing pace.
+
+## Investigating missed strokes
+
+The phone now defaults to Wait for completion to avoid relying on an early guess.
+Early mode remains selectable. Correct playing hand and consistent grip are still
+required. Live signed gyro rates show whether the phone is receiving data, and
+the detector distinguishes Tracking motion, Recovering, and Long movement / wait
+for rest. Completed Unknown predictions show the rejection reason.
+
+To reproduce misses: refresh the controller, choose your hand, recalibrate, and
+try four isolated strokes with a pause until Ready between them. If they still
+miss, tap Stop, expand Detection diagnostics, and Download diagnostic JSON.
+The trace retains up to 3000 recent corrected gyro samples plus 200 prediction/state
+events, with the hand, response mode, suppression setting, and calibration used.
+It is held only in memory and replaced by a new session or reload. There is no
+new measured accuracy claim or threshold change without a fresh trace.
+
+## Fast confirmation
+
+The new default Response is **Fast confirmation · experimental**. It uses the
+same stroke-direction rules as completion mode, after a peak has passed. Strong
+peaks (at least 800 °/s) can be confirmed after rotation stays below half the peak
+(or 120 °/s, whichever is greater) for 40 ms, with at least 60 ms of readings after
+the peak. Existing duration, sharp-rise, hand, and directional checks still apply.
+If that short window is ambiguous or the peak is weaker, the detector falls back
+to the original completion logic instead of discarding the swing. Completed-window
+and Early modes remain available for comparison. Return suppression is unchanged.
+
+This is faster confirmation, not a guarantee of early-mode speed or identical
+accuracy. It still needs a peak and decline; Early can guess while motion rises.
+The phone displays threshold-to-confirmation time, excluding network/rendering.
+Five saved recording replays preserve original labels and peak timestamps with
+return suppression disabled to isolate classification. Confirmation saves roughly
+50–115 ms in those samples. These are development recordings, not independent
+accuracy or end-to-end latency measurements. Diagnostic JSON records the selected
+mode and fast predictions so fresh sessions can be evaluated.

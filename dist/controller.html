@@ -12,7 +12,7 @@
     button { cursor: pointer; } button:disabled { opacity: .45; } .primary { background: #23664f; color: white; }
     small { display: block; color: #53675d; } .buttons { display: flex; flex-wrap: wrap; gap: 8px; }
   </style>
-  <script type="module" crossorigin src="/assets/controller-ctiixZDE.js"></script>
+  <script type="module" crossorigin src="/assets/controller-BJyry3o5.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/swingConnection-CIpSl-X0.js">
 </head>
 <body><main>
@@ -20,7 +20,7 @@
   <p id="room"></p><p id="connection" role="status">Connecting…</p>
   <section>
     <label>Playing hand <select id="hand"><option>Right</option><option>Left</option></select></label>
-    <label>Response <select id="response"><option value="early">Early · experimental</option><option value="complete">Wait for completion</option></select></label>
+    <label>Response <select id="response"><option value="fast">Fast confirmation · experimental</option><option value="complete">Wait for completion</option><option value="early">Early · experimental</option></select></label>
     <p><label><input id="suppress-returns" type="checkbox" checked> Suppress return motions</label>
       <small>Waits at least 400 ms and requires 250 ms of low rotation after a stroke. Very fast consecutive strokes may be skipped.</small></p>
     <div id="latest" role="status">Ready?</div>
@@ -29,8 +29,14 @@
     <p id="delivery" role="status"></p>
     <small id="timing">Early mode trades accuracy for a faster response.</small>
     <small id="detector-state" role="status">Detector idle</small>
+    <small id="gyro">Waiting for gyro readings</small>
+    <small id="reason"></small>
     <small>Keep the page visible. Grip securely, use a wrist strap, and keep your swing area clear. This animates a preset stroke, not your exact 3D motion.</small>
   </section>
+  <details><summary>Detection diagnostics</summary>
+    <p>If a stroke is missed, tap Stop and download the trace. It includes recent corrected gyro readings, recovery states, predictions, and the hand/mode used. New sessions replace the trace.</p>
+    <button id="download-trace" disabled>Download diagnostic JSON</button>
+  </details>
   <details><summary>Test the connection without sensors</summary>
     <div class="buttons"><button id="forehand">Send Forehand</button><button id="backhand">Send Backhand</button></div>
     <p>Open the game in the same room. Test buttons work on your Mac too.</p>

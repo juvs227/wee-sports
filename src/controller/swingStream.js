@@ -1,8 +1,8 @@
 import { classifySwings, predictEarlySwing } from './classifySwing.js';
 
 // Consume finished windows instead of repeatedly classifying session history.
-export function createSwingStream(hand, { early = false, suppressReturns = true } = {}) {
-  const createDetector = () => createDetectorStream(hand, early);
+export function createSwingStream(hand, { early = false, fast = false, suppressReturns = true } = {}) {
+  const createDetector = () => createDetectorStream(hand, early, fast);
   let detector = createDetector();
   let recoveryStarted = null;
   let quietSince = null;
@@ -35,7 +35,7 @@ export function createSwingStream(hand, { early = false, suppressReturns = true 
       if (recoveryStarted !== null) return [];
       const results = detector.analyze(final);
       if (!suppressReturns) return results;
-      const index = results.findIndex(result => result.label !== 'Unknown' && (result.complete || result.early));
+      const index = results.findIndex(result => result.label !== 'Unknown' && (result.complete || result.early || result.fast));
       if (index !== -1) {
         recoveryStarted = lastTime;
         quietSince = null;
@@ -46,22 +46,23 @@ export function createSwingStream(hand, { early = false, suppressReturns = true 
       }
       return results;
     },
-    get phase() { return recoveryStarted === null ? 'ready' : 'recovering'; },
+    get phase() { return recoveryStarted === null ? detector.phase : 'recovering'; },
     get size() { return detector.size + recoverySamples.length; },
     get recoverySamples() { return [...recoverySamples]; },
   };
 }
 
-function createDetectorStream(hand, early) {
+function createDetectorStream(hand, early, fast) {
   if (early) return createEarlySwingStream(hand);
   let samples = [];
   let waitingForRest = false;
+  let restThreshold = 120;
   let quietSince = null;
   return {
     push(sample) {
       if (waitingForRest) {
         const speed = Math.hypot(sample.rotationAlpha, sample.rotationBeta, sample.rotationGamma);
-        quietSince = speed < 120 ? quietSince ?? sample.timeMs : null;
+        quietSince = speed < restThreshold ? quietSince ?? sample.timeMs : null;
         if (quietSince !== null && sample.timeMs - quietSince >= 100) waitingForRest = false;
         return;
       }
@@ -75,10 +76,16 @@ function createDetectorStream(hand, early) {
       }
     },
     analyze(final = false) {
-      const results = classifySwings(samples, { hand, final });
+      const results = classifySwings(samples, { hand, final, fast });
       if (results.length) {
         const consumed = results.at(-1).endMs;
         samples = samples.filter(sample => sample.timeMs > consumed);
+        if (results.some(result => result.fast)) {
+          samples = [];
+          waitingForRest = true;
+          restThreshold = Math.max(120, results.find(result => result.fast).peakRotation * 0.35);
+          quietSince = null;
+        }
       } else if (samples.length && samples.at(-1).timeMs - samples[0].timeMs > 5000) {
         // Don't turn the tail of a long movement into a new, shorter stroke.
         samples = [];
@@ -88,6 +95,7 @@ function createDetectorStream(hand, early) {
       return results;
     },
     get size() { return samples.length; },
+    get phase() { return waitingForRest ? 'waiting-for-rest' : samples.length ? 'tracking' : 'ready'; },
   };
 }
 
@@ -145,5 +153,6 @@ function createEarlySwingStream(hand) {
       return results;
     },
     get size() { return samples.length; },
+    get phase() { return waitingForRest ? 'waiting-for-rest' : samples.length ? 'tracking' : 'ready'; },
   };
 }
