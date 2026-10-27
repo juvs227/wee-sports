@@ -20,6 +20,7 @@ import {
     NEUTRAL_INPUT,
     type PlayerInput,
 } from '../Controllers/playerInput';
+import { calculateRandomServe } from './randomServe';
 
 export class World {
     public scene: THREE.Scene;
@@ -156,24 +157,13 @@ export class World {
             if (dist1 <= REACH) {
                 this.player1.playAnimation(animName);
 
-                // Backhit gets slightly wider angle/variance variations
-                const xForce = isBackhand ? (Math.random() - 0.5) * 0.12 : (Math.random() - 0.5) * 0.08;
-                const randomServe = new THREE.Vector3(
-                    xForce,
-                    THREE.MathUtils.randFloat(0.18, 0.25),
-                    -THREE.MathUtils.randFloat(0.18, 0.28)
-                );
+                const randomServe = calculateRandomServe(1, isBackhand);
                 serveBall(this.ball, randomServe, 'player1');
 
             } else if (dist2 <= REACH) {
                 this.player2.playAnimation(animName);
 
-                const xForce = isBackhand ? (Math.random() - 0.5) * 0.12 : (Math.random() - 0.5) * 0.08;
-                const randomServe = new THREE.Vector3(
-                    xForce,
-                    THREE.MathUtils.randFloat(0.15, 0.23),
-                    THREE.MathUtils.randFloat(0.20, 0.32)
-                );
+                const randomServe = calculateRandomServe(2, isBackhand);
                 serveBall(this.ball, randomServe, 'player2');
             }
         }
