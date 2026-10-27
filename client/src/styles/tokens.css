@@ -1,0 +1,117 @@
+/*
+ * Wee Sports design tokens: Wii-inspired light. White and silver surfaces, a
+ * Wii-channel blue accent, big rounded shapes. Type scales with the viewport
+ * because the TV is read from across a room.
+ */
+:root {
+  color-scheme: light;
+
+  --bg: #f4f6f8;
+  --bg-stripe: rgb(255 255 255 / 0.7);
+  --surface: #ffffff;
+  --surface-sunk: #eef1f4;
+  --border: #dde2e7;
+  --border-strong: #c3cad1;
+
+  --text: #22272c;
+  --text-muted: #5b646c;
+
+  /* #34bdef is decorative only (rings, glows). Text and buttons use the deeper
+     blues, which pass contrast with white. */
+  --accent: #34bdef;
+  --accent-soft: #e2f5fd;
+  --accent-ink: #075f91;
+  --accent-top: #0d7ab8;
+  --accent-bottom: #0a6499;
+
+  --danger: #b4233a;
+  --danger-soft: #fdecef;
+  --warn-ink: #6b4a00;
+  --warn-soft: #fff4d6;
+
+  /* One color per seat, like the Wii remote's player lights. */
+  --p1: #2f80ed;
+  --p2: #e5484d;
+  --p3: #2b9a66;
+  --p4: #e0a100;
+
+  --radius-sm: 12px;
+  --radius: 18px;
+  --radius-lg: 26px;
+  --radius-pill: 999px;
+
+  --shadow-sm: 0 1px 2px rgb(24 39 56 / 0.06);
+  --shadow: 0 1px 2px rgb(24 39 56 / 0.06), 0 10px 28px rgb(24 39 56 / 0.07);
+  --shadow-lift: 0 2px 6px rgb(24 39 56 / 0.08), 0 18px 40px rgb(24 39 56 / 0.14);
+  --ring: 0 0 0 4px rgb(52 189 239 / 0.35);
+
+  --font: 'Nunito', ui-rounded, 'SF Pro Rounded', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --gutter: clamp(16px, 4vw, 48px);
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  /* 16px on a laptop, ~20px on a 1080p TV, capped for 4K. */
+  font-size: clamp(16px, 0.5vw + 10px, 22px);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  font-family: var(--font);
+  line-height: 1.5;
+  color: var(--text);
+  background-color: var(--bg);
+  /* The Wii menu's faint horizontal pinstripe. */
+  background-image: repeating-linear-gradient(180deg, transparent 0 3px, var(--bg-stripe) 3px 4px);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--accent-ink);
+}
+
+:focus-visible {
+  outline: 3px solid var(--accent-top);
+  outline-offset: 3px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,5 +1,5 @@
 {
-  "name": "threejs-modular-template",
+  "name": "wee-sports",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -13,8 +13,13 @@
     "fix": "gts fix",
     "prepare": "npm run compile",
     "test:physics": "vitest run test/",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "test": "npm run test:game && npm run test:platform",
+    "test:watch": "vitest",
+    "test:game": "vitest run",
+    "test:platform": "npm test -w @wee/server",
+    "stress": "node server/scripts/stress.js",
+    "start": "node server/main.js",
+    "preview": "node server/main.js --preview"
   },
   "devDependencies": {
     "@types/node": "^22.7.5",
@@ -22,12 +27,18 @@
     "gts": "^7.0.0",
     "typescript": "^5.6.3",
     "vite": "^6.4.5",
-    "vitest": "^4.1.12"
+    "vitest": "^4.1.12",
+    "@vitejs/plugin-react": "^4.3.1"
   },
   "dependencies": {
     "socket.io": "^4.8.4",
     "socket.io-client": "^4.8.4",
     "three": "^0.186.1",
     "ws": "^8.18.0"
-  }
+  },
+  "workspaces": [
+    "shared",
+    "server",
+    "client"
+  ]
 }

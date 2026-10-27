@@ -1,4 +1,59 @@
-# wee-sports
+# Wee Sports
+
+`update-homepage` combines the current tennis app from `main` with the homepage,
+lobby, ready check, reconnect handling, and stress runner from `week4-reconnect`.
+
+## Run the combined app
+
+Use Node 24 and the npm lockfile:
+
+```sh
+npm ci
+npm run dev
+```
+
+Open `http://localhost:5173` for the homepage. One server serves the homepage,
+Socket.io lobby, tennis, and swing relay; no separate `:3001` process is needed.
+For a phone tunnel, set `NGROK_HOST` to the tunnel hostname before starting the
+server. `VITE_PUBLIC_URL` can also set the QR's public origin. Real phone motion
+requires HTTPS. Same-Wi-Fi joining still works over HTTP.
+
+1. Choose Tennis, then join its QR/code from four separate phones or browser profiles.
+2. Mark all four ready and press Play on the TV. The five-second countdown opens tennis.
+3. P1 gets the existing phone controller with Enable motion, Calibrate, and Start swings.
+   P2–P4 retain their lobby seats and watch. Main currently supports one phone against
+   the bot; this merge does not add four-player tennis or tutorial voting.
+4. A temporary lobby connection loss pauses the embedded game. Rejoining preserves
+   the seat and the running game while the TV page stays open. After a motion pause,
+   tap Start swings again. Closing the lobby ends its embedded game/controllers.
+
+The existing protocol still calls the post-countdown phase `tutorial`; that former
+placeholder now contains the existing tennis page. Its relay room is `lobby-<CODE>`,
+so four-character lobby codes map to the existing relay's room format. The outer
+lobby page stays mounted to retain its reconnect token. If P1 explicitly leaves,
+the remaining players return to the lobby so someone can fill the controller seat.
+
+**Recovery limit:** refreshing the TV restores the lobby but starts a fresh tennis
+world. Scores/points are still local to that page; authoritative match recovery and
+restarting an interrupted point remain future work. Direct prototype URLs keep the
+existing relay behavior and do not participate in lobby recovery.
+
+Standalone prototypes remain at `/game.html` and `/controller.html?room=<room-id>`.
+`npm run build` builds all three pages and checks model assets. After building, `npm run preview`
+serves the built app locally with both relays (local preview, not a deployment setup).
+`npm start` runs the same combined app as `npm run dev`.
+
+## Checks
+
+```sh
+npm run compile
+npm test               # game/relay Vitest suite, then platform node:test suite
+npm run build
+npm run stress -- --lobbies 10,25 --seconds 5
+```
+
+See [platform reconnect and stress-test notes](docs/platform.md). The recorded
+stress benchmark predates this merge and measures lobby traffic only, not tennis.
 
 ## Contributions
 We follow the **Google TypeScript Style Guide** for all JavaScript and TypeScript code in this repository. 
@@ -10,7 +65,7 @@ Before submitting a Pull Request, please run the following commands locally:
 
 - **Check code style and types:**
   ```bash
-  bun run check
+  npm run check
   ```
   
 ## Racket contact prototype
@@ -121,7 +176,7 @@ npm run compile        # separate TypeScript check
 npm run build          # build game and phone controller
 ```
 
-`vitest.config.mjs` runs `test/**/*.test.ts` and `server/**/*.test.js` in the Node environment. The physics,
+`vitest.config.mjs` runs `test/**/*.test.ts` and `server/*.test.js`; platform tests in `server/src` and `server/scripts` run separately through node:test in the Node environment. The physics,
 bot, and ball-position tests do not need a browser or WebGL renderer. Tests import
 `test` from Vitest and retain Node assert assertions. Browser sensor permissions,
 actual phone input, and rendered animation timing still need device playtesting.

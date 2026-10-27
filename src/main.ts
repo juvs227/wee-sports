@@ -9,9 +9,20 @@ async function main(): Promise<void> {
     }
 
     const world = new World(container as HTMLElement);
-    world.start();
+    let lobbyPaused = window.parent !== window;
+    if (!lobbyPaused) world.start();
+    window.addEventListener('message', event => {
+        if (event.source !== window.parent || event.origin !== location.origin ||
+            event.data?.type !== 'wee:lobby-state' || typeof event.data.paused !== 'boolean') return;
+        lobbyPaused = event.data.paused;
+        if (lobbyPaused) {
+            world.setPlayerInput({ moveX: 0, moveZ: 0 }, 1);
+            world.stop();
+        }
+        else world.start();
+    });
     new InputController((input) => {
-        world.setPlayerInput(input, 1);
+        world.setPlayerInput(lobbyPaused ? { moveX: 0, moveZ: 0 } : input, 1);
     });
 
     const params = new URLSearchParams(location.search);
@@ -51,6 +62,7 @@ async function main(): Promise<void> {
     link.href = controllerUrl.href;
     link.textContent = 'Open phone controller';
     link.style.color = '#86efac';
+    if (window.parent !== window) link.hidden = true; // Phones already joined through the lobby.
 
     const autoLabel = document.createElement('label');
     autoLabel.style.cssText = 'display:block;margin:12px 0';
@@ -76,7 +88,7 @@ async function main(): Promise<void> {
             status.textContent = text;
         },
         onSwing: (event) => {
-            world.swing(event);
+            if (!lobbyPaused) world.swing(event);
 
         },
     });

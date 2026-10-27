@@ -2,6 +2,7 @@ import { createSwingStream } from './swingStream.js';
 import { connectSwings } from '../network/swingConnection.js';
 
 const element = id => document.getElementById(id);
+let lobbyPaused = window.parent !== window;
 const room = new URLSearchParams(location.search).get('room');
 if (!/^[a-zA-Z0-9-]{6,40}$/.test(room ?? '')) throw new Error('Open the controller link from the game to join its room.');
 element('room').textContent = `Room: ${room}`;
@@ -11,6 +12,7 @@ const connection = connectSwings({ room, role: 'phone',
     ? 'Delivered to game.' : 'No game connected in this room. Open the game first.'; },
 });
 function send(label) {
+  if (lobbyPaused) { element('delivery').textContent = 'Paused — waiting for everyone to reconnect.'; return; }
   const sent = connection.sendSwing(label, element('hand').value);
   element('delivery').textContent = sent ? 'Sent; waiting for relay…' : 'Disconnected: swing was not sent. Try again after reconnecting.';
 }
@@ -31,12 +33,22 @@ let calibrationStarted = 0;
 function controls() {
   element('enable').disabled = enabled;
   element('calibrate').disabled = !enabled || recording || calibrating;
-  element('record').disabled = !enabled || !bias || recording || calibrating;
+  element('record').disabled = lobbyPaused || !enabled || !bias || recording || calibrating;
   element('stop').disabled = !recording;
   element('hand').disabled = recording || calibrating;
   element('response').disabled = recording;
   element('suppress-returns').disabled = recording;
+  element('forehand').disabled = lobbyPaused;
+  element('backhand').disabled = lobbyPaused;
 }
+window.addEventListener('message', event => {
+  if (event.source !== window.parent || event.origin !== location.origin ||
+      event.data?.type !== 'wee:lobby-state' || typeof event.data.paused !== 'boolean') return;
+  lobbyPaused = event.data.paused;
+  if (lobbyPaused) stop('Paused. When everyone reconnects, tap Start swings to continue.');
+  controls();
+});
+controls();
 function analyze(final = false) {
   for (const swing of stream?.analyze(final) ?? []) {
     element('latest').textContent = `${swing.label}${swing.early ? ' · early' : ''}`;
