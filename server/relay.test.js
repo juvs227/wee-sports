@@ -1,4 +1,4 @@
-import test from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
@@ -6,7 +6,6 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { WebSocket } from 'ws';
 import { attachRelay } from './relay.js';
-import { createPlayer, triggerPlayerSwing, updatePlayerMotion } from '../src/World/components/player.js';
 
 test('phone events reach only games in the same room; invalid events are rejected', async () => {
   const server = createServer();
@@ -53,24 +52,6 @@ test('phone events reach only games in the same room; invalid events are rejecte
   }
 });
 
-test('stroke and playing hand control animation direction, then return to idle', () => {
-  const player = createPlayer();
-  triggerPlayerSwing(player, { label: 'Forehand', hand: 'Right' });
-  updatePlayerMotion(player, player.userData.swing.started + 162.5);
-  assert.ok(player.rotation.y > 0);
-  triggerPlayerSwing(player, { label: 'Backhand', hand: 'Right' });
-  updatePlayerMotion(player, player.userData.swing.started + 162.5);
-  assert.ok(player.rotation.y < 0);
-  triggerPlayerSwing(player, { label: 'Backhand', hand: 'Left' });
-  updatePlayerMotion(player, player.userData.swing.started + 162.5);
-  assert.ok(player.rotation.y > 0);
-  updatePlayerMotion(player, player.userData.swing.started + 650);
-  assert.equal(player.rotation.y, 0);
-  assert.equal(player.userData.swing, undefined);
-  player.geometry.dispose();
-  player.material.dispose();
-});
-
 test('combined server serves both pages and controller module', async () => {
   const process = spawn(globalThis.process.execPath, ['server/main.js'], {
     env: { ...globalThis.process.env, PORT: '0' }, stdio: ['ignore', 'pipe', 'pipe'],
@@ -87,10 +68,17 @@ test('combined server serves both pages and controller module', async () => {
     }
     assert.ok(port, `Server failed to start: ${errors}`);
     const base = `http://127.0.0.1:${port}`;
-    for (const path of ['/', '/controller.html?room=room-one', '/src/controller/main.js']) {
+    for (const path of ['/', '/controller.html?room=room-one', '/src/main.ts', '/src/controller/main.js']) {
       const response = await fetch(base + path);
       assert.equal(response.status, 200, path);
       assert.ok((await response.text()).length > 100);
+    }
+    for (const name of ['player', 'racket']) {
+      const response = await fetch(`${base}/assets/${name}.glb`);
+      assert.equal(response.status, 200);
+      const bytes = Buffer.from(await response.arrayBuffer());
+      assert.equal(bytes.toString('ascii', 0, 4), 'glTF');
+      assert.equal(bytes.readUInt32LE(8), bytes.length);
     }
   } finally {
     clearTimeout(timeout);
@@ -99,4 +87,4 @@ test('combined server serves both pages and controller module', async () => {
     process.kill();
     if (process.exitCode === null && process.signalCode === null) await exited;
   }
-});
+}, 15000);

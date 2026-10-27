@@ -60,7 +60,7 @@ test('rally hit updates velocity and resets shot state; serve still waits for co
 });
 
 test('hitbox fits the bundled racket asset without browser or mesh-triangle collision', async () => {
-    const data = readFileSync('assets/racket.glb');
+    const data = readFileSync('public/assets/racket.glb');
     const bytes = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
     const asset = await new GLTFLoader().parseAsync(bytes, '');
     const hitbox = new RacketHitbox(asset.scene);

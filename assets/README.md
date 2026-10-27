@@ -14,3 +14,9 @@ To attach the racket, use the "HandSocket" object. This can be grabbed by callin
 Attached models can rotate relative to the socket axis. This means that rotating the racket about the y-axis will rotate it properly relative to the hand, instead of the global y-axis.
 
 For future development, a "HeadSocket" will be created for attaching hats to the player model.
+
+## Model files
+
+The player and racket GLBs are stored in `public/assets/` so Vite includes them
+in production builds. Their runtime URLs are `/assets/player.glb` and
+`/assets/racket.glb`. This directory retains model usage documentation.

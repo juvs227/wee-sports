@@ -116,12 +116,12 @@ are declared in package.json; commit package-lock.json alongside dependency upda
 ```sh
 npm test               # run all TypeScript tests once
 npm run test:watch     # rerun tests as files change
-npm run test:physics   # alias for the current Vitest suite
+npm run test:physics   # run only test/ TypeScript physics and bot tests
 npm run compile        # separate TypeScript check
 npm run build          # build game and phone controller
 ```
 
-`vitest.config.mjs` runs `test/**/*.test.ts` in the Node environment. The physics,
+`vitest.config.mjs` runs `test/**/*.test.ts` and `server/**/*.test.js` in the Node environment. The physics,
 bot, and ball-position tests do not need a browser or WebGL renderer. Tests import
 `test` from Vitest and retain Node assert assertions. Browser sensor permissions,
 actual phone input, and rendered animation timing still need device playtesting.
@@ -133,3 +133,92 @@ longer invoke compilation/lint implicitly; lint remains available separately as
 hook still compiles TypeScript during dependency installation. Workflow execution
 on GitHub requires committing and pushing these files; local checks do not run a
 remote GitHub Actions job.
+
+## Build assets and relay regression checks
+
+Models live in `public/assets/player.glb` and `public/assets/racket.glb`. Vite
+serves them at `/assets/...` during development and copies them into `dist/assets`
+when building. Keep source models under public; do not move them back into the
+root assets directory or rely on manually copying them into dist.
+
+`npm run build` now also runs `scripts/verify-build.mjs`, which checks that both
+built GLBs exist and have valid version/length headers. Missing model assets make
+the build (and therefore GitHub CI) fail rather than yielding a broken game.
+
+The server tests now use Vitest and run with `npm test`. The obsolete placeholder
+player animation test was removed; current player/racket behavior is covered by
+the TypeScript physics tests. Relay coverage checks room routing, invalid messages,
+role enforcement, and actual HTTP responses for the game, controller, TypeScript
+entry point, and both model files. Continuous-swing and return-suppression tests
+are also included. The suite includes physics, bot, trajectory, relay, and continuous-swing tests.
+
+Before merging, run the same commands as CI:
+
+```sh
+npm ci
+npm run compile
+npm test
+npm run build
+```
+
+Then run the app and perform a real phone-to-game test: open the shared HTTPS
+controller link, send a manual stroke, enable/calibrate motion, and try both stroke
+types. Automated tests do not exercise iPhone permissions or rendered animation.
+Commit the model moves, verification script, test changes, and package/config
+updates on the feature branch, push, and verify the PR's GitHub CI result. Do not
+merge based solely on local checks.
+
+## Court-targeted shot trajectories
+
+Successful racket contacts now aim at a safe landing point rather than applying
+one fixed velocity everywhere. Player 1 aims into negative Z; player 2 aims into
+positive Z. The preferred depth is 8.5 units, with deterministic forehand/backhand
+placement kept inside X ±2.8. A central target at depth 7 is the fallback.
+
+`shotTrajectory.ts` solves launch velocity in the existing units per 60 Hz tick,
+then simulates the first bounce using 1/120 s substeps. It searches flight times
+from 1 to 2.5 seconds, requiring a first landing inside the opposite court's safe
+area and at least 0.9 units of ball-center height across the net (current net top
+0.55 plus radius and clearance margin). It compensates for semi-implicit gravity.
+This applies to rally returns and contact that releases a prepared serve; it does
+not implement regulation service boxes. Practice feeds retain their own setup.
+
+A yellow ring shows the intended landing point, and Hit feedback reports its X/Z.
+H toggles the ring alongside the other debug markers. Test with B/Shift+B, your
+phone, and the bot. Targets and power are deliberately repeatable while tuning.
+A later opponent contact changes the ball's trajectory, so its original target
+only applies if that shot is allowed to land. No collision with the net mesh was
+added: the planner checks clearance proactively. Impossible/invalid contact
+positions report no safe trajectory rather than launching invalid values.
+
+Tests cover 144 combinations of side, stroke, and contact location/height, plus
+invalid inputs and simulation at 30/60/144 FPS. They verify first-bounce court
+placement and clearance, not a measured real-play success rate. Visual playtesting
+is still needed for bot reach, racket timing, and feel.
+
+## Forehand height adjustment
+
+Forehands now lower the hand/racket together by up to 0.22 world units at the
+middle of the stroke, easing to zero at either end. The authored backhand path
+is unchanged. The offset is applied to the bone containing both Hand and
+HandSocket, in world-down direction despite model rotation/scale, and removed
+before every mixer update so it does not accumulate across frames or strokes.
+Cached strike offsets, bot reach checks, and practice feeds use the adjusted pose.
+Tune `DEFAULT_FOREHAND_DROP` in `forehandPose.ts`, or the per-player `forehandDrop`
+option, after checking the blue contact box against the ball in play. This is a
+runtime pose correction, not an edit to the GLB animation. Refresh the Mac game,
+try B then K, and compare Shift+B then J to verify backhands remain appropriate.
+
+## Gentler phone swings (sensitive v7)
+
+The classifier now starts a candidate at 200 °/s rotation magnitude (previously
+250) and accepts peaks from 280 °/s (previously 350). Direction thresholds are
+roughly 20% lower for both stroke types and playing hands; strong left-backhand
+support now uses −750 instead of −850 °/s. Direction dominance, minimum duration,
+repeated-sample checks, and return suppression remain. Early and completion
+modes share the same candidate start/peak limits.
+
+Refresh the phone controller to load `gyro-handed-sensitive-v7`, choose the
+correct playing hand, recalibrate, and test gentler strokes. These defaults may
+admit more accidental motions; keep Suppress return motions enabled initially.
+This changes phone recognition only, not racket hitbox size or collision timing.

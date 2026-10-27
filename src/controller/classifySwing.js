@@ -1,5 +1,6 @@
 // Provisional rules inferred from screenshots, not fitted to raw recordings.
-export const classifierVersion = 'gyro-handed-v6'
+export const classifierVersion = 'gyro-handed-sensitive-v7'
+export const SWING_LIMITS = Object.freeze({ start: 200, minPeak: 280 })
 const axes = ['Alpha', 'Beta', 'Gamma']
 const valid = sample => Number.isFinite(sample.timeMs) && axes.every(axis => Number.isFinite(sample[`rotation${axis}`]))
 const speed = sample => Math.hypot(...axes.map(axis => sample[`rotation${axis}`]))
@@ -23,7 +24,7 @@ function describe(window, complete, hand) {
   // rotation peak rather than loosening the beta threshold for every motion.
   const backhandSupport = window.filter(sample =>
     Math.abs(sample.timeMs - peakSample.timeMs) <= 60 &&
-    sample.rotationAlpha < -250 && sample.rotationBeta < -200)
+    sample.rotationAlpha < -200 && sample.rotationBeta < -160)
   const sustainedBackhand = backhandSupport.length >= 2 &&
     backhandSupport.at(-1).timeMs - backhandSupport[0].timeMs >= 16
   const angles = { alpha: 0, beta: 0, gamma: 0 }
@@ -36,39 +37,39 @@ function describe(window, complete, hand) {
   let label = 'Unknown'
   let reason = 'Rotation directions overlap the screenshot examples.'
   if (!complete) reason = 'Motion window ended before a clear return to rest.'
-  else if (window.length < 5 || durationMs < 80 || durationMs > 1500 || peak < 350) reason = 'Motion is too short, long, or weak for these rules.'
+  else if (window.length < 5 || durationMs < 80 || durationMs > 1500 || peak < SWING_LIMITS.minPeak) reason = 'Motion is too short, long, or weak for these rules.'
   else if (hand === 'Left') {
     const nearby = window.filter(sample => Math.abs(sample.timeMs - peakSample.timeMs) <= 60)
     const support = nearby.filter(sample => rates.alpha > 0
-      ? sample.rotationAlpha > 250 && sample.rotationBeta < -150
-      : sample.rotationAlpha < -250)
-    const strongNegative = nearby.filter(sample => sample.rotationAlpha < -850)
+      ? sample.rotationAlpha > 200 && sample.rotationBeta < -120
+      : sample.rotationAlpha < -200)
+    const strongNegative = nearby.filter(sample => sample.rotationAlpha < -750)
     const sustainedStrongNegative = strongNegative.length >= 2 &&
       strongNegative.at(-1).timeMs - strongNegative[0].timeMs >= 16
     const sustained = support.length >= 2 && support.at(-1).timeMs - support[0].timeMs >= 16
-    if (sustained && rates.alpha > 250 && rates.beta < -150 && rates.gamma < 100) {
+    if (sustained && rates.alpha > 200 && rates.beta < -120 && rates.gamma < 100) {
       label = 'Forehand'
       reason = 'Left-hand positive alpha with sustained negative beta near peak.'
-    } else if (sustained && rates.alpha < -250 && Math.abs(rates.alpha) / peak >= 0.75 &&
+    } else if (sustained && rates.alpha < -200 && Math.abs(rates.alpha) / peak >= 0.75 &&
         (rates.beta <= 100 || rates.gamma >= 250 || sustainedStrongNegative)) {
       label = 'Backhand'
       reason = sustainedStrongNegative
-        ? 'Left-hand dominant negative alpha with repeated rates below −850 °/s near peak.'
+        ? 'Left-hand dominant negative alpha with repeated rates below −750 °/s near peak.'
         : 'Left-hand dominant negative alpha with supporting beta/gamma directions.'
     } else {
       reason = 'Left-hand direction is ambiguous or resembles the observed return movement.'
     }
   }
   else if (hand !== 'Right') reason = 'Playing hand is unsupported.' 
-  else if (rates.alpha < -250 && (rates.beta < -200 || sustainedBackhand)) {
+  else if (rates.alpha < -200 && (rates.beta < -160 || sustainedBackhand)) {
     label = 'Backhand'
-    reason = rates.beta < -200
+    reason = rates.beta < -160
       ? 'Alpha and beta are both strongly negative at peak rotation.'
       : 'Negative alpha at peak with repeated negative alpha/beta agreement within 60 ms.'
-  } else if (rates.gamma < -450 && Math.abs(rates.gamma) > 1.2 * Math.max(Math.abs(rates.alpha), Math.abs(rates.beta))) {
+  } else if (rates.gamma < -360 && Math.abs(rates.gamma) > 1.2 * Math.max(Math.abs(rates.alpha), Math.abs(rates.beta))) {
     label = 'Backhand'
     reason = 'Negative gamma dominates, resembling the alternate backhand example.'
-  } else if (rates.beta > 250 && rates.alpha > 100 && rates.gamma > -450) {
+  } else if (rates.beta > 200 && rates.alpha > 80 && rates.gamma > -450) {
     label = 'Forehand'
     reason = 'Positive beta and alpha coincide without dominant negative gamma.'
   }
@@ -92,7 +93,7 @@ export function classifySwings(samples, { hand = 'Right', sport = 'Tennis', fina
     // Broad repositioning humps should not become extra swings. A peak at the
     // recording boundary is retained, since its approach was not captured.
     const distinctRise = peakIndex === 0 || Math.min(...approach.map(speed)) <= peak * 0.5
-    if (peak >= 350 && distinctRise) results.push(describe(window, true, hand))
+    if (peak >= SWING_LIMITS.minPeak && distinctRise) results.push(describe(window, true, hand))
     window = []
     quietSince = null
     peak = 0
@@ -106,7 +107,7 @@ export function classifySwings(samples, { hand = 'Right', sport = 'Tennis', fina
       peak = 0
       if (!valid(sample)) continue
     }
-    if (!window.length && speed(sample) >= 250) window = [sample]
+    if (!window.length && speed(sample) >= SWING_LIMITS.start) window = [sample]
     else if (window.length) window.push(sample)
     if (window.length) {
       peak = Math.max(peak, speed(sample))

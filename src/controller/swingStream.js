@@ -1,4 +1,4 @@
-import { classifySwings, predictEarlySwing } from './classifySwing.js';
+import { classifySwings, predictEarlySwing, SWING_LIMITS } from './classifySwing.js';
 
 // Consume finished windows instead of repeatedly classifying session history.
 export function createSwingStream(hand, { early = false, suppressReturns = true } = {}) {
@@ -114,7 +114,7 @@ function createEarlySwingStream(hand) {
       if (previousTime !== null && (sample.timeMs <= previousTime || sample.timeMs - previousTime > 100)) reset();
       previousTime = sample.timeMs;
       const speed = Math.hypot(...values);
-      if (!samples.length && !waitingForRest && speed < 250) return;
+      if (!samples.length && !waitingForRest && speed < SWING_LIMITS.start) return;
       peak = Math.max(peak, speed);
       quietSince = speed < Math.max(120, peak * 0.35) ? quietSince ?? sample.timeMs : null;
       if (quietSince !== null && sample.timeMs - quietSince >= 100) { reset(); return; }

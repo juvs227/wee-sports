@@ -1,4 +1,4 @@
-import test from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { createSwingStream } from '../src/controller/swingStream.js';
 
@@ -90,4 +90,41 @@ test('recovery requires both cooldown and continuous quiet, and sensor gaps rese
     stream.push({ timeMs, rotationAlpha: 0, rotationBeta: 0, rotationGamma: 0 });
   }
   assert.equal(stream.phase, 'ready');
+});
+
+for (const early of [false, true]) {
+  test(`gentler forehands and backhands work for both hands (${early ? 'early' : 'completion'})`, () => {
+    for (const [hand, label, alpha, beta, gamma] of [
+      ['Right', 'Forehand', 90, 270, 0],
+      ['Right', 'Backhand', -240, -180, 0],
+      ['Left', 'Forehand', 240, -160, -80],
+      ['Left', 'Backhand', -300, -50, 20],
+    ]) {
+      const stream = createSwingStream(hand, { early });
+      const results = [];
+      for (let i = 0; i < 40; i++) {
+        const active = i < 12;
+        stream.push({ timeMs: i * 20, rotationAlpha: active ? alpha : 0,
+          rotationBeta: active ? beta : 0, rotationGamma: active ? gamma : 0 });
+        results.push(...stream.analyze());
+      }
+      assert.deepEqual(results.map(result => result.label), [label]);
+    }
+  });
+}
+
+test('small shakes and known left-hand return direction remain unclassified', () => {
+  for (const early of [false, true]) {
+    for (const rates of [[40, 70, 20], [-688, 250, 209]]) {
+      const stream = createSwingStream('Left', { early });
+      const results = [];
+      for (let i = 0; i < 40; i++) {
+        const active = i < 12;
+        stream.push({ timeMs: i * 20, rotationAlpha: active ? rates[0] : 0,
+          rotationBeta: active ? rates[1] : 0, rotationGamma: active ? rates[2] : 0 });
+        results.push(...stream.analyze());
+      }
+      assert.ok(results.every(result => result.label === 'Unknown'));
+    }
+  }
 });

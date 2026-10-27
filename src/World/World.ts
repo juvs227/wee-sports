@@ -23,6 +23,7 @@ import {
     NEUTRAL_INPUT,
     type PlayerInput,
 } from '../Controllers/playerInput';
+import { planCourtShot } from './shotTrajectory';
 import { chooseBotStroke, type BotStroke } from './botPlayer';
 import { predictBaselineIntercept, lateralSteering } from './autoPosition';
 import { sweptRacketContact } from './components/racketContact';
@@ -44,6 +45,8 @@ export class World {
     private botAttempted = false;
     private autoTargets: [number, number] = [0, 0];
     private readonly targetMarkers: THREE.Mesh[] = [];
+    private readonly shotTargetMarker: THREE.Mesh;
+    private hasShotTarget = false;
     private clock = new THREE.Clock();
     private animationFrameId: number | null = null;
 
@@ -118,6 +121,11 @@ export class World {
             this.scene.add(marker);
             this.targetMarkers.push(marker);
         }
+        this.shotTargetMarker = new THREE.Mesh(new THREE.RingGeometry(0.16, 0.23, 24),
+            new THREE.MeshBasicMaterial({ color: 0xfacc15, side: THREE.DoubleSide, depthWrite: false }));
+        this.shotTargetMarker.rotation.x = -Math.PI / 2;
+        this.shotTargetMarker.visible = false;
+        this.scene.add(this.shotTargetMarker);
         window.addEventListener('resize', this.handleResize);
     }
 
@@ -188,6 +196,7 @@ export class World {
             marker.visible = (this.autoPositionEnabled || (number === 2 && this.botEnabled)) && this.showHitboxes && !data.isWaitingForServe;
             marker.position.set(target, 0.075, player.group.position.z);
         }
+        this.shotTargetMarker.visible = this.hasShotTarget && this.showHitboxes && !data.isWaitingForServe;
     }
 
     private updateBot(): void {
@@ -256,6 +265,7 @@ export class World {
         // Sample the middle of the chosen stroke before rendering, then restore
         // idle. Aim the practice feed at the strike pose, not the resting racket.
         const animation = backhand ? 'SwingLeft' : 'SwingRight';
+        player.swingBackhand = backhand;
         player.playAnimation(animation);
         const action = player.actions[animation];
         if (!action) { this.onSwingFeedback('Swing animation is unavailable'); return; }
@@ -288,13 +298,20 @@ export class World {
         if (data.waitingForRacketHit && data.lastHitBy && data.lastHitBy !== id) return;
         if (!sweptRacketContact(hitbox.bounds, previousPose, hitbox.pose(),
             previousBall, this.ball.position, BALL_RADIUS)) return;
-        const direction = number === 1 ? -1 : 1;
-        const velocity = data.waitingForRacketHit ? data.pendingVelocity.clone()
-            : new THREE.Vector3(player.swingBackhand ? -0.04 : 0.04, 0.22, direction * 0.24);
-        hitBall(this.ball, velocity, id);
+        const plan = planCourtShot(this.ball.position, number, player.swingBackhand, data.gravity);
+        if (!plan) {
+            player.hitConsumed = true;
+            player.contactActive = false;
+            this.onSwingFeedback(`Player ${number}: Contact, but no safe court trajectory from this position`);
+            return;
+        }
+        hitBall(this.ball, plan.velocity, id);
+        this.hasShotTarget = true;
+        this.shotTargetMarker.position.set(plan.target.x, 0.08, plan.target.z);
+        this.shotTargetMarker.visible = this.showHitboxes;
         player.hitConsumed = true;
         player.contactActive = false;
-        this.onSwingFeedback(`Player ${number}: Hit!`);
+        this.onSwingFeedback(`Player ${number}: Hit! · aim (${plan.target.x.toFixed(1)}, ${plan.target.z.toFixed(1)})`);
     }
 
     public playerServe(playerNumber: 1 | 2 = 1): void {
@@ -383,6 +400,9 @@ export class World {
 
     public dispose(): void {
         this.stop();
+        this.shotTargetMarker.geometry.dispose();
+        (this.shotTargetMarker.material as THREE.Material).dispose();
+        this.shotTargetMarker.removeFromParent();
         for (const marker of this.targetMarkers) {
             marker.geometry.dispose();
             (marker.material as THREE.Material).dispose();

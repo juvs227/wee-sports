@@ -1,5 +1,6 @@
 // components/player.ts
 import * as THREE from 'three';
+import { forehandDrop, worldOffsetToLocal, DEFAULT_FOREHAND_DROP } from './forehandPose';
 import { RacketHitbox, contactWindowCrossed } from './racketContact';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
@@ -34,6 +35,7 @@ export interface PlayerOptions {
     racketPath?: string;
     scale?: number;
     racketScale?: number;
+    forehandDrop?: number;
 }
 
 export function createPlayer(
@@ -52,13 +54,20 @@ export function createPlayer(
         minZ = -10,
         maxZ = 10,
         speed = 4,
-        modelPath = './assets/player.glb',
-        racketPath = './assets/racket.glb',
+        modelPath = '/assets/player.glb',
+        racketPath = '/assets/racket.glb',
         scale = 0.2,
         racketScale = 0.4,
+        forehandDrop: forehandDropAmount = DEFAULT_FOREHAND_DROP,
     } = options;
 
     const loader = new GLTFLoader();
+    let handBone: THREE.Object3D | null = null;
+    const appliedHandOffset = new THREE.Vector3();
+    function clearHandOffset(): void {
+        handBone?.position.sub(appliedHandOffset);
+        appliedHandOffset.set(0, 0, 0);
+    }
 
     const controller: PlayerController = {
         group,
@@ -85,6 +94,7 @@ export function createPlayer(
                 return;
             }
 
+            clearHandOffset();
             const previous = this.currentAnimation
                 ? this.actions[this.currentAnimation]
                 : undefined;
@@ -113,6 +123,7 @@ export function createPlayer(
         },
 
         stopAnimation(): void {
+            clearHandOffset();
             Object.values(this.actions).forEach((action) => {
                 action.stop();
             });
@@ -122,11 +133,18 @@ export function createPlayer(
         },
 
         update(delta: number): void {
+            clearHandOffset();
             const action = this.currentAnimation ? this.actions[this.currentAnimation] : undefined;
             const duration = action?.getClip().duration ?? 0;
             this.contactActive = this.isSwinging && !this.hitConsumed && !!action && duration > 0 &&
                 contactWindowCrossed(action.time / duration, (action.time + delta) / duration);
             this.mixer?.update(delta);
+            if (this.isSwinging && action && duration > 0 && handBone?.parent) {
+                const drop = forehandDrop(action.time / duration, this.swingBackhand, forehandDropAmount);
+                handBone.parent.updateWorldMatrix(true, false);
+                appliedHandOffset.copy(worldOffsetToLocal(handBone.parent.matrixWorld, new THREE.Vector3(0, -drop, 0)));
+                handBone.position.add(appliedHandOffset);
+            }
         },
 
         move(dx: number, dz: number, delta: number): void {
@@ -238,6 +256,9 @@ export function createPlayer(
 
             if (handSocket) {
                 controller.handSocket = handSocket;
+                // This model groups both the Hand mesh and HandSocket under
+                // one bone, so moving it keeps the hand attached to the racket.
+                handBone = handSocket.parent;
 
                 loader.load(
                     racketPath,
@@ -255,6 +276,7 @@ export function createPlayer(
                         for (const name of ['SwingLeft', 'SwingRight']) {
                             const action = controller.actions[name];
                             if (!action) continue;
+                            controller.swingBackhand = name === 'SwingLeft';
                             controller.playAnimation(name);
                             action.stopFading();
                             action.setEffectiveWeight(1);
@@ -266,6 +288,7 @@ export function createPlayer(
                             controller.stopAnimation();
                             controller.update(0);
                         }
+                        controller.swingBackhand = false;
                         if (restore) controller.playAnimation(restore);
                     },
                     undefined,
