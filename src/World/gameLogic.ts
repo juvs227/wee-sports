@@ -184,7 +184,8 @@ export class GameLogic {
         this.scene.updateMatrixWorld(true);
         const data = this.ball.userData as BallUserData;
         const wasWaiting = data.isWaitingForServe;
-        updateBallMotion(this.ball, step, winner => this.scoreSystem.awardPoint(winner));
+        updateBallMotion(this.ball, step, (winner, loser) =>
+            this.scoreSystem.awardPoint(winner, loser));
         const resetDuringStep = !wasWaiting && data.isWaitingForServe;
         if (!resetDuringStep) {
             this.checkRacketContact(this.player1, 1, pose1, previousBall);

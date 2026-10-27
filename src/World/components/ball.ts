@@ -87,7 +87,7 @@ export function hitBall(ball: THREE.Mesh, velocity: THREE.Vector3, player: BallP
 export function resetBallForServe(
     ball: THREE.Mesh,
     courtBounds: { width: number; length: number } = COURT_BOUNDS,
-    onPointScored?: (winner: BallPlayer) => void,
+    onPointScored?: (winner: BallPlayer, loser: BallPlayer) => void,
 ): void {
     const userData = ball.userData as BallUserData;
 
@@ -96,7 +96,8 @@ export function resetBallForServe(
 
     const pointWinner = determinePointWinner(
         userData.firstBounceInBounds, userData.lastHitBy, ball.position.z);
-    onPointScored?.(pointWinner);
+    const pointLoser = pointWinner === 'player1' ? 'player2' : 'player1';
+    onPointScored?.(pointWinner, pointLoser);
 
     // Reset ball state for serve
     userData.isWaitingForServe = true;
@@ -114,7 +115,7 @@ export function resetBallForServe(
 export function updateBallMotion(
     ball: THREE.Mesh,
     delta: number,
-    onPointScored?: (winner: BallPlayer) => void,
+    onPointScored?: (winner: BallPlayer, loser: BallPlayer) => void,
 ): void {
     const userData = ball.userData as BallUserData;
 

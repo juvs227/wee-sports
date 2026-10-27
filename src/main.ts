@@ -1,6 +1,7 @@
 import { World } from './World/World';
 import { InputController } from './Controllers/inputController';
 import { connectSwings } from './network/swingConnection.js';
+import { renderScore } from './scoreRenderer';
 
 async function main(): Promise<void> {
     const container = document.querySelector('#scene-container');
@@ -40,8 +41,7 @@ async function main(): Promise<void> {
     const score = document.createElement('p');
     score.style.fontWeight = 'bold';
     const updateScore = (): void => {
-        const currentScore = world.getScore();
-        score.textContent = `Score: Player 1 ${currentScore.player1} - ${currentScore.player2} Player 2`;
+        renderScore(score, world.getScore());
     };
     updateScore();
 
