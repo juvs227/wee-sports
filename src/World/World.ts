@@ -109,6 +109,7 @@ export class World {
             minZ: -11.5,
             maxZ: -1,
         });
+        this.player2.group.rotation.y = Math.PI;
         this.scene.add(this.player2.group);
 
         this.ball = createBall(0, 0.3, 10.0); 
