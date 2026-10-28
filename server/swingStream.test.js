@@ -73,23 +73,26 @@ for (const early of [true, false]) {
   });
 }
 
-test('recovery requires both cooldown and continuous quiet, and sensor gaps reset quiet evidence', () => {
-  const stream = createSwingStream('Right', { early: true });
-  for (let timeMs = 0; timeMs <= 180; timeMs += 20) {
-    stream.push({ timeMs, rotationAlpha: 300, rotationBeta: 600, rotationGamma: 0 });
-    stream.analyze();
-  }
+test('a fast delivery stays latched through its full motion window and sensor gaps cannot rearm it', () => {
+  const stream = createSwingStream('Right', { fast: true });
+  const events = [];
+  const push = (timeMs, alpha = 0, beta = 0) => {
+    stream.push({ timeMs, rotationAlpha: alpha, rotationBeta: beta, rotationGamma: 0 });
+    events.push(...stream.analyze());
+  };
+  for (let timeMs = 0; timeMs <= 180; timeMs += 20) push(timeMs, 600, 1200);
+  for (let timeMs = 200; timeMs <= 240; timeMs += 20) push(timeMs);
+  assert.equal(events.length, 1);
   assert.equal(stream.phase, 'recovering');
-  for (let timeMs = 200; timeMs <= 460; timeMs += 20) {
-    stream.push({ timeMs, rotationAlpha: 0, rotationBeta: 0, rotationGamma: 0 });
-  }
-  assert.equal(stream.phase, 'recovering'); // quiet enough, but not 400 ms since emission
-  stream.push({ timeMs: 1000, rotationAlpha: 0, rotationBeta: 0, rotationGamma: 0 });
-  assert.equal(stream.phase, 'recovering'); // gap must not count as quiet
-  for (let timeMs = 1020; timeMs <= 1260; timeMs += 20) {
-    stream.push({ timeMs, rotationAlpha: 0, rotationBeta: 0, rotationGamma: 0 });
-  }
-  assert.equal(stream.phase, 'ready');
+  // A gap after fast confirmation is not evidence of a completed follow-through.
+  for (let timeMs = 1000; timeMs <= 1200; timeMs += 20) push(timeMs, 600, 1200);
+  assert.equal(stream.phase, 'waiting-for-rest');
+  assert.equal(events.length, 1);
+  for (let timeMs = 1220; timeMs <= 1340; timeMs += 20) push(timeMs);
+  for (let timeMs = 1360; timeMs <= 1540; timeMs += 20) push(timeMs, 600, 1200);
+  for (let timeMs = 1560; timeMs <= 1700; timeMs += 20) push(timeMs);
+  assert.deepEqual(events.map(event => event.label), ['Forehand', 'Forehand']);
+  assert.deepEqual(stream.analyze(true), []);
 });
 
 for (const early of [false, true]) {

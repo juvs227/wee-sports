@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
 const relay = vi.hoisted(() => ({ sendSwing: vi.fn(() => true) }));
@@ -28,7 +29,7 @@ beforeEach(() => {
   });
   vi.stubGlobal('document', { hidden: false,
     getElementById(id) {
-      if (!elements.has(id)) elements.set(id, { textContent: '', value: id === 'hand' ? 'Right' : id === 'response' ? 'early' : id === 'stroke-mode' ? 'auto' : id === 'power' ? '0.7' : '0', checked: true, dataset: {} });
+      if (!elements.has(id)) elements.set(id, { textContent: '', value: id === 'hand' ? 'Right' : id === 'response' ? 'fast' : id === 'stroke-mode' ? 'auto' : id === 'power' ? '0.7' : '0', checked: true, dataset: {} });
       return elements.get(id);
     },
     addEventListener(type, fn) { documentListeners.set(type, fn); },
@@ -60,6 +61,7 @@ test('Calibrate itself requests permission; only real still readings unlock setu
   state({ playing: true, paused: false });
   expect(elements.get('stop').disabled).toBe(false);
   for (let i = 0; i < 15; i++) tick(20, { alpha: 300, beta: 600, gamma: 0 });
+  for (let i = 0; i < 10; i++) tick();
   expect(relay.sendSwing).toHaveBeenCalledWith('Forehand', 'Right');
 });
 
@@ -146,3 +148,30 @@ test('calibrated bowling motion only rolls when explicitly armed on the current 
   expect(messages.filter(message => message.type === 'wee:player-roll')).toHaveLength(1);
   expect(relay.sendSwing).not.toHaveBeenCalled();
 });
+
+const teamRecordings = [
+  ['two-forehands-one-backhand', 'Right', ['Forehand', 'Forehand', 'Backhand']],
+  ['four-backhands', 'Right', Array(4).fill('Backhand')],
+  ['left-four-backhands-new', 'Left', Array(4).fill('Backhand')],
+  ['left-four-forehands', 'Left', Array(4).fill('Forehand')],
+  ['left-mixed', 'Left', ['Forehand', 'Backhand', 'Forehand', 'Backhand']],
+];
+for (const [name, hand, expected] of teamRecordings) {
+  test(`team's recorded sensor swings reach gameplay after calibration: ${name}`, async () => {
+    const recording = JSON.parse(readFileSync(new URL(`./fixtures/team-motion/${name}.json`, import.meta.url), 'utf8'));
+    await import('../src/controller/main.js');
+    elements.get('hand').value = hand;
+    await calibrate();
+    state({ playing: true, paused: false });
+    let previous = 0;
+    for (const sample of recording.samples ?? recording) {
+      // Fixtures are bias-corrected. Add the measured zero offset back before
+      // delivering DeviceMotion events, to exercise actual controller correction.
+      tick(sample.timeMs - previous, { alpha: sample.rotationAlpha + .1,
+        beta: sample.rotationBeta - .1, gamma: sample.rotationGamma + .2 });
+      previous = sample.timeMs;
+    }
+    expect(relay.sendSwing.mock.calls).toEqual(expected.map(label => [label, hand]));
+    expect(messages).toContainEqual({ type: 'wee:controller-setup', setup: 'motion' });
+  });
+}

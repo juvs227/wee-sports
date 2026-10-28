@@ -113,7 +113,7 @@ export default function JoinStub() {
 
         {isController(seat.sport, seat.slot) ? (
           <>
-            {phase !== PHASES.TUTORIAL ? <p>Choose motion or button controls, then press Ready. Your setup stays with you when the match starts.</p> : null}
+            {phase !== PHASES.TUTORIAL ? <p>Calibrate your phone below, then press Ready. Your swings control the game, and calibration stays with you when the match starts.</p> : null}
             <PrototypeFrame code={seat.code} controller player={seat.slot + 1} sport={seat.sport} gameId={seat.gameId} gameState={seat.gameState}
               playing={phase === PHASES.TUTORIAL}
               paused={phase !== PHASES.TUTORIAL || reconnecting || seat.paused}

@@ -106,7 +106,7 @@ export default function HostStub() {
         </p>
       )}
 
-      {!url.startsWith('https:') ? <p className="stub__warn">This Wi-Fi link supports button controls. Phone motion and calibration need HTTPS. Open the app through your HTTPS tunnel, then scan its QR code.</p> : null}
+      {!url.startsWith('https:') ? <p className="stub__warn">Phone motion needs HTTPS. This QR uses HTTP, so calibration cannot access the sensors. Open the TV page through your HTTPS tunnel, then scan that QR code.</p> : null}
 
       {/* The ready check happens right here in the lobby, in place of the seat list. */}
       {lobby.phase === PHASES.LOBBY ? (

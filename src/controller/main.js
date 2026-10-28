@@ -144,10 +144,10 @@ function analyze() {
   if (!recording || bowling) return;
   for (const swing of stream?.analyze() ?? []) {
     element('latest').textContent = swing.label === 'Unknown' ? 'Try a clearer swing' : swing.label;
-    element('timing').textContent = swing.simple ? 'Simple motion mapping · your selected shot.' : swing.early
+    element('timing').textContent = swing.simple ? 'Simple motion mapping · your selected shot.' : swing.early || swing.fast
       ? `Recognized in ${Math.round(swing.detectionDelayMs)} ms, before network and game response.`
       : 'Stroke classified after completion.';
-    if ((swing.complete || swing.early) && swing.label !== 'Unknown') send(swing.label);
+    if ((swing.complete || swing.early || swing.fast) && swing.label !== 'Unknown') send(swing.label);
   }
 }
 function stop(message = 'Motion stopped. Tap Start motion when you are ready.', user = false) {
@@ -163,7 +163,7 @@ function startMotion() {
   if (recording || !motionWanted || !bias || buttonMode || calibration || !enabled || !gameActive || lobbyPaused || !connected || document.hidden || !recentReadings()) return;
   const mode = element('stroke-mode').value;
   stream = bowling ? null : mode === 'auto' ? createSwingStream(element('hand').value, {
-    early: element('response').value === 'early', suppressReturns: element('suppress-returns').checked,
+    early: element('response').value === 'early', fast: element('response').value === 'fast', suppressReturns: element('suppress-returns').checked,
   }) : createSimpleSwingStream(mode);
   started = performance.now();
   recording = true;
@@ -217,7 +217,7 @@ function motion(event) {
   if (bowling) {
     const result = bowlingDetector?.push(sample);
     if (result) roll(result.power);
-  } else { stream.push(sample); if (element('response').value === 'early') analyze(); }
+  } else { stream.push(sample); if (element('response').value !== 'complete') analyze(); }
 }
 async function requestMotion() {
   if (!window.isSecureContext) throw new Error('Motion needs HTTPS. The lobby can open over HTTP, but phone sensors cannot. Ask the TV host for the secure HTTPS link, or use buttons.');
@@ -268,6 +268,7 @@ element('use-buttons').onclick = () => {
   buttonMode = true;
   lastSetup = undefined;
   element('manual-controls').open = true;
+  element('bowling-buttons').open = true;
   element('motion').textContent = bowling ? 'Button controls ready. Set aim, curve and power, then Roll ball on your turn.' : 'Button controls ready. Use Forehand and Backhand when the match starts.';
   controls();
 };

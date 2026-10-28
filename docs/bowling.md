@@ -55,7 +55,9 @@ explicit Stop, hidden pages, pauses and disconnects discard partial gestures.
 
 Bowling arms one delivery at a time. A sustained pitch-axis motion followed by
 deceleration releases once, with power derived from peak angular speed. Aim and
-curve remain explicit sliders. Tennis retains its automatic classifier and adds
+curve remain explicit sliders. Tennis uses the team’s post-peak fast confirmation by default, retaining the
+physical motion window to avoid duplicate follow-through and missed repeat swings.
+The automatic classifier still offers
 explicit simple shot mappings for devices/grips that cannot satisfy it.
 
 - [MDN: motion permission and transient activation](https://developer.mozilla.org/en-US/docs/Web/API/DeviceMotionEvent/requestPermission_static)

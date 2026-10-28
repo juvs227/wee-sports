@@ -48,6 +48,21 @@ requires HTTPS. Same-Wi-Fi joining still works over HTTP.
    seat ends the match and returns everyone to the lobby. Closing the lobby ends
    it for everyone.
 
+The default tennis sensor mode uses the team's **fast confirmation** from
+`experiment/early-swing-prediction` (`80ec8f7`). It confirms the direction after
+the swing peak and sends one shot per physical motion window. Follow-through
+filtering no longer demands 250 ms of near-zero rotation, which left the old
+controller stuck after the first swing in the team's actual recordings. The
+five recordings on `juve-swing-classification` now replay all 19 expected strokes
+through calibration, DeviceMotion processing and gameplay delivery. See
+[fixture provenance](server/fixtures/team-motion/README.md). Early prediction
+remains an explicit experimental option; it can misclassify the backswing.
+
+Calibration and motion are the main phone flow. Buttons are tucked under a
+fallback disclosure for connection testing or devices without sensors. Tennis
+still uses the team's recognized forehand/backhand gestures to drive the racket
+animation; it does not claim one-to-one tracking of the phone's 3D position.
+
 Phone motion requires HTTPS: a LAN HTTP link can join the lobby but cannot use
 sensors. Start your HTTPS tunnel to port 5173 and open the app at its HTTPS URL
 before scanning the QR; or configure `NGROK_HOST` / `VITE_PUBLIC_URL` before

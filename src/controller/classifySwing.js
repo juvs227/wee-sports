@@ -79,24 +79,34 @@ function describe(window, complete, hand) {
     integratedDegrees: angles, complete }
 }
 
-export function classifySwings(samples, { hand = 'Right', sport = 'Tennis', final = true } = {}) {
+// Fast confirmation comes from the team's early-swing-prediction experiment
+// (80ec8f7): wait for deceleration and retain the directional context at peak.
+export function classifySwings(samples, { hand = 'Right', sport = 'Tennis', final = true, fast = false } = {}) {
   if (sport !== 'Tennis') return []
   const results = []
   let window = []
   let quietSince = null
   let previous = null
   let peak = 0
-  function completeWindow() {
+  let fastQuietSince = null
+  function completeWindow(fastWindow = false) {
     const peakIndex = window.reduce((best, sample, i) => speed(sample) > speed(window[best]) ? i : best, 0)
     const peakSample = window[peakIndex]
     const approach = window.slice(0, peakIndex + 1).filter(sample => peakSample.timeMs - sample.timeMs <= 250)
     // Broad repositioning humps should not become extra swings. A peak at the
     // recording boundary is retained, since its approach was not captured.
     const distinctRise = peakIndex === 0 || Math.min(...approach.map(speed)) <= peak * 0.5
-    if (peak >= SWING_LIMITS.minPeak && distinctRise) results.push(describe(window, true, hand))
+    const prediction = peak >= SWING_LIMITS.minPeak && distinctRise ? describe(window, true, hand) : null
+    // An ambiguous shorter window must retain its later evidence.
+    if (fastWindow && (!prediction || prediction.label === 'Unknown')) return false
+    if (prediction) results.push(fastWindow ? { ...prediction, complete: false, fast: true,
+      detectedAtMs: window.at(-1).timeMs,
+      detectionDelayMs: window.at(-1).timeMs - window[0].timeMs } : prediction)
     window = []
     quietSince = null
     peak = 0
+    fastQuietSince = null
+    return true
   }
   for (const sample of samples) {
     if (!valid(sample) || (previous && (sample.timeMs <= previous.timeMs || sample.timeMs - previous.timeMs > 100))) {
@@ -105,6 +115,7 @@ export function classifySwings(samples, { hand = 'Right', sport = 'Tennis', fina
       quietSince = null
       previous = null
       peak = 0
+      fastQuietSince = null
       if (!valid(sample)) continue
     }
     if (!window.length && speed(sample) >= SWING_LIMITS.start) window = [sample]
@@ -112,6 +123,11 @@ export function classifySwings(samples, { hand = 'Right', sport = 'Tennis', fina
     if (window.length) {
       peak = Math.max(peak, speed(sample))
       quietSince = speed(sample) < Math.max(120, peak * 0.35) ? quietSince ?? sample.timeMs : null
+      fastQuietSince = speed(sample) < Math.max(120, peak * 0.5) ? fastQuietSince ?? sample.timeMs : null
+      if (fast && peak >= 800 && fastQuietSince !== null && sample.timeMs - fastQuietSince >= 40) {
+        const peakSample = window.reduce((best, value) => speed(value) > speed(best) ? value : best)
+        if (sample.timeMs - peakSample.timeMs >= 60 && completeWindow(true)) return results
+      }
       if (quietSince !== null && sample.timeMs - quietSince >= 100) {
         completeWindow()
       }
