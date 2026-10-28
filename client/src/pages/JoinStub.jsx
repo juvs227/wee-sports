@@ -77,50 +77,10 @@ export default function JoinStub() {
   if (seat) {
     const players = lobby?.players ?? [];
     const phase = lobby?.phase ?? PHASES.LOBBY;
+    const playing = phase === PHASES.TUTORIAL;
     const setup = players.find(player => player.slot === seat.slot)?.setup;
-    return (
-      <main className="stub phone-session">
-        <p className="eyebrow">Homepage lobby · {seat.code}</p>
-        {storageWarning ? <p className="alert">Browser storage is unavailable. Keep this tab open to preserve your seat.</p> : null}
-        {error ? <p className="alert" role="alert">{errorText(error)}</p> : null}
-        <div className="you">
-          <span
-            className="seat__badge seat__badge--big"
-            data-slot={seat.slot}
-            style={{ '--player': `var(--p${seat.slot + 1})` }}
-          >
-            P{seat.slot + 1}
-          </span>
-          <div>
-            <h1>You&rsquo;re in, {seat.name}</h1>
-            <p className="stub__muted">
-              {sportName(seat.sport)} · lobby {seat.code}
-            </p>
-          </div>
-        </div>
-        {phase === PHASES.TUTORIAL ? (
-          <p role="status">{!isController(seat.sport, seat.slot) ? 'You’re watching this match. Follow the action on the TV.'
-            : !setup ? 'Finish controller setup below to resume the match.'
-            : lobby.paused ? 'Match paused. Waiting for everyone to reconnect and finish setup.'
-            : seat.sport === 'bowling' ? 'Watch the TV for your turn. Aim below, then roll with motion or the Roll button.'
-            : setup === 'buttons' ? 'Use Forehand and Backhand below, and watch the TV.'
-            : 'Motion starts automatically. Swing as the ball approaches your side; watch the TV.'}</p>
-        ) : phase === PHASES.LOBBY ? (
-          <p className="stub__status">Waiting for a player to join the P1 controller seat…</p>
-        ) : (
-          <PhoneReady lobby={lobby} slot={seat.slot} disabled={reconnecting || (lobby.paused && phase !== PHASES.TUTORIAL)} />
-        )}
-
-        {isController(seat.sport, seat.slot) ? (
-          <>
-            {phase !== PHASES.TUTORIAL ? <p>Calibrate your phone below, then press Ready. Your swings control the game, and calibration stays with you when the match starts.</p> : null}
-            <PrototypeFrame code={seat.code} controller player={seat.slot + 1} sport={seat.sport} gameId={seat.gameId} gameState={seat.gameState}
-              playing={phase === PHASES.TUTORIAL}
-              paused={phase !== PHASES.TUTORIAL || reconnecting || seat.paused}
-              showPause={reconnecting} />
-          </>
-        ) : <p>The first two phones control the blue and red players. You have a spectator seat.</p>}
-        {reconnecting || lobby.reconnecting?.length ? <ReconnectNotice lobby={lobby} reconnecting={reconnecting} /> : null}
+    const lobbyOptions = (
+      <>
         <h2>In this lobby</h2>
         <ul className="seats" aria-live="polite">
           {players.map((player) => (
@@ -137,12 +97,57 @@ export default function JoinStub() {
             </li>
           ))}
         </ul>
-
         <div className="stub__actions">
           <button type="button" className="btn btn--ghost" onClick={leave}>
             Leave game
           </button>
         </div>
+      </>
+    );
+    return (
+      <main className={`stub phone-session${playing ? ' phone-session--playing' : ''}`}>
+        {!playing ? <p className="eyebrow">Homepage lobby · {seat.code}</p> : null}
+        {storageWarning ? <p className="alert">Browser storage is unavailable. Keep this tab open to preserve your seat.</p> : null}
+        {error ? <p className="alert" role="alert">{errorText(error)}</p> : null}
+        <div className="you">
+          <span
+            className="seat__badge seat__badge--big"
+            data-slot={seat.slot}
+            style={{ '--player': `var(--p${seat.slot + 1})` }}
+          >
+            P{seat.slot + 1}
+          </span>
+          <div>
+            <h1>{playing ? seat.name : <>You&rsquo;re in, {seat.name}</>}</h1>
+            <p className="stub__muted">
+              {sportName(seat.sport)}{playing ? '' : ` · lobby ${seat.code}`}
+            </p>
+          </div>
+        </div>
+        {playing ? (
+          !isController(seat.sport, seat.slot) ? <p className="stub__status" role="status">You’re watching this match. Follow the action on the TV.</p> : null
+        ) : phase === PHASES.LOBBY ? (
+          <p className="stub__status">Waiting for a player to join the P1 controller seat…</p>
+        ) : (
+          <PhoneReady lobby={lobby} slot={seat.slot} disabled={reconnecting || (lobby.paused && phase !== PHASES.TUTORIAL)} />
+        )}
+
+        {reconnecting || lobby.reconnecting?.length ? <ReconnectNotice lobby={lobby} reconnecting={reconnecting} /> : null}
+        {isController(seat.sport, seat.slot) ? (
+          <>
+            {!playing && !setup ? <p>Calibrate your phone below, then press Ready.</p> : null}
+            <PrototypeFrame code={seat.code} controller player={seat.slot + 1} sport={seat.sport} gameId={seat.gameId} gameState={seat.gameState}
+              playing={phase === PHASES.TUTORIAL}
+              paused={phase !== PHASES.TUTORIAL || reconnecting || seat.paused}
+              showPause={reconnecting} />
+          </>
+        ) : !playing ? <p>The first two phones control the blue and red players. You have a spectator seat.</p> : null}
+        {playing ? (
+          <details className="phone-session__options">
+            <summary>Lobby options <span>{seat.code}</span></summary>
+            {lobbyOptions}
+          </details>
+        ) : lobbyOptions}
       </main>
     );
   }

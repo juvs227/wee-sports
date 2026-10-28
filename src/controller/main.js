@@ -20,11 +20,6 @@ element('room').textContent = lobbyCode && embedded ? `Lobby ${lobbyCode} · P${
 if (embedded) element('connection-help').textContent = 'Your controller is connected through the homepage lobby.';
 if (bowling) {
   element('controller-title').textContent = 'Your bowling ball';
-  element('play-title').textContent = '3. Bowl your frame';
-  element('play-help').textContent = 'Choose your line and curve, then roll when it is your turn. Motion sets power from your underhand swing; the button uses the power slider.';
-  element('latest').textContent = 'Let’s bowl';
-  element('bowling-controls').hidden = false;
-  element('manual-controls').hidden = true;
   element('tennis-settings').hidden = true;
 }
 if (embedded && window.ResizeObserver) {
@@ -59,6 +54,10 @@ let bowlingDetector = null;
 let armedAt = null;
 let pendingRoll = null;
 let sensorUpdatedAt = 0;
+let settingsOpen = false;
+let playNotice = '';
+let setupError = '';
+let feedbackUntil = 0;
 
 function recentReadings() { return lastReading !== null && performance.now() - lastReading < 1500; }
 function publishSetup() {
@@ -71,6 +70,73 @@ function publishSetup() {
 }
 function turnReady() { return bowling && gameActive && connected && !lobbyPaused && canRoll && currentPlayer === player && !pendingRoll; }
 function cancelArmedRoll() { bowlingDetector = null; armedAt = null; }
+// One calm play screen; setup remains mounted so switching views preserves
+// calibration, sensor permission and the lobby connection.
+function renderPlayState() {
+  const setup = buttonMode || Boolean(bias);
+  element('setup-panel').hidden = setup && !settingsOpen;
+  element('controller-options').hidden = setup && !settingsOpen;
+  element('play-panel').hidden = !setup || settingsOpen;
+  element('controller-header').hidden = embedded && setup && !settingsOpen;
+  element('toggle-settings').hidden = !setup;
+  element('toggle-settings').disabled = Boolean(calibration) || permissionPending;
+  element('toggle-settings').textContent = settingsOpen ? 'Back to controller' : 'Controller settings';
+  element('toggle-settings').ariaExpanded = String(settingsOpen);
+  element('stop').hidden = !recording || settingsOpen;
+  let state = 'ready';
+  let status = buttonMode ? 'Buttons ready' : 'Calibrated';
+  let title = 'You’re ready';
+  let help = 'Press Ready above, then watch the TV.';
+  if (!connected) {
+    state = 'paused'; status = 'Connection lost'; title = 'Reconnecting…';
+    help = 'Keep this page open. Your controller will reconnect automatically.';
+  } else if (gameActive && lobbyPaused) {
+    state = 'paused'; status = 'Match paused'; title = 'Hang tight';
+    help = 'Waiting for everyone to reconnect and finish setup.';
+  } else if (setupError) {
+    state = 'paused'; status = 'Setup needed'; title = 'Setup not saved';
+    help = 'Open Controller settings and calibrate again, or reconnect.';
+  } else if (gameActive && bowling && (bowlingPhase === 'complete' || bowlingPhase === 'finished')) {
+    state = 'finished'; status = 'Match complete'; title = 'Nice bowling!'; help = 'See the final scores on the TV.';
+  } else if (gameActive && !buttonMode && !recentReadings()) {
+    state = 'paused'; status = 'Motion interrupted'; title = 'Waiting for sensors';
+    help = 'Keep this screen open. Motion resumes when readings return.';
+  } else if (gameActive && !buttonMode && !recording) {
+    state = 'paused'; status = 'Motion paused'; title = 'Ready when you are';
+    help = 'Tap Resume motion to keep playing.';
+  } else if (gameActive) {
+    state = 'playing'; status = buttonMode ? 'Button controls' : 'Motion on';
+    title = buttonMode ? 'Tap to swing' : 'Swing to play';
+    help = 'Watch the TV. Swing as the ball approaches your side.';
+    if (buttonMode) help = 'Watch the TV and choose your shot.';
+    if (bowling) {
+      if (pendingRoll || (currentPlayer === player && !canRoll)) {
+        state = 'waiting'; title = 'Watch the lane'; help = 'Your ball is rolling. Let the pins settle.';
+      } else if (turnReady()) {
+        title = bowlingDetector ? 'Swing forward' : 'Your turn';
+        help = bowlingDetector ? 'Screen up. Swing gently underhand and keep holding your phone.'
+          : buttonMode ? 'Choose your line, then tap Roll ball.' : 'Choose your line, then arm your roll.';
+      } else {
+        state = 'waiting'; title = currentPlayer ? `P${currentPlayer} is bowling` : 'Waiting for the lane';
+        help = 'Watch the TV. Your turn will appear here.';
+      }
+    }
+  }
+  // Avoid repeatedly replacing live-region content on the sensor timer.
+  const notice = setupError || playNotice;
+  for (const [id, text] of [['play-status', status], ['play-title', title], ['play-help', help], ['play-notice', notice]]) {
+    if (element(id).textContent !== text) element(id).textContent = text;
+  }
+  element('play-panel').dataset.state = state;
+  element('play-notice').hidden = !notice || (!setupError && (!gameActive || lobbyPaused || !connected));
+  element('record').hidden = !setup || buttonMode || !gameActive || lobbyPaused || !connected || recording || settingsOpen || state === 'finished';
+  element('record').disabled = !gameActive || lobbyPaused || !connected || !enabled || !bias || recording || Boolean(calibration) || !recentReadings();
+  element('bowling-controls').hidden = !bowling || state !== 'playing' || !turnReady();
+  element('arm-roll').hidden = buttonMode;
+  element('bowling-buttons').hidden = !buttonMode;
+  element('manual-controls').hidden = bowling || !buttonMode || state !== 'playing';
+  element('latest').hidden = !gameActive || state === 'paused' || performance.now() >= feedbackUntil;
+}
 function controls() {
   element('setup-next').textContent = gameActive
     ? 'Motion starts automatically once setup is complete and everyone is connected.'
@@ -79,21 +145,14 @@ function controls() {
   element('enable').textContent = enabled ? 'Retry motion access' : 'Enable motion';
   element('calibrate').disabled = permissionPending || Boolean(calibration);
   element('calibrate').textContent = calibration ? 'Calibrating…' : bias ? 'Calibrate again' : 'Calibrate';
-  element('record').disabled = !gameActive || lobbyPaused || !enabled || !bias || recording || Boolean(calibration);
   element('stop').disabled = !recording;
   for (const id of ['hand', 'response', 'stroke-mode', 'suppress-returns']) element(id).disabled = recording || Boolean(calibration);
   for (const id of ['forehand', 'backhand']) element(id).disabled = !gameActive || lobbyPaused || !connected;
   element('roll').disabled = !turnReady() || (!buttonMode && !bias);
   element('arm-roll').disabled = !turnReady() || !recording || Boolean(bowlingDetector);
   element('arm-roll').textContent = bowlingDetector ? 'Armed · swing forward' : 'Arm motion roll';
-  if (bowling) element('bowling-turn').textContent = !gameActive ? 'Ready up, then start the match on the TV.'
-    : lobbyPaused || !connected ? 'Paused · waiting for everyone to reconnect.'
-    : bowlingPhase === 'complete' || bowlingPhase === 'finished' ? 'Match complete! See the TV for the final scores.'
-    : pendingRoll ? 'Ball delivered · watch the lane.'
-    : canRoll && currentPlayer === player ? 'Your turn! Choose your line and roll.'
-    : currentPlayer === player ? 'The pins are settling…'
-    : currentPlayer ? `P${currentPlayer} is bowling. Your turn will appear here.` : 'Waiting for the lane…';
   publishSetup();
+  renderPlayState();
 }
 function deliveryResult(event, kind = 'swing') {
   element('delivery').textContent = event.ok === false
@@ -101,15 +160,26 @@ function deliveryResult(event, kind = 'swing') {
       : event.error === 'not-your-turn' || event.error === 'roll-rejected' ? 'Wait until the TV and your controller show your turn.'
       : `The ${kind} was not accepted. Wait for the game to reconnect, then try again.`
     : event.receivers ? 'Delivered to game.' : 'No game connected. Check the TV.';
+  playNotice = event.ok === false || !event.receivers ? element('delivery').textContent : '';
+  renderPlayState();
 }
 const connection = connectSwings({ room, role: 'phone',
-  onStatus: text => { element('connection').textContent = text; },
+  onStatus: text => {
+    element('connection').textContent = text;
+    if (!embedded) {
+      connected = text === 'Connected';
+      if (!connected) stop();
+      controls();
+    }
+  },
   onAck: event => deliveryResult(event),
 });
 function send(label) {
   if (bowling || lobbyPaused || !gameActive || !connected || document.hidden) return;
   const sent = connection.sendSwing(label, element('hand').value);
   element('delivery').textContent = sent ? 'Sending stroke…' : 'Disconnected: the stroke was not sent.';
+  playNotice = sent ? '' : element('delivery').textContent;
+  renderPlayState();
 }
 element('forehand').onclick = () => send('Forehand');
 element('backhand').onclick = () => send('Backhand');
@@ -122,6 +192,8 @@ function roll(power) {
   post({ type: 'wee:player-roll', event });
   element('delivery').textContent = 'Sending your roll…';
   element('latest').textContent = `${Math.round(power * 100)}% power`;
+  feedbackUntil = performance.now() + 1800;
+  playNotice = '';
   controls();
 }
 element('roll').onclick = () => roll(Number(element('power').value));
@@ -129,6 +201,7 @@ element('arm-roll').onclick = () => {
   if (!turnReady() || !recording || !recentReadings()) return;
   bowlingDetector = createBowlingMotionDetector();
   armedAt = performance.now();
+  playNotice = '';
   element('motion').textContent = 'Armed. Screen up, swing gently forward underhand and slow down. Keep holding the phone.';
   controls();
 };
@@ -144,13 +217,14 @@ function analyze() {
   if (!recording || bowling) return;
   for (const swing of stream?.analyze() ?? []) {
     element('latest').textContent = swing.label === 'Unknown' ? 'Try a clearer swing' : swing.label;
+    feedbackUntil = performance.now() + 1500;
     element('timing').textContent = swing.simple ? 'Simple motion mapping · your selected shot.' : swing.early || swing.fast
       ? `Recognized in ${Math.round(swing.detectionDelayMs)} ms, before network and game response.`
       : 'Stroke classified after completion.';
     if ((swing.complete || swing.early || swing.fast) && swing.label !== 'Unknown') send(swing.label);
   }
 }
-function stop(message = 'Motion stopped. Tap Start motion when you are ready.', user = false) {
+function stop(message = 'Motion paused. Tap Resume motion when you are ready.', user = false) {
   if (user) motionWanted = false;
   const wasRecording = recording;
   recording = false;
@@ -160,14 +234,15 @@ function stop(message = 'Motion stopped. Tap Start motion when you are ready.', 
   controls();
 }
 function startMotion() {
-  if (recording || !motionWanted || !bias || buttonMode || calibration || !enabled || !gameActive || lobbyPaused || !connected || document.hidden || !recentReadings()) return;
+  if (recording || settingsOpen || !motionWanted || !bias || buttonMode || calibration || !enabled || !gameActive || lobbyPaused || !connected || document.hidden || !recentReadings()) return;
   const mode = element('stroke-mode').value;
   stream = bowling ? null : mode === 'auto' ? createSwingStream(element('hand').value, {
     early: element('response').value === 'early', fast: element('response').value === 'fast', suppressReturns: element('suppress-returns').checked,
   }) : createSimpleSwingStream(mode);
   started = performance.now();
   recording = true;
-  element('latest').textContent = bowling ? 'Ready to bowl' : 'Motion is live';
+  element('latest').textContent = '';
+  playNotice = '';
   element('motion').textContent = bowling ? 'Motion is live. Arm a roll when it is your turn.' : 'Motion is live. Swing to play; use Stop motion to pause your detector.';
   controls();
 }
@@ -175,7 +250,9 @@ window.addEventListener('message', event => {
   if (!embedded || event.source !== window.parent || event.origin !== location.origin) return;
   const data = event.data;
   if (data?.type === 'wee:setup-ack') {
-    if (!data.result?.ok) element('setup-status').textContent = 'Setup could not be saved. Reconnect or select your controls again.';
+    setupError = data.result?.ok ? '' : 'Setup could not be saved. Reconnect or select your controls again.';
+    if (setupError) element('setup-status').textContent = setupError;
+    renderPlayState();
     return;
   }
   if (data?.type === 'wee:bowling-state' && bowling) {
@@ -261,13 +338,19 @@ element('calibrate').onclick = async () => {
 };
 element('record').onclick = () => { motionWanted = true; startMotion(); };
 element('stop').onclick = () => stop(undefined, true);
+element('toggle-settings').onclick = () => {
+  settingsOpen = !settingsOpen;
+  if (settingsOpen) stop('Motion pauses while controller settings are open.');
+  else startMotion();
+  controls();
+};
 element('use-buttons').onclick = () => {
   stop(undefined, true);
   calibration = null;
   element('calibration-progress').hidden = true;
   buttonMode = true;
+  settingsOpen = false;
   lastSetup = undefined;
-  element('manual-controls').open = true;
   element('bowling-buttons').open = true;
   element('motion').textContent = bowling ? 'Button controls ready. Set aim, curve and power, then Roll ball on your turn.' : 'Button controls ready. Use Forehand and Backhand when the match starts.';
   controls();
@@ -291,6 +374,7 @@ function sensorStatus(now) {
   element('sensor-detail').textContent = `${window.isSecureContext ? 'Secure context' : 'Insecure context'} · ${eventsSeen} events · ${validReadings} valid gyro readings${latestRate ? ` · ${Math.round(Math.hypot(...Object.values(latestRate)))}°/s · last reading ${Math.round(now - lastReading)} ms ago` : ''}`;
   element('detector-state').textContent = !recording ? 'Motion idle' : bowling ? bowlingDetector ? 'Armed for one underhand delivery' : 'Motion live · arm your roll on your turn'
     : stream?.phase === 'recovering' ? 'Return to rest for the next stroke' : 'Motion live · ready for a swing';
+  renderPlayState();
 }
 setInterval(() => {
   const now = performance.now();
@@ -304,6 +388,7 @@ setInterval(() => {
       element('calibration-progress').hidden = true;
       if (bias) {
         motionWanted = true;
+        settingsOpen = false;
         element('motion').textContent = gameActive ? 'Calibrated. Motion starts when the match is ready.' : 'Calibrated. Press Ready above; motion will start with the match.';
       } else element('motion').textContent = result.reason === 'no-readings' || result.reason === 'stale'
         ? 'Calibration could not get live gyroscope readings. Check the sensor message below, then retry or use button controls.'
@@ -316,10 +401,10 @@ setInterval(() => {
   }
   if (recording && !recentReadings()) stop('Sensor readings paused. Keep the page visible; motion resumes when readings return.');
   if (armedAt !== null && now - armedAt > 6000) {
-    cancelArmedRoll(); element('motion').textContent = 'Roll timed out. Arm again when you are ready.'; controls();
+    cancelArmedRoll(); playNotice = 'Roll timed out. Arm again when you are ready.'; element('motion').textContent = playNotice; controls();
   }
   if (pendingRoll && now - pendingRoll.at > 4000) {
-    pendingRoll = null; element('delivery').textContent = 'No roll confirmation yet. Watch the TV before trying again.'; controls();
+    pendingRoll = null; playNotice = 'No roll confirmation yet. Watch the TV before trying again.'; element('delivery').textContent = playNotice; controls();
   }
   startMotion();
   analyze();
