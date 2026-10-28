@@ -6,7 +6,7 @@
  */
 
 /** Bumped when a message shape changes incompatibly. */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /** A dropped connection keeps its seat for one minute. */
 export const RECONNECT_MS = 60_000;
@@ -49,8 +49,8 @@ export const PHASES = {
 /**
  * Every lobby snapshot below has this shape:
  *
- *   { code, sport, phase, players: [{ slot, name, ready }], countdown,
- *     paused, reconnecting: [{ name, msLeft }] }
+ *   { code, sport, phase, players: [{ slot, name, ready, setup }], countdown,
+ *     paused, reconnecting: [{ name, msLeft }], setupPending: [name] }
  *
  * Create/join/resume acknowledgements additionally contain a private token
  * and role. Never send those fields in LOBBY_UPDATE or include them in a URL.
@@ -77,7 +77,9 @@ export const EVENTS = {
   PLAYER_LEAVE: 'player:leave',
   /** Phone -> server: { ready: boolean }. Can be toggled until everyone is ready. Ack: { ok }. */
   PLAYER_READY: 'player:ready',
-  /** Joined P1 -> server -> its TV. Uses the lobby session, not a second room. */
+  /** Controller setup is reported by each phone before it can become ready. */
+  PLAYER_SETUP: 'player:setup',
+  /** Joined P1/P2 -> server -> its TV. The server assigns the player number. */
   PLAYER_SWING: 'player:swing',
   GAME_SWING: 'game:swing',
   /** Server -> everyone in a lobby: the snapshot. */

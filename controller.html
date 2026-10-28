@@ -4,34 +4,39 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Wee Sports · Phone controller</title>
-  <style>
-    * { box-sizing: border-box; } body { margin: 0; background: #f1f5ef; color: #18392e; font: 16px/1.5 system-ui; }
-    main { max-width: 520px; margin: auto; padding: 24px; } section { background: white; border-radius: 20px; padding: 22px; margin: 16px 0; }
-    h1 { font-size: 32px; margin: 0; } #latest { font-size: 44px; margin: 16px 0; font-weight: 800; }
-    button, select { font: inherit; padding: 12px; min-height: 44px; border: 1px solid #b8cabc; border-radius: 10px; background: white; color: inherit; margin: 6px 0; }
-    button { cursor: pointer; } button:disabled { opacity: .45; } .primary { background: #23664f; color: white; }
-    small { display: block; color: #53675d; } .buttons { display: flex; flex-wrap: wrap; gap: 8px; }
-  </style>
 </head>
-<body><main>
-  <h1>Phone controller</h1>
-  <p id="room"></p><p id="connection" role="status">Connecting…</p>
-  <section>
-    <label>Playing hand <select id="hand"><option>Right</option><option>Left</option></select></label>
-    <label>Response <select id="response"><option value="early">Early · experimental</option><option value="complete">Wait for completion</option></select></label>
-    <p><label><input id="suppress-returns" type="checkbox" checked> Suppress return motions</label>
-      <small>Waits at least 400 ms and requires 250 ms of low rotation after a stroke. Very fast consecutive strokes may be skipped.</small></p>
-    <div id="latest" role="status">Ready?</div>
-    <p id="motion" role="status">Enable motion, hold still to calibrate, then record.</p>
-    <div class="buttons"><button id="enable">Enable motion</button><button id="calibrate" disabled>Calibrate</button><button id="record" class="primary" disabled>Start swings</button><button id="stop" disabled>Stop</button></div>
-    <p id="delivery" role="status"></p>
-    <small id="timing">Early mode trades accuracy for a faster response.</small>
-    <small id="detector-state" role="status">Detector idle</small>
-    <small>Keep the page visible. Grip securely, use a wrist strap, and keep your swing area clear. This animates a preset stroke, not your exact 3D motion.</small>
+<body class="controller-page"><main>
+  <p class="play-eyebrow" id="room"></p>
+  <h1>Your racket</h1>
+  <p id="connection" class="play-muted" role="status">Connecting…</p>
+  <section class="play-card">
+    <div class="play-card-heading"><h2>1. Get comfortable</h2><span class="play-pill" id="setup-status" role="status">Set up your controller</span></div>
+    <label class="hand-label">Playing hand <select id="hand"><option>Right</option><option>Left</option></select></label>
+    <h2>2. Choose your controls</h2>
+    <p class="play-muted">For motion, allow access and rest your phone on a table for two seconds.</p>
+    <p id="motion" role="status">Enable motion, then calibrate. You can also play with buttons.</p>
+    <div class="buttons"><button id="enable">Enable motion</button><button id="calibrate" disabled>Calibrate</button></div>
+    <button id="use-buttons" class="subtle">Use button controls</button>
+    <p class="play-muted" id="setup-next">Once set up, press Ready above and wait for Play on the TV.</p>
   </section>
-  <details><summary>Test the connection without sensors</summary>
-    <div class="buttons"><button id="forehand">Send Forehand</button><button id="backhand">Send Backhand</button></div>
-    <p id="connection-help">Open the game in the same room. Test buttons work on your Mac too.</p>
+  <section class="play-card">
+    <h2>3. Play tennis</h2>
+    <p class="play-muted">Watch the TV. P1 swings to serve; then return the ball as it reaches your racket.</p>
+    <div id="latest" role="status">Let’s rally</div>
+    <div class="buttons"><button id="record" class="primary" disabled>Start swings</button><button id="stop" disabled>Stop</button></div>
+    <p id="delivery" role="status"></p>
+    <small id="detector-state" role="status">Detector idle</small>
+    <details id="manual-controls"><summary>Button controls</summary>
+      <div class="buttons"><button id="forehand" class="primary">Forehand</button><button id="backhand">Backhand</button></div>
+      <p id="connection-help" class="play-muted">Open the game in the same room.</p>
+    </details>
+    <small>Keep this page visible. Grip securely, use a wrist strap, and leave room to swing.</small>
+  </section>
+  <details class="play-card"><summary>Motion settings</summary>
+    <label>Response <select id="response"><option value="early">Early · experimental</option><option value="complete">Wait for completion</option></select></label>
+    <p><label><input id="suppress-returns" type="checkbox" checked> Suppress return motions</label></p>
+    <small>Waits for a short rest after each stroke. Very fast consecutive strokes may be skipped.</small>
+    <small id="timing">Early mode trades accuracy for a faster response.</small>
   </details>
 </main><script type="module" src="/src/controller/main.js"></script></body>
 </html>

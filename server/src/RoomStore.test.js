@@ -51,8 +51,8 @@ test('players take the lowest seat and every join returns the lobby', () => {
   assert.equal(first.slot, 0);
   assert.equal(second.slot, 1);
   assert.deepEqual(second.players, [
-    { slot: 0, name: 'Ada', ready: false },
-    { slot: 1, name: 'Bo', ready: false },
+    { slot: 0, name: 'Ada', ready: false, setup: null },
+    { slot: 1, name: 'Bo', ready: false, setup: null },
   ]);
 });
 
@@ -131,6 +131,8 @@ function startReadyCheck() {
   const clock = { t: 1_000_000 };
   const { store, code } = openRoom(new RoomStore({ now: () => clock.t }));
   for (let i = 0; i < MAX_PLAYERS; i += 1) store.join(`p${i}`, { v, code, name: `P${i}` });
+  store.setSetup('p0', { setup: 'buttons' });
+  store.setSetup('p1', { setup: 'motion' });
   return { store, code, clock };
 }
 
@@ -194,6 +196,7 @@ test('un-readying before the last player is ready keeps the check open', () => {
 test('ready outside the ready phase is rejected', () => {
   const { store, code } = openRoom();
   store.join('a', { v, code, name: 'Ada' });
+  store.setSetup('a', { setup: 'buttons' });
   assert.equal(store.setReady('a', { ready: true }).ok, true);
   store.start('tv');
   assert.deepEqual(store.setReady('a', { ready: true }), { ok: false, error: ERRORS.NO_READY_CHECK });
@@ -371,6 +374,7 @@ test('one phone can ready, start tennis, and reconnect without extra players', (
   const { store, code } = openRoom(new RoomStore({ now: () => clock.t }));
   const seat = store.join('solo', { v, code, name: 'Solo' });
   assert.equal(seat.phase, PHASES.READY);
+  store.setSetup('solo', { setup: 'buttons' });
   assert.equal(store.setReady('solo', { ready: true }).advanced, true);
   assert.equal(store.start('tv').ok, true);
   assert.equal(store.join('late', { v, code, name: 'Late' }).error, ERRORS.IN_PROGRESS);
@@ -386,12 +390,44 @@ test('one phone can ready, start tennis, and reconnect without extra players', (
 test('joining after all-ready reopens readiness before the countdown', () => {
   const { store, code } = openRoom();
   store.join('solo', { v, code, name: 'Solo' });
+  store.setSetup('solo', { setup: 'motion' });
   store.setReady('solo', { ready: true });
   const friend = store.join('friend', { v, code, name: 'Friend' });
   assert.equal(friend.ok, true);
   assert.equal(friend.phase, PHASES.READY);
   assert.equal(store.start('tv').ok, false);
   assert.equal(store.setReady('solo', { ready: true }).advanced, false);
+  store.setSetup('friend', { setup: 'buttons' });
+  store.setReady('solo', { ready: true });
   assert.equal(store.setReady('friend', { ready: true }).advanced, true);
   assert.equal(store.start('tv').ok, true);
+});
+
+test('setup gates readiness, cancels a countdown, and pauses a running match until restored', () => {
+  let now = 0;
+  const { store, code } = openRoom(new RoomStore({ now: () => now }));
+  store.join('p0', { v, code, name: 'Blue' });
+  store.join('p1', { v, code, name: 'Red' });
+  assert.equal(store.setReady('p0', { ready: true }).error, 'setup-required');
+  assert.equal(store.setSetup('tv', { setup: 'buttons' }).error, 'not-controller');
+  assert.equal(store.setSetup('p0', { setup: 'fake' }).error, 'bad-setup');
+  store.setSetup('p0', { setup: 'motion' }); store.setSetup('p1', { setup: 'buttons' });
+  store.setReady('p0', { ready: true }); store.setReady('p1', { ready: true }); store.start('tv');
+  store.setSetup('p1', { setup: null });
+  assert.equal(store.lobby(code).phase, PHASES.READY);
+  assert.equal(store.lobby(code).countdown, null);
+  store.setSetup('p1', { setup: 'motion' });
+  store.setReady('p0', { ready: true }); store.setReady('p1', { ready: true }); store.start('tv');
+  now += 5000; store.finishCountdown(code);
+  store.setSetup('p1', { setup: null });
+  assert.equal(store.lobby(code).paused, true);
+  assert.deepEqual(store.lobby(code).setupPending, ['Red']);
+  const stroke = { type: 'swing', id: 'one', label: 'Forehand', hand: 'Right' };
+  assert.equal(store.swingTarget('p0', stroke).error, 'paused');
+  store.setSetup('p1', { setup: 'buttons' });
+  assert.equal(store.lobby(code).paused, false);
+  assert.equal(store.swingTarget('p1', { ...stroke, player: 1 }).event.player, 2);
+  store.remove('p1');
+  assert.equal(store.lobby(code).phase, PHASES.READY);
+  assert.equal(store.lobby(code).paused, false);
 });

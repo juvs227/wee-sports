@@ -11,7 +11,7 @@
 - The ready flow pauses while anyone is missing. A running countdown retains its
   remaining duration and continues only after everyone returns.
 - If a phone does not return, its seat is released. Before play, readiness resets;
-  during play, losing P1 returns to the lobby, while a spectator can expire without
+  during play, losing P1 or P2 returns to the lobby, while a spectator can expire without
   restarting the game.
   If the TV does not return, the lobby closes. Explicit **Leave game** and
   **Close lobby** still take effect immediately.
@@ -19,9 +19,11 @@
   participating. A server restart ends in-memory lobbies and shows an ended-game
   message rather than silently creating a different session.
 
-**Integration scope:** one phone can start tennis from the homepage lobby. P1's
-controller and calibration controls open before Play and stay loaded through the
-countdown. Embedded swings use the same lobby session; standalone prototypes
+**Integration scope:** one phone plays the bot; two phones play each other through
+the homepage lobby. Both controllers open before Play and stay loaded through the
+countdown. Each must report successful motion calibration or an explicit button-control
+choice before Ready. Reloading a controller clears its setup and pauses an active
+match until setup is completed again. A simple network reconnect keeps calibration. Embedded swings use the same lobby session; standalone prototypes
 retain their separate relay. The TV's game stays mounted and
 pauses during a lobby disconnect. TV refresh still resets its local tennis world;
 score recovery and restarting the interrupted point remain future work.
@@ -33,14 +35,17 @@ Run `npm test` for the existing room tests plus reconnect and real Socket.io tes
 and `npm run build` for the client build. The socket tests open local loopback ports.
 
 For a device check, start with one phone, then repeat with up to four separate
-phones/browser profiles (P1 controls tennis; the others watch):
+phones/browser profiles (P1/P2 play; P3/P4 watch):
 
-1. Refresh a phone and the TV; verify the same room, names, seats, and readiness.
+1. Refresh a phone and the TV; verify the same room, names, and seats. Refinish controller setup after a reload. The TV starts a fresh world on reload.
 2. Temporarily disable a phone's network; verify the waiting screen and reconnect.
 3. Disconnect during the five-second countdown; verify it resumes with time remaining.
 4. Stay disconnected for over 60 seconds; verify seat release or TV timeout closure.
 5. Reopen the same controller in a second tab; verify only the new tab has control.
 6. Stop/restart the server; verify the old session reports that the game has ended.
+7. Try both playing hands, motion calibration, button controls, serving, returning,
+   and scoring. Verify P2 disables the bot, and either controller leaving returns
+   everyone to the lobby.
 
 ### Week 5: measure concurrent lobby capacity
 

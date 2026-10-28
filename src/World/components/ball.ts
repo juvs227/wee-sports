@@ -1,5 +1,6 @@
 // components/ball.ts
 import * as THREE from 'three';
+import { determinePointWinner } from '../scoreSystem';
 export const BALL_RADIUS = 0.1; // Define the radius of the ball for collision detection
 const COURT_BOUNDS = { width: 4.115, length: 11.885 };
 // Define an interface for the custom physics properties stored in userData
@@ -11,8 +12,6 @@ export interface BallUserData {
     waitingForRacketHit: boolean;
     servePosition: THREE.Vector3; // Default position to reset to
     slideTimer?: number;
-    scorePlayer1: number;         // Score tracking for Player 1 (+ve side)
-    scorePlayer2: number;         // Score tracking for Player 2 (-ve side)
     bounceCount: number;          // How many times ball hit the ground
     firstBounceInBounds: boolean; // Was the 1st bounce inside court bounds?
     lastHitBy?: 'player1' | 'player2'; // Who last hit/served the ball
@@ -40,8 +39,6 @@ export function createBall(x: number, y: number, z: number): THREE.Mesh {
         isWaitingForServe: true,
         waitingForRacketHit: false,
         servePosition: new THREE.Vector3(x, y, z),
-        scorePlayer1: 0,
-        scorePlayer2: 0,
         bounceCount: 0,
         firstBounceInBounds: false,
     } as BallUserData;
@@ -89,47 +86,18 @@ export function hitBall(ball: THREE.Mesh, velocity: THREE.Vector3, player: BallP
 
 export function resetBallForServe(
     ball: THREE.Mesh,
-    courtBounds: { width: number; length: number } = COURT_BOUNDS
+    courtBounds: { width: number; length: number } = COURT_BOUNDS,
+    onPointScored?: (winner: BallPlayer, loser: BallPlayer) => void,
 ): void {
     const userData = ball.userData as BallUserData;
 
-    // Ensure properties exist
-    userData.scorePlayer1 = userData.scorePlayer1 ?? 0;
-    userData.scorePlayer2 = userData.scorePlayer2 ?? 0;
     userData.bounceCount = userData.bounceCount ?? 0;
     userData.firstBounceInBounds = userData.firstBounceInBounds ?? false;
 
-    const zPos = ball.position.z;
-    let pointWinner: 'player1' | 'player2';
-
-    // A valid landing that is not returned gives the point to the hitter.
-    if (userData.firstBounceInBounds) {
-        if (userData.lastHitBy) {
-            pointWinner = userData.lastHitBy;
-        } else {
-            pointWinner = zPos > 0 ? 'player2' : 'player1';
-        }
-    }
-    // 2. Ball went out, hit net, or failed to land in bounds -> Point goes to
-    // the opponent of the player who hit the ball.
-    else {
-        if (userData.lastHitBy) {
-            pointWinner = userData.lastHitBy === 'player1' ? 'player2' : 'player1';
-        } else if (zPos > 0) {
-            pointWinner = 'player2';
-        } else {
-            pointWinner = 'player1';
-        }
-    }
-
-    // Award score and log
-    if (pointWinner === 'player1') {
-        userData.scorePlayer1++;
-        console.log(`[SCORE] Player 1 scored! Current Score -> Player 1: ${userData.scorePlayer1} | Player 2: ${userData.scorePlayer2}`);
-    } else {
-        userData.scorePlayer2++;
-        console.log(`[SCORE] Player 2 scored! Current Score -> Player 1: ${userData.scorePlayer1} | Player 2: ${userData.scorePlayer2}`);
-    }
+    const pointWinner = determinePointWinner(
+        userData.firstBounceInBounds, userData.lastHitBy, ball.position.z);
+    const pointLoser = pointWinner === 'player1' ? 'player2' : 'player1';
+    onPointScored?.(pointWinner, pointLoser);
 
     // Reset ball state for serve
     userData.isWaitingForServe = true;
@@ -147,6 +115,7 @@ export function resetBallForServe(
 export function updateBallMotion(
     ball: THREE.Mesh,
     delta: number,
+    onPointScored?: (winner: BallPlayer, loser: BallPlayer) => void,
 ): void {
     const userData = ball.userData as BallUserData;
 
@@ -187,7 +156,7 @@ export function updateBallMotion(
 
             // After sliding for 1.5 seconds, reset the ball for the next serve
             if (userData.slideTimer >= 1.5) {
-                resetBallForServe(ball);
+                resetBallForServe(ball, COURT_BOUNDS, onPointScored);
                 return;
             }
         } else {

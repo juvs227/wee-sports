@@ -130,7 +130,7 @@ export class RoomStore {
 
     const unique = this.#uniqueName(room, cleaned);
     const memberId = this.#addSession(playerId, code, 'player');
-    room.players.set(memberId, { slot, name: unique, ready: false });
+    room.players.set(memberId, { slot, name: unique, ready: false, setup: null });
     this.#resetReady(room);
     return this.#sessionView(memberId);
   }
@@ -149,7 +149,9 @@ export class RoomStore {
     const ready = payload?.ready;
     if (typeof ready !== 'boolean') return { ok: false, error: ERRORS.BAD_READY };
 
-    room.players.get(playerId).ready = ready;
+    const player = room.players.get(playerId);
+    if (ready && player.slot < 2 && !player.setup) return { ok: false, error: 'setup-required' };
+    player.ready = ready;
     const advanced = [...room.players.values()].every((player) => player.ready);
     if (advanced) {
       this.#clearReady(room);
@@ -172,18 +174,38 @@ export class RoomStore {
     return { ok: true, code: room.code, msLeft: COUNTDOWN_SECONDS * 1000 };
   }
 
+  setSetup(socketId, payload) {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    const room = member && this.#rooms.get(member.code);
+    const player = room?.players.get(member.id);
+    if (!player || player.slot > 1) return { ok: false, error: 'not-controller' };
+    if (![null, 'motion', 'buttons'].includes(payload?.setup)) return { ok: false, error: 'bad-setup' };
+    if (player.setup !== payload.setup) {
+      player.setup = payload.setup;
+      if (room.phase === PHASES.READY) {
+        player.ready = false;
+      } else if (BEFORE_PLAY.has(room.phase) || room.phase === PHASES.COUNTDOWN) {
+        room.deadline = null;
+        this.#resetReady(room);
+      }
+      this.#updatePause(room);
+    }
+    return { ok: true, code: room.code };
+  }
+
   /** Resolve the target from the authenticated seat; clients cannot choose another room. */
   swingTarget(socketId, event) {
     const member = this.#members.get(this.#sockets.get(socketId));
     const room = member && this.#rooms.get(member.code);
-    if (member?.role !== 'player' || room?.players.get(member.id)?.slot !== 0) {
+    const player = room?.players.get(member.id);
+    if (member?.role !== 'player' || !player || player.slot > 1) {
       return { ok: false, error: 'not-controller' };
     }
     if (!isSwing(event)) return { ok: false, error: 'bad-swing' };
     if (room.pausedAt !== null) return { ok: false, error: ERRORS.PAUSED };
     if (room.phase !== PHASES.TUTORIAL) return { ok: false, error: 'not-playing' };
     return { ok: true, hostSocketId: this.#members.get(room.hostId)?.socketId,
-      event: { type: 'swing', id: event.id, label: event.label, hand: event.hand } };
+      event: { type: 'swing', id: event.id, label: event.label, hand: event.hand, player: player.slot + 1 } };
   }
 
   /**
@@ -204,7 +226,7 @@ export class RoomStore {
     const room = this.#rooms.get(code);
     if (!room) return null;
     const players = [...room.players.values()]
-      .map(({ slot, name, ready }) => ({ slot, name, ready }))
+      .map(({ slot, name, ready, setup }) => ({ slot, name, ready, setup }))
       .sort((a, b) => a.slot - b.slot);
     const countdown =
       room.phase === PHASES.COUNTDOWN ? { msLeft: Math.max(0, room.deadline - (room.pausedAt ?? this.#now())) } : null;
@@ -213,7 +235,8 @@ export class RoomStore {
       .map(member => ({ name: member.role === 'host' ? 'TV' : room.players.get(member.id)?.name,
         msLeft: Math.max(0, this.#graceMs - (this.#now() - member.disconnectedAt)) }));
     return { code: room.code, sport: room.sport, phase: room.phase, players, countdown,
-      paused: room.pausedAt !== null, reconnecting };
+      paused: room.pausedAt !== null, reconnecting,
+      setupPending: players.filter(player => player.slot < 2 && !player.setup).map(player => player.name) };
   }
 
   /** The code this id is hosting, or null. */
@@ -251,9 +274,8 @@ export class RoomStore {
     const leavingSlot = room.players.get(id)?.slot;
     room.players.delete(id);
     this.#updatePause(room);
-    // Main's current tennis prototype has one controller: P1. Let the remaining
-    // players refill that seat instead of leaving a game without its controller.
-    if (room.phase === PHASES.TUTORIAL && leavingSlot === 0) {
+    // A controller leaving ends this match; spectators can leave freely.
+    if (room.phase === PHASES.TUTORIAL && leavingSlot < 2) {
       room.phase = PHASES.LOBBY;
       this.#clearReady(room);
     }
@@ -263,6 +285,7 @@ export class RoomStore {
       const countdownCancelled = room.phase === PHASES.COUNTDOWN;
       room.deadline = null;
       this.#resetReady(room);
+      this.#updatePause(room);
       if (countdownCancelled) return { code: room.code, closed: false, countdownCancelled };
     }
     return { code: room.code, closed: false };
@@ -294,7 +317,8 @@ export class RoomStore {
   }
 
   #updatePause(room) {
-    const missing = [...this.#members.values()].some(member => member.code === room.code && member.disconnectedAt !== null);
+    const missing = [...this.#members.values()].some(member => member.code === room.code && member.disconnectedAt !== null) ||
+      (room.phase === PHASES.TUTORIAL && [...room.players.values()].some(player => player.slot < 2 && !player.setup));
     if (missing && room.pausedAt === null) room.pausedAt = this.#now();
     else if (!missing && room.pausedAt !== null) {
       if (room.deadline !== null) room.deadline += this.#now() - room.pausedAt;

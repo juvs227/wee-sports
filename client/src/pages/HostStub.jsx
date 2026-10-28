@@ -8,7 +8,6 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { EVENTS, MAX_PLAYERS, PHASES } from '@wee/shared/protocol.js';
 import { QrCode } from '../components/QrCode.jsx';
-import { StubBanner } from '../components/StubBanner.jsx';
 import { TvCountdown } from '../components/TvCountdown.jsx';
 import { TvReady } from '../components/TvReady.jsx';
 import { TvTutorial } from '../components/TvTutorial.jsx';
@@ -41,7 +40,7 @@ export default function HostStub() {
 
   if (ended || (!lobby && !reconnecting)) {
     return (
-      <main className="stub">
+      <main className="stub host-lobby">
         <p className="eyebrow">TV lobby</p>
         <h1>Lobby closed</h1>
         <p className="stub__muted">
@@ -67,7 +66,7 @@ export default function HostStub() {
 
   if (!lobby) {
     return (
-      <main className="stub">
+      <main className="stub host-lobby">
         <p className="stub__muted">Opening lobby…</p>
       </main>
     );
@@ -83,10 +82,10 @@ export default function HostStub() {
   const canPlay = lobby.phase === PHASES.ALL_READY && !starting;
 
   return (
-    <main className="stub">
+    <main className="stub host-lobby">
       <p className="eyebrow">TV lobby</p>
       <h1>{sportName(lobby.sport)} lobby</h1>
-      <p className="stub__muted">One phone is enough to play against the bot. P1 controls the racket; up to three more people can join to watch.</p>
+      <p className="stub__muted">Bring a friend: the first two phones control P1 and P2. One phone plays against the bot. Two extra seats are available for spectators.</p>
       {storageWarning ? <p className="alert">Browser storage is unavailable. Keep this tab open to preserve your session.</p> : null}
       <p className="stub__muted">Scan with your phone camera, or open the link and type the code.</p>
 
@@ -123,7 +122,7 @@ export default function HostStub() {
                 >
                   P{slot + 1}
                 </span>
-                {player ? player.name : 'Open seat'}
+                {player ? player.name : slot < 2 ? 'Join to play' : 'Join to watch'}
               </li>
             ))}
           </ul>

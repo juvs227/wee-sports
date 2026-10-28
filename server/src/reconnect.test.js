@@ -8,6 +8,7 @@ function setup(count = 1) {
   const store = new RoomStore({ now: () => clock.now });
   const host = store.createRoom('host', { v, sport: 'tennis' });
   const players = Array.from({ length: count }, (_, i) => store.join(`p${i}`, { v, code: host.code, name: `Player ${i}` }));
+  for (let i = 0; i < Math.min(count, 2); i++) store.setSetup(`p${i}`, { setup: 'motion' });
   return { store, clock, host, players, code: host.code };
 }
 const restore = (store, socket, session) => store.resume(socket, { v, code: session.code, token: session.token, role: session.role });

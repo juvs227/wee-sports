@@ -10,8 +10,8 @@ const CATALOG = [
   {
     id: 'tennis',
     name: 'Tennis',
-    blurb: 'Play against the bot with one phone. Friends can join to watch.',
-    players: { min: 1, max: 1 },
+    blurb: 'Rally with a friend using two phones, or play solo against the bot.',
+    players: { min: 1, max: 2 },
     Icon: RacketIcon,
     tint: ['#f1fbdc', '#c6eb86'],
   },

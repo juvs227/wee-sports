@@ -1,12 +1,22 @@
 import { createSwingStream } from './swingStream.js';
 import { connectSwings } from '../network/swingConnection.js';
+import { calibrationBias } from './calibration.js';
+import '../../client/src/styles/tokens.css';
+import '../play.css';
+
+if (window.parent !== window) {
+  new ResizeObserver(entries => window.parent.postMessage({ type: 'wee:controller-height',
+    height: Math.ceil(entries[0].target.getBoundingClientRect().height) + 2 }, location.origin))
+    .observe(document.querySelector('main'));
+}
 
 const element = id => document.getElementById(id);
 let lobbyPaused = window.parent !== window;
 const room = new URLSearchParams(location.search).get('room');
 if (!/^[a-zA-Z0-9-]{6,40}$/.test(room ?? '')) throw new Error('Open the controller link from the game to join its room.');
 const lobbyCode = new URLSearchParams(location.search).get('lobby');
-element('room').textContent = lobbyCode && window.parent !== window ? `Homepage lobby: ${lobbyCode} · P1` : `Room: ${room}`;
+const player = new URLSearchParams(location.search).get('player') === '2' ? 2 : 1;
+element('room').textContent = lobbyCode && window.parent !== window ? `Lobby ${lobbyCode} · P${player} · ${player === 1 ? 'Blue' : 'Red'}` : `Room: ${room}`;
 if (lobbyCode && window.parent !== window) element('connection-help').textContent = 'These buttons control the tennis game on your TV. No second room to join.';
 const connection = connectSwings({ room, role: 'phone',
   onStatus: text => { element('connection').textContent = text; },
@@ -32,9 +42,23 @@ let recording = false;
 let started = 0;
 let lastReading = 0;
 let calibrationStarted = 0;
+let buttonMode = false;
+let lastSetup;
+let wasConnected = false;
+let gameActive = window.parent === window;
+
+function publishSetup() {
+  const setup = buttonMode ? 'buttons' : bias ? 'motion' : null;
+  element('setup-status').textContent = setup === 'motion' ? 'Calibrated ✓' : setup === 'buttons' ? 'Button controls selected ✓' : 'Set up your controller';
+  if (window.parent !== window && setup !== lastSetup) {
+    lastSetup = setup;
+    window.parent.postMessage({ type: 'wee:controller-setup', setup }, location.origin);
+  }
+}
 
 
 function controls() {
+  element('setup-next').textContent = gameActive ? 'Finishing setup resumes the match. Then start swinging or use the buttons below.' : 'Once set up, press Ready above and wait for Play on the TV.';
   element('enable').disabled = enabled;
   element('calibrate').disabled = !enabled || recording || calibrating;
   element('record').disabled = lobbyPaused || !enabled || !bias || recording || calibrating;
@@ -44,15 +68,29 @@ function controls() {
   element('suppress-returns').disabled = recording;
   element('forehand').disabled = lobbyPaused;
   element('backhand').disabled = lobbyPaused;
+  publishSetup();
 }
 window.addEventListener('message', event => {
-  if (event.source !== window.parent || event.origin !== location.origin ||
-      event.data?.type !== 'wee:lobby-state' || typeof event.data.paused !== 'boolean') return;
+  if (event.source !== window.parent || event.origin !== location.origin) return;
+  if (event.data?.type === 'wee:setup-ack') {
+    if (!event.data.result?.ok) element('setup-status').textContent = 'Setup could not be saved. Reconnect or select your controls again.';
+    return;
+  }
+  if (event.data?.type !== 'wee:lobby-state' || typeof event.data.paused !== 'boolean') return;
+  if (event.data.connected && !wasConnected) lastSetup = undefined;
+  wasConnected = event.data.connected;
+  gameActive = event.data.playing === true;
   lobbyPaused = event.data.paused;
   if (lobbyPaused) stop('Paused. When everyone reconnects, tap Start swings to continue.');
   controls();
 });
 controls();
+element('use-buttons').onclick = () => {
+  stop(); buttonMode = true; lastSetup = undefined;
+  element('manual-controls').open = true;
+  element('motion').textContent = 'Use Forehand and Backhand below once the match starts.';
+  controls();
+};
 function analyze(final = false) {
   for (const swing of stream?.analyze(final) ?? []) {
     element('latest').textContent = `${swing.label}${swing.early ? ' · early' : ''}`;
@@ -96,6 +134,7 @@ element('enable').onclick = async () => {
   } catch (error) { element('motion').textContent = error.message; }
 };
 element('calibrate').onclick = () => {
+  buttonMode = false;
   calibrating = true;
   calibrationStarted = performance.now();
   calibrationSamples = [];
@@ -122,14 +161,8 @@ element('stop').onclick = () => stop();
 setInterval(() => {
   if (calibrating && performance.now() - calibrationStarted >= 2000) {
     calibrating = false;
-    const axes = ['alpha', 'beta', 'gamma'];
-    if (calibrationSamples.length >= 10 && performance.now() - lastReading < 500) {
-      const means = Object.fromEntries(axes.map(axis => [axis,
-        calibrationSamples.reduce((sum, sample) => sum + sample[axis], 0) / calibrationSamples.length]));
-      const variation = Math.sqrt(calibrationSamples.reduce((sum, sample) => sum + axes.reduce((v, axis) => v + (sample[axis] - means[axis]) ** 2, 0), 0) / calibrationSamples.length);
-      if (Math.hypot(...Object.values(means)) <= 5 && variation <= 3) bias = means;
-    }
-    element('motion').textContent = bias ? 'Calibrated. Pick up the phone and record.' : 'Calibration failed: keep still with the page visible and retry.';
+    bias = calibrationBias(calibrationSamples, performance.now() - lastReading);
+    element('motion').textContent = bias ? (gameActive ? 'Calibrated. Tap Start swings to play.' : 'Calibrated. Press Ready above; when the match starts, tap Start swings.') : 'Calibration failed: keep still with the page visible and retry, or use button controls.';
     controls();
   }
   if (!recording) return;

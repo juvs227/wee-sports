@@ -17,7 +17,6 @@ import {
   normalizeCode,
 } from '@wee/shared/protocol.js';
 import { PhoneReady } from '../components/PhoneReady.jsx';
-import { StubBanner } from '../components/StubBanner.jsx';
 import { errorText } from '../lib/errors.js';
 import { request } from '../lib/socket.js';
 import { useReconnect } from '../lib/useReconnect.js';
@@ -77,8 +76,9 @@ export default function JoinStub() {
   if (seat) {
     const players = lobby?.players ?? [];
     const phase = lobby?.phase ?? PHASES.LOBBY;
+    const setup = players.find(player => player.slot === seat.slot)?.setup;
     return (
-      <main className={phase === PHASES.TUTORIAL ? "tennis-session" : "stub"}>
+      <main className="stub phone-session">
         <p className="eyebrow">Homepage lobby · {seat.code}</p>
         {storageWarning ? <p className="alert">Browser storage is unavailable. Keep this tab open to preserve your seat.</p> : null}
         {error ? <p className="alert" role="alert">{errorText(error)}</p> : null}
@@ -98,22 +98,27 @@ export default function JoinStub() {
           </div>
         </div>
         {phase === PHASES.TUTORIAL ? (
-          <p role="status">{seat.slot === 0 ? 'Tennis is ready. Tap Start swings below, then watch the TV.' : 'Watch the TV. P1 controls the racket against the bot; your seat is saved.'}</p>
+          <p role="status">{seat.slot > 1 ? 'You’re watching this match. Follow the action on the TV.'
+            : !setup ? 'Finish controller setup below to resume the match.'
+            : lobby.paused ? 'Match paused. Waiting for everyone to reconnect and finish setup.'
+            : setup === 'buttons' ? 'Use Forehand and Backhand below, and watch the TV.'
+            : 'Tap Start swings below, then watch the TV.'}</p>
         ) : phase === PHASES.LOBBY ? (
           <p className="stub__status">Waiting for a player to join the P1 controller seat…</p>
         ) : (
-          <PhoneReady lobby={lobby} slot={seat.slot} disabled={reconnecting || lobby.paused} />
+          <PhoneReady lobby={lobby} slot={seat.slot} disabled={reconnecting || (lobby.paused && phase !== PHASES.TUTORIAL)} />
         )}
 
-        {seat.slot === 0 ? (
+        {seat.slot < 2 ? (
           <>
-            {phase !== PHASES.TUTORIAL ? <p>Enable motion and calibrate below, then press Ready. Your setup stays with you when the host presses Play.</p> : null}
-            <PrototypeFrame code={seat.code} controller
+            {phase !== PHASES.TUTORIAL ? <p>Choose motion or button controls, then press Ready. Your setup stays with you when the match starts.</p> : null}
+            <PrototypeFrame code={seat.code} controller player={seat.slot + 1}
+              playing={phase === PHASES.TUTORIAL}
               paused={phase !== PHASES.TUTORIAL || reconnecting || seat.paused}
-              showPause={reconnecting || seat.paused} />
+              showPause={reconnecting} />
           </>
-        ) : <p>P1 plays against the bot. Other seats can watch.</p>}
-        {reconnecting || lobby.paused ? <ReconnectNotice lobby={lobby} reconnecting={reconnecting} /> : null}
+        ) : <p>The first two phones control the blue and red players. You have a spectator seat.</p>}
+        {reconnecting || lobby.reconnecting?.length ? <ReconnectNotice lobby={lobby} reconnecting={reconnecting} /> : null}
         <h2>In this lobby</h2>
         <ul className="seats" aria-live="polite">
           {players.map((player) => (
@@ -144,7 +149,7 @@ export default function JoinStub() {
 
   return (
     <main className="stub">
-      <StubBanner>Phone screen</StubBanner>
+      <p className="eyebrow">Wee Sports · phone controller</p>
       <h1>Join a game</h1>
       {ended ? <p className="alert" role="alert">{ended === 'replaced'
         ? 'This controller is active in another tab. Continue there or reload this page.'

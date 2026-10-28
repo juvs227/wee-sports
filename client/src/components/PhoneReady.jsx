@@ -47,6 +47,7 @@ export function PhoneReady({ lobby, slot, disabled = false }) {
 
   // The snapshot is the source of truth, so the button always matches the TV.
   const ready = lobby.players.find((player) => player.slot === slot)?.ready ?? false;
+  const needsSetup = slot < 2 && !lobby.players.find(player => player.slot === slot)?.setup;
   const readyCount = lobby.players.filter((player) => player.ready).length;
 
   async function toggle() {
@@ -69,11 +70,12 @@ export function PhoneReady({ lobby, slot, disabled = false }) {
         type="button"
         className={`btn ${ready ? 'btn--ghost' : 'btn--primary'} phone-ready__btn`}
         aria-pressed={ready}
-        disabled={sending || disabled}
+        disabled={sending || disabled || needsSetup}
         onClick={toggle}
       >
         {ready ? 'Ready ✓ (tap to undo)' : 'Ready'}
       </button>
+      {needsSetup ? <p className="stub__muted">Finish controller setup below to unlock Ready.</p> : null}
       <p className="phone-ready__count" aria-live="polite">
         {readyCount}/{lobby.players.length} ready
       </p>

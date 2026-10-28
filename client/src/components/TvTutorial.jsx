@@ -9,10 +9,14 @@ import { PrototypeFrame } from './PrototypeFrame.jsx';
 export function TvTutorial({ lobby, paused, onClose, error }) {
   return (
     <main className="tennis-session">
-      <h1>{sportName(lobby.sport)} · lobby {lobby.code}</h1>
-      <p>P1 controls the racket. The other seats can watch; this version plays against the bot.</p>
+      <div className="match-heading"><div><p className="eyebrow">Wee Sports · {lobby.code}</p>
+      <h1>{sportName(lobby.sport)} court</h1></div>
+      <span className="match-pill">{lobby.players.some(player => player.slot === 1) ? '2 players · head to head' : 'Solo · vs bot'}</span></div>
+      <p className="stub__muted">P1 is blue. P2 is red. Swing to serve, then take turns returning the ball.</p>
       {error ? <p className="alert" role="alert">{error}</p> : null}
-      <PrototypeFrame code={lobby.code} paused={paused} />
+      <PrototypeFrame code={lobby.code} players={lobby.players} paused={paused}
+        pauseMessage={lobby.reconnecting?.length ? `Waiting for ${lobby.reconnecting.map(member => member.name).join(', ')} to reconnect.`
+          : lobby.setupPending?.length ? `Waiting for ${lobby.setupPending.join(', ')} to finish controller setup.` : undefined} />
       <button type="button" className="btn btn--ghost" onClick={onClose}>Close lobby</button>
     </main>
   );

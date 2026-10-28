@@ -1,7 +1,13 @@
 # Wee Sports
 
-`update-homepage` combines the current tennis app from `main` with the homepage,
-lobby, ready check, reconnect handling, and stress runner from `week4-reconnect`.
+`update-homepage` combines the homepage/lobby/reconnect work with tennis from
+`main` and the team's scoring, model, and game-logic updates from `base-game`.
+
+Comparison checked October 28: `main` is still at `3a5a72a` and was already
+included in this branch. `base-game` (`08e121f`) adds scoring and updated assets;
+those source changes are merged here. `game-menu` adds an independent Escape-key
+pause, which is kept separate so it cannot resume a game that the lobby paused.
+Tutorial voting remains separate work; its old protocol needs adapting before merging.
 
 ## Run the combined app
 
@@ -18,28 +24,38 @@ For a phone tunnel, set `NGROK_HOST` to the tunnel hostname before starting the
 server. `VITE_PUBLIC_URL` can also set the QR's public origin. Real phone motion
 requires HTTPS. Same-Wi-Fi joining still works over HTTP.
 
-1. Choose Tennis and join its QR/code from one phone. Up to three friends can join
-   to watch before the countdown starts; all joined phones press Ready.
-2. P1 can Enable motion and Calibrate in the lobby. Press Ready, then Play on the TV.
-   The five-second countdown opens tennis against the bot. The same controller stays
-   loaded, preserving calibration and hand selection. Tap Start swings to play.
-3. Phone strokes use the homepage lobby's Socket.io session. There is no second
-   room or controller link to pair. Only P1 can send strokes, and the server routes
-   them only to that lobby's TV. The game acknowledges receipt; loading or paused
-   games report a retry message instead of silently accepting input.
-4. A temporary connection loss pauses the embedded game. Rejoining preserves the
-   seat and running game while the TV page stays open. After a motion pause, tap
-   Start swings again. Closing the lobby ends its embedded game/controllers.
+1. Choose Tennis on the TV/laptop. Scan its QR code with one or two phones.
+   The first phone is P1 (blue), the second is P2 (red). A single phone plays
+   against the bot. Seats 3 and 4 are spectators and must also press Ready.
+2. On each controller, choose a playing hand, **Enable motion**, then **Calibrate**
+   with the phone still for two seconds. Alternatively choose **Use button controls**.
+   Ready is disabled until that phone finishes setup. Failed/stale calibration
+   cannot mark it ready. Use HTTPS on physical phones for motion access.
+3. Everyone presses **Ready**, then the TV presses **Play**. The same controllers
+   stay loaded through the countdown, preserving calibration and hand selection.
+   For motion play, tap **Start swings** on each phone. For buttons, use Forehand
+   and Backhand. P1's first swing serves; P2 returns when the ball reaches the racket.
+4. The server assigns each stroke to the authenticated P1/P2 seat and sends it
+   only to that lobby's TV. The bot is disabled when P2 joins. The TV shows both
+   names, points, and games won using the team's scoring system.
+5. A dropped connection pauses the same running world. Seats are held for 60 seconds.
+   Reloading a phone requires controller setup again before play resumes. After
+   reconnecting, motion users tap **Start swings** again. An explicit P1 or P2
+   Leave ends that match and returns the remaining group to the lobby. Closing
+   the lobby ends it for everyone.
 
-The existing protocol still calls the post-countdown phase `tutorial`; it contains
-main's tennis page. Tutorial voting and two-player tennis remain separate work.
-The outer lobby owns membership, readiness, reconnects, and swing delivery. A small
-same-origin bridge forwards strokes into the existing game without changing its
-physics or classifier. The standalone `/swings` relay remains available for the
-game team's direct prototype URLs. If P1 leaves, the game returns to the lobby to
-refill that controller seat. Joining/leaving before play resets readiness and cancels
-any countdown; the remaining group can start again as soon as P1 is present and
-all joined phones are ready.
+Protocol v3 adds controller setup and server-assigned player numbers. Reload old
+pages after updating. Its post-countdown phase is still named `tutorial` internally,
+but displays tennis. The homepage lobby owns membership/readiness/reconnects;
+a same-origin bridge connects the existing controller and game without another
+lobby. The standalone `/swings` prototype relay remains available.
+
+This is the team's tennis prototype: automatic positioning, preset strokes,
+existing ball physics and scoring. P1 serves each point; regulation service turns,
+service boxes and a full match-end/rematch flow are not implemented. The new serve
+setup places the held ball at the existing racket strike pose; normal collision and
+trajectory code still decide the hit. No classifier thresholds or ball physics were
+retuned for the lobby integration.
 
 **Recovery limit:** refreshing the TV restores the lobby but starts a fresh tennis
 world. Scores/points are still local to that page; authoritative match recovery and
@@ -112,8 +128,8 @@ realistic impact physics, net collision, and full tennis rules are not added her
 Keyboard swing input is edge-triggered and uses the same command path as the
 phone, avoiding duplicate handling of J/K. Hand selection chooses the corresponding
 animation direction, but does not swap the existing model's racket to another
-physical hand. Player 2 remains available through the game input API rather than
-a second paired phone.
+physical hand. In homepage lobbies, the second paired phone controls Player 2;
+standalone prototype links retain their original Player 1 relay.
 
 Validation: `npm run compile`, `npm run test:physics` (Node 24), and `npm run build`.
 Physics tests cover fast ball crossings, moving/scaled rackets, contact timing,
@@ -262,8 +278,7 @@ is still needed for bot reach, racket timing, and feel.
 ## Forehand height adjustment
 
 Forehands now lower the hand/racket together by up to 0.22 world units at the
-middle of the stroke, easing to zero at either end. The authored backhand path
-is unchanged. The offset is applied to the bone containing both Hand and
+middle of the stroke, easing to zero at either end. The team’s updated backhand pose rises from a lower start to a higher finish. The offset is applied to the bone containing both Hand and
 HandSocket, in world-down direction despite model rotation/scale, and removed
 before every mixer update so it does not accumulate across frames or strokes.
 Cached strike offsets, bot reach checks, and practice feeds use the adjusted pose.

@@ -34,7 +34,7 @@ export function TvReady({ lobby }) {
       </div>
 
       <ul className="ready__cards">
-        {players.map(({ slot, name, ready }) => (
+        {players.map(({ slot, name, ready, setup }) => (
           <li
             key={slot}
             className="ready-card"
@@ -47,7 +47,7 @@ export function TvReady({ lobby }) {
             <span className="ready-card__name">{name}</span>
             <span className="ready-card__status">
               {ready ? <CheckIcon className="ready-card__icon" /> : null}
-              {ready ? 'Ready' : 'Not ready'}
+              {ready ? 'Ready' : slot > 1 ? 'Watching' : setup === 'motion' ? 'Calibrated · press Ready' : setup === 'buttons' ? 'Buttons · press Ready' : 'Set up your controller'}
             </span>
           </li>
         ))}

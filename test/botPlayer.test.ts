@@ -24,3 +24,10 @@ test('bot does not manufacture hits outside its reach or with unavailable animat
     assert.equal(chooseBotStroke(incoming, position, []), null);
     assert.equal(chooseBotStroke(incoming, position, [{ ...forehand, duration: 0 }]), null);
 });
+
+test('bot accepts balls near either edge of the racket contact window', () => {
+    const early = { ...incoming, position: { x: 0.5, y: 1, z: -9.1 } };
+    const late = { ...incoming, position: { x: 0.5, y: 1, z: -8.1 } };
+    assert.equal(chooseBotStroke(early, position, [forehand]), forehand);
+    assert.equal(chooseBotStroke(late, position, [forehand]), forehand);
+});

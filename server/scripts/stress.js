@@ -172,6 +172,7 @@ async function main(options) {
     for (let i = 0; i < MAX_PLAYERS; i += 1) {
       const player = await connect();
       const joined = await send(player, EVENTS.PLAYER_JOIN, { v, code, name: `Player ${i + 1}` });
+      if (joined.ok && joined.slot < 2) await send(player, EVENTS.PLAYER_SETUP, { setup: 'buttons' });
       if (i === 0) { phone = player; slot = joined.slot; }
     }
     rooms.push({ code, host, phone, slot, ready: false });
