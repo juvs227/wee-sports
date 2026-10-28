@@ -2,6 +2,7 @@ import { World } from './World/World';
 import { InputController } from './Controllers/inputController';
 import { connectSwings } from './network/swingConnection.js';
 import { renderScore } from './scoreRenderer';
+import { Menu } from './Menu/Menu';
 
 async function main(): Promise<void> {
     const container = document.querySelector('#scene-container');
@@ -15,6 +16,8 @@ async function main(): Promise<void> {
         world.setPlayerInput(input, 1);
     });
 
+    const menu = new Menu(world);
+    
     const params = new URLSearchParams(location.search);
     const room = params.get('room') || crypto.randomUUID().slice(0, 8);
     if (!/^[a-zA-Z0-9-]{6,40}$/.test(room)) {
