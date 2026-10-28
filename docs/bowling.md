@@ -21,6 +21,20 @@ The source of truth for scoring is the USBC playing rules, Rule 2:
 
 Three.js renders the alley, ball, compound-profile pins and moving camera.
 cannon-es resolves gravity, ball–pin and pin–pin collisions at a fixed 240 Hz.
+The release starts with forward skid and wrist-controlled side rotation. A
+smooth oil-to-dry transition from 10.5 to 13.5 metres increases contact friction:
+the ball travels mostly straight initially, hooks, then rolls when its contact
+slip is exhausted. Positive spin bends right; negative bends left. A slower
+delivery has more time to hook. The visible trail records the actual simulated
+path, without steering the ball or promising a predicted strike.
+
+For the installed cannon-es 0.20 solver, friction equation limits clamp impulses.
+The contact coefficients are scaled by the fixed timestep so that the original
+release rotation is not consumed near the foul line. This also lets fallen pins
+slide and carry into other pins. Catch surfaces contain deflected bodies. The
+alley keeps the existing lane geometry with forest-green clubhouse panels,
+ceiling lights, lane numbers and warm wood.
+
 Pinfall is measured from settled bodies; it is never sampled from random odds.
 A bounded delivery timeout prevents an unsettled body from blocking the match.
 The second roll sweeps deadwood and retains standing pins in their displaced
@@ -35,11 +49,13 @@ tennis game's per-tick trajectory constants are not a bowling physics model.
 
 - [USBC Equipment Specifications](https://bowl.com/getmedia/08ef148d-c0e4-4e00-9e0d-855ba4729ad5/equipment-specs-manual.pdf)
 - [USBC Ball Motion Study](https://images.bowl.com/bowl/media/legacy/uploadedfiles/Equip_and_Specs/Equip_and_Specs_Home/08ballmotionstudy.pdf)
+- [USBC: skid, hook and roll phases](https://images.bowl.com/bowl/media/legacy/internap/bowl/equipandspecs/pdfs/articles/skid_hook_roll_v3_final.pdf)
 - [USBC entry-angle guidance](https://bowl.com/adjusting-entry-angle)
 - [cannon-es World API](https://pmndrs.github.io/cannon-es/docs/classes/World.html)
+- [cannon-es GSSolver impulse limits](https://github.com/pmndrs/cannon-es/blob/v0.20.0/src/solver/GSSolver.ts)
 
 This is an arcade approximation: simplified lane oil/friction and compound pin
-geometry, no oil transition or certified ball-core simulation. There is no foul
+geometry, no oil carrydown or certified ball-core simulation. There is no foul
 line sensor; releases are legal by design. It does not claim USBC equipment
 certification or tournament-grade realism.
 
@@ -53,9 +69,17 @@ cannot pass. Live diagnostics distinguish denied access, absent data, movement
 and insecure HTTP. Motion starts automatically once calibrated and playing;
 explicit Stop, hidden pages, pauses and disconnects discard partial gestures.
 
-Bowling arms one delivery at a time. A sustained pitch-axis motion followed by
-deceleration releases once, with power derived from peak angular speed. Aim and
-curve remain explicit sliders. Tennis uses the team’s post-peak fast confirmation by default, retaining the
+Bowling arms one delivery at a time. Hold the phone screen up with its top toward
+the TV. Tilt left/right to aim; arming locks the aim so the swing cannot move it.
+A sustained X-axis underhand pitch (`rotationRate.alpha`) followed by deceleration
+releases once. Power comes from peak pitch speed, assisted by gravity-free linear
+acceleration when available. Integrated Y-axis wrist rotation (`rotationRate.beta`)
+sets left/right curve with a small dead zone. The phone shows the measured power
+and curve while armed and briefly after release. Motion rates use a different
+axis order from DeviceOrientation angles; this follows the deployed
+[Chromium implementation](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/modules/device_orientation/device_motion_event_pump.cc).
+Unusable gravity readings restore manual aim. Explicit button mode retains aim,
+curve and power sliders. Tennis uses the team’s post-peak fast confirmation by default, retaining the
 physical motion window to avoid duplicate follow-through and missed repeat swings.
 The automatic classifier still offers
 explicit simple shot mappings for devices/grips that cannot satisfy it.

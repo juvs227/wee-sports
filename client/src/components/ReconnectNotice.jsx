@@ -1,7 +1,8 @@
 import { QrCode } from './QrCode.jsx';
-import { joinUrl } from '../lib/joinUrl.js';
+import { usePhoneLink } from '../lib/usePhoneLink.js';
 
 export function ReconnectNotice({ lobby, reconnecting, code }) {
+  const { url } = usePhoneLink(code);
   return (
     <main className="stub" role="status" aria-live="polite">
       <h1>{reconnecting ? 'Reconnecting…' : 'Waiting for everyone to reconnect'}</h1>
@@ -16,7 +17,7 @@ export function ReconnectNotice({ lobby, reconnecting, code }) {
         </ul>
       ) : null}
       {code ? <div className="stub__row">
-        <QrCode value={joinUrl(code)} className="stub__qr" label="Scan to reconnect" />
+        {url ? <QrCode value={url} className="stub__qr" label="Scan to reconnect" /> : null}
         <div><p className="stub__code">{code}</p><p className="stub__muted">Reopen this lobby in the same phone browser.</p></div>
       </div> : null}
       <p className="stub__status">The ready check or countdown will continue when everyone is back.</p>

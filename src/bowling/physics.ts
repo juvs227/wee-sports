@@ -34,7 +34,9 @@ export class BowlingPhysics {
   private accumulator = 0;
   private quiet = 0;
   private gutter = false;
+  private pastDeck = false;
   private pinMaterial = new Material('pin');
+  private ballLaneContact: ContactMaterial;
 
   constructor() {
     this.world = new World({gravity: new Vec3(0, -9.81, 0), allowSleep: true});
@@ -42,10 +44,13 @@ export class BowlingPhysics {
     (this.world.solver as GSSolver).tolerance = 1e-7;
     const laneMaterial = new Material('lane');
     const ballMaterial = new Material('ball');
-    this.world.addContactMaterial(new ContactMaterial(laneMaterial, ballMaterial, {friction: 0.025, restitution: 0.08}));
-    this.world.addContactMaterial(new ContactMaterial(laneMaterial, this.pinMaterial, {friction: 0.28, restitution: 0.06}));
-    this.world.addContactMaterial(new ContactMaterial(ballMaterial, this.pinMaterial, {friction: 0.16, restitution: 0.42}));
-    this.world.addContactMaterial(new ContactMaterial(this.pinMaterial, this.pinMaterial, {friction: 0.2, restitution: 0.34}));
+    this.ballLaneContact = new ContactMaterial(laneMaterial, ballMaterial, {friction: 0.004 * FIXED_STEP, restitution: 0.03});
+    this.world.addContactMaterial(this.ballLaneContact);
+    // The solver's friction limits are impulses; scale force coefficients by
+    // the fixed timestep for pins too, so a fallen pin can slide and carry.
+    this.world.addContactMaterial(new ContactMaterial(laneMaterial, this.pinMaterial, {friction: 0.28 * FIXED_STEP, restitution: 0.06}));
+    this.world.addContactMaterial(new ContactMaterial(ballMaterial, this.pinMaterial, {friction: 0.16 * FIXED_STEP, restitution: 0.42}));
+    this.world.addContactMaterial(new ContactMaterial(this.pinMaterial, this.pinMaterial, {friction: 0.2 * FIXED_STEP, restitution: 0.34}));
     const box = (size: Vec3, position: Vec3) => {
       const body = new Body({mass: 0, shape: new Box(size), material: laneMaterial, position});
       this.world.addBody(body);
@@ -57,7 +62,13 @@ export class BowlingPhysics {
       box(new Vec3(0.035, 0.25, 10), new Vec3(side * (LANE.width / 2 + LANE.gutterWidth + 0.035), 0.04, 10));
     }
     box(new Vec3(0.85, 0.1, 0.6), new Vec3(0, -0.3, 19.78));
-    box(new Vec3(0.85, 0.5, 0.08), new Vec3(0, 0.1, 20.4));
+    // A catch floor and pit walls retain deflected bodies instead of letting
+    // them fall forever outside the narrow lane and delay the next player.
+    box(new Vec3(4.4, 0.1, 10.3), new Vec3(0, -0.5, 10.1));
+    box(new Vec3(4.4, 0.9, 0.08), new Vec3(0, 0.4, 20.4));
+    for (const side of [-1, 1]) {
+      box(new Vec3(0.08, 0.9, 10.3), new Vec3(side * 4.4, 0.4, 10.1));
+    }
     this.ball = new Body({mass: 6.35, material: ballMaterial, shape: new Sphere(BALL_RADIUS),
       linearDamping: 0.008, angularDamping: 0.008, allowSleep: true});
     this.world.addBody(this.ball);
@@ -127,14 +138,16 @@ export class BowlingPhysics {
     this.elapsed = 0;
     this.quiet = 0;
     this.gutter = false;
+    this.pastDeck = false;
     const speed = 4.5 + 4.5 * controls.power;
     const angle = controls.aim * 0.06;
     const vx = Math.sin(angle) * speed;
     const vz = Math.cos(angle) * speed;
     this.ball.velocity.set(vx, 0, vz);
-    // Release side-roll creates lateral slip. Contact friction, rather than a
-    // scripted curve, bends the ball's path; the oil coefficient is simplified.
-    this.ball.angularVelocity.set(vz / BALL_RADIUS, 0, -vx / BALL_RADIUS - controls.spin * 3);
+    // A release initially skids. Side rotation produces lateral contact slip;
+    // friction turns that into hook, then rolling once the slip is exhausted.
+    // These are bounded game inputs, not a claim of measured phone ball speed.
+    this.ball.angularVelocity.set(vz / BALL_RADIUS * 0.7, 0, -vx / BALL_RADIUS - controls.spin * 22);
     this.ball.wakeUp();
     return true;
   }
@@ -145,19 +158,27 @@ export class BowlingPhysics {
     this.accumulator += Math.min(seconds, 0.1);
     while (this.accumulator >= FIXED_STEP) {
       this.accumulator -= FIXED_STEP;
+      // A simple fixed house pattern: oil through the front of the lane, then a
+      // smooth transition to dry boards. Only ball/lane friction changes; the
+      // solver still supplies every contact force, including lateral hook.
+      const dry = Math.min(1, Math.max(0, (this.ball.position.z - 10.5) / 3.0));
+      // cannon-es 0.20's GSSolver clamps lambda (an impulse) to the friction
+      // equation's force limits. Convert μmg to μmgΔt so the 240 Hz solver
+      // does not spend all the release spin in the first few centimetres.
+      this.ballLaneContact.friction = (0.004 + 0.16 * dry * dry * (3 - 2 * dry)) * FIXED_STEP;
       this.world.step(FIXED_STEP);
       this.elapsed += FIXED_STEP;
-      if (this.ball.position.z < LANE.length - 0.2 &&
-          Math.abs(this.ball.position.x) > LANE.width / 2 + BALL_RADIUS * 0.3 && this.ball.position.y < BALL_RADIUS * 0.65) {
+      if (this.ball.position.z < LANE.length &&
+          Math.abs(this.ball.position.x) > LANE.width / 2 + BALL_RADIUS * 0.3 && this.ball.position.y < BALL_RADIUS * 0.8) {
         this.gutter = true;
       }
       // USBC 6b: neither a gutter ball nor a ball rebounding from the rear
       // cushion may knock down additional pins. Pin-to-pin rebounds stay legal.
-      if (this.gutter || this.ball.position.z > LANE.deckEnd + 0.3) this.ball.collisionFilterMask = 1;
-      const pastPins = this.ball.position.z > LANE.deckEnd + 0.3;
+      this.pastDeck ||= this.ball.position.z > LANE.deckEnd + 0.3;
+      if (this.gutter || this.pastDeck) this.ball.collisionFilterMask = 1;
       const stopped = this.ball.velocity.lengthSquared() < 0.008;
       const pinsQuiet = this.pins.every(pin => pin.body.velocity.lengthSquared() < 0.006 && pin.body.angularVelocity.lengthSquared() < 0.035);
-      if (this.elapsed > 2 && (pastPins || stopped) && pinsQuiet) this.quiet += FIXED_STEP;
+      if (this.elapsed > 2 && (this.pastDeck || stopped) && pinsQuiet) this.quiet += FIXED_STEP;
       else this.quiet = 0;
       if (this.quiet > 0.6 || this.elapsed >= 12) {
         this.active = false;

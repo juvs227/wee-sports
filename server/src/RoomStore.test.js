@@ -9,13 +9,14 @@ import {
   PROTOCOL_VERSION,
   READY_AT_PLAYERS,
   isRoomCode,
+  playerCapacity,
 } from '@wee/shared/protocol.js';
 import { RoomStore } from './RoomStore.js';
 
 const v = PROTOCOL_VERSION;
 
-function openRoom(store = new RoomStore()) {
-  const room = store.createRoom('tv', { v, sport: 'tennis' });
+function openRoom(store = new RoomStore(), sport = 'tennis') {
+  const room = store.createRoom('tv', { v, sport });
   assert.equal(room.ok, true);
   return { store, code: room.code };
 }
@@ -56,12 +57,19 @@ test('players take the lowest seat and every join returns the lobby', () => {
   ]);
 });
 
-test(`the lobby is full after ${MAX_PLAYERS} players`, () => {
-  const { store, code } = openRoom();
-  for (let i = 0; i < MAX_PLAYERS; i += 1) {
-    assert.equal(store.join(`p${i}`, { v, code, name: `P${i}` }).ok, true);
+for (const sport of ['tennis', 'bowling']) test(`${sport} rejects joins beyond its playing seats, including reserved seats`, () => {
+  const { store, code } = openRoom(new RoomStore(), sport);
+  let first;
+  for (let i = 0; i < playerCapacity(sport); i += 1) {
+    const seat = store.join(`p${i}`, { v, code, name: `P${i}` });
+    assert.equal(seat.ok, true);
+    if (i === 0) first = seat;
   }
+  store.disconnect('p0');
   assert.deepEqual(store.join('late', { v, code, name: 'Late' }), { ok: false, error: ERRORS.ROOM_FULL });
+  const resumed = store.resume('back', { v, code, role: 'player', token: first.token });
+  assert.equal(resumed.slot, 0);
+  assert.equal(resumed.players.length, playerCapacity(sport));
 });
 
 test('a wrong or malformed code is no-room', () => {
@@ -82,7 +90,7 @@ test('names are cleaned, capped, and required', () => {
 });
 
 test('duplicate names get a number and still fit', () => {
-  const { store, code } = openRoom();
+  const { store, code } = openRoom(new RoomStore(), 'bowling');
   assert.equal(store.join('a', { v, code, name: 'Sam' }).name, 'Sam');
   assert.equal(store.join('b', { v, code, name: 'sam' }).name, 'sam 2');
   assert.equal(store.join('c', { v, code, name: 'Sam' }).name, 'Sam 3');
@@ -127,12 +135,12 @@ test('removing someone who is not in a room is a no-op', () => {
 // Ready check -------------------------------------------------------------
 
 /** A room with a fake clock, filled with four players to retain multiplayer lobby coverage. Players are p0, p1, … */
-function startReadyCheck() {
+function startReadyCheck(sport = 'bowling') {
   const clock = { t: 1_000_000 };
-  const { store, code } = openRoom(new RoomStore({ now: () => clock.t }));
-  for (let i = 0; i < MAX_PLAYERS; i += 1) store.join(`p${i}`, { v, code, name: `P${i}` });
+  const { store, code } = openRoom(new RoomStore({ now: () => clock.t }), sport);
+  for (let i = 0; i < playerCapacity(sport); i += 1) store.join(`p${i}`, { v, code, name: `P${i}` });
   store.setSetup('p0', { setup: 'buttons' });
-  store.setSetup('p1', { setup: 'motion' });
+  for (let i = 1; i < playerCapacity(sport); i += 1) store.setSetup(`p${i}`, { setup: 'motion' });
   return { store, code, clock };
 }
 
@@ -221,7 +229,7 @@ test('a bad ready payload is rejected and changes nothing', () => {
   assert.deepEqual(readyFlags(store, code), [false, false, false, false]);
 });
 
-test('a spectator leaving restarts readiness for the remaining players', () => {
+test('a player leaving restarts readiness for the remaining players', () => {
   const { store, code } = startReadyCheck();
   store.setReady('p0', { ready: true });
   store.setReady('p2', { ready: true });
@@ -241,13 +249,13 @@ test('a new 4th player restarts the ready check from scratch', () => {
   assert.ok(back.players.every((player) => player.ready === false));
 });
 
-test('a spectator leaving the tennis phase does not allow mid-game joining', () => {
-  const { store, code, clock } = startReadyCheck();
+test('an active tennis game rejects mid-game joining', () => {
+  const { store, code, clock } = startReadyCheck('tennis');
+  store.remove('p1');
   everyoneReady(store);
   store.start('tv');
   clock.t += COUNTDOWN_MS;
   store.finishCountdown(code);
-  store.remove('p3');
   assert.equal(store.lobby(code).phase, PHASES.TUTORIAL);
   assert.deepEqual(store.join('late', { v, code, name: 'Late' }), { ok: false, error: ERRORS.IN_PROGRESS });
 });
@@ -346,7 +354,7 @@ test('a player leaving during the countdown cancels it and clears the ready flag
 });
 
 test('the tennis controller leaving returns everyone to the lobby to refill P1', () => {
-  const { store, code, clock } = startReadyCheck();
+  const { store, code, clock } = startReadyCheck('tennis');
   everyoneReady(store);
   store.start('tv');
   clock.t += COUNTDOWN_MS;

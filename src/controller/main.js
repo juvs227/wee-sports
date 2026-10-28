@@ -1,5 +1,5 @@
 import { createSwingStream } from './swingStream.js';
-import { createSimpleSwingStream, createBowlingMotionDetector } from './motionGestures.js';
+import { createSimpleSwingStream, createBowlingMotionDetector, bowlingTiltAim } from './motionGestures.js';
 import { connectSwings } from '../network/swingConnection.js';
 import { createInputId } from '../network/inputId.js';
 import { createCalibrationSession } from './calibration.js';
@@ -58,6 +58,9 @@ let settingsOpen = false;
 let playNotice = '';
 let setupError = '';
 let feedbackUntil = 0;
+let lastTiltReading = null;
+let liveAim = 0;
+let bowlingReadout = null;
 
 function recentReadings() { return lastReading !== null && performance.now() - lastReading < 1500; }
 function publishSetup() {
@@ -73,6 +76,7 @@ function cancelArmedRoll() { bowlingDetector = null; armedAt = null; }
 // One calm play screen; setup remains mounted so switching views preserves
 // calibration, sensor permission and the lobby connection.
 function renderPlayState() {
+  const tiltAvailable = lastTiltReading !== null && performance.now() - lastTiltReading < 500;
   const setup = buttonMode || Boolean(bias);
   element('setup-panel').hidden = setup && !settingsOpen;
   element('controller-options').hidden = setup && !settingsOpen;
@@ -114,8 +118,8 @@ function renderPlayState() {
         state = 'waiting'; title = 'Watch the lane'; help = 'Your ball is rolling. Let the pins settle.';
       } else if (turnReady()) {
         title = bowlingDetector ? 'Swing forward' : 'Your turn';
-        help = bowlingDetector ? 'Screen up. Swing gently underhand and keep holding your phone.'
-          : buttonMode ? 'Choose your line, then tap Roll ball.' : 'Choose your line, then arm your roll.';
+        help = bowlingDetector ? 'Screen up, top toward the TV. Swing underhand and gently turn your wrist for curve. Keep holding your phone.'
+          : buttonMode ? 'Choose your line, then tap Roll ball.' : 'Hold the phone screen up, top toward the TV. Aim, arm, then swing. Your motion sets power and curve.';
       } else {
         state = 'waiting'; title = currentPlayer ? `P${currentPlayer} is bowling` : 'Waiting for the lane';
         help = 'Watch the TV. Your turn will appear here.';
@@ -135,6 +139,11 @@ function renderPlayState() {
   element('shot-adjustments').hidden = Boolean(bowlingDetector);
   element('arm-roll').hidden = buttonMode || Boolean(bowlingDetector);
   element('cancel-roll').hidden = !bowlingDetector;
+  element('curve-buttons').hidden = !buttonMode;
+  element('aim').hidden = !buttonMode && tiltAvailable;
+  element('aim-label').textContent = !buttonMode && tiltAvailable ? 'Tilt to aim' : 'Aim';
+  element('tilt-help').hidden = buttonMode || !tiltAvailable;
+  element('bowling-readout').hidden = !bowling || buttonMode || !gameActive || state === 'paused' || !(bowlingDetector || (bowlingReadout && performance.now() < feedbackUntil));
   element('bowling-buttons').hidden = !buttonMode;
   element('manual-controls').hidden = bowling || !buttonMode || state !== 'playing';
   element('latest').hidden = !gameActive || state === 'paused' || performance.now() >= feedbackUntil;
@@ -185,16 +194,16 @@ function send(label) {
 }
 element('forehand').onclick = () => send('Forehand');
 element('backhand').onclick = () => send('Backhand');
-function roll(power) {
+function roll(power, measuredSpin = null) {
   if (!turnReady() || document.hidden) return;
   cancelArmedRoll();
   const event = { type: 'roll', id: createInputId(), power,
-    aim: Number(element('aim').value), spin: Number(element('spin').value) };
+    aim: Number(element('aim').value), spin: measuredSpin ?? Number(element('spin').value) };
   pendingRoll = { id: event.id, at: performance.now() };
   post({ type: 'wee:player-roll', event });
   element('delivery').textContent = 'Sending your roll…';
-  element('latest').textContent = `${Math.round(power * 100)}% power`;
-  feedbackUntil = performance.now() + 1800;
+  element('latest').textContent = measuredSpin === null ? `${Math.round(power * 100)}% power` : 'Roll sent';
+  feedbackUntil = performance.now() + 3500;
   playNotice = '';
   controls();
 }
@@ -202,6 +211,8 @@ element('roll').onclick = () => roll(Number(element('power').value));
 element('arm-roll').onclick = () => {
   if (!turnReady() || !recording || !recentReadings()) return;
   bowlingDetector = createBowlingMotionDetector();
+  bowlingReadout = { power: 0, spin: 0 };
+  showBowlingReadout(bowlingReadout);
   armedAt = performance.now();
   playNotice = '';
   element('motion').textContent = 'Armed. Screen up, swing gently forward underhand and slow down. Keep holding the phone.';
@@ -210,9 +221,16 @@ element('arm-roll').onclick = () => {
 };
 element('cancel-roll').onclick = () => {
   cancelArmedRoll();
+  bowlingReadout = null;
   controls();
   element('arm-roll').focus?.();
 };
+function showBowlingReadout(readout) {
+  element('motion-power').value = readout.power;
+  element('motion-power-value').textContent = `${Math.round(readout.power * 100)}%`;
+  element('motion-curve').textContent = Math.abs(readout.spin) < .04 ? 'Straight'
+    : `${readout.spin < 0 ? 'Left' : 'Right'} ${Math.round(Math.abs(readout.spin) * 100)}%`;
+}
 for (const id of ['aim', 'spin', 'power']) {
   element(id).oninput = () => {
     const value = Number(element(id).value);
@@ -236,6 +254,7 @@ function stop(message = 'Motion paused. Tap Resume motion when you are ready.', 
   if (user) motionWanted = false;
   const wasRecording = recording;
   recording = false;
+  lastTiltReading = null;
   stream = null; // Never flush an unfinished gesture when stopping or disconnecting.
   cancelArmedRoll();
   if (wasRecording || user) element('motion').textContent = message;
@@ -298,10 +317,25 @@ function motion(event) {
   calibration?.push(rate, now);
   if (!recording) return;
   const sample = { timeMs: now - started, rotationAlpha: rate.alpha - bias.alpha,
-    rotationBeta: rate.beta - bias.beta, rotationGamma: rate.gamma - bias.gamma };
+    rotationBeta: rate.beta - bias.beta, rotationGamma: rate.gamma - bias.gamma,
+    acceleration: event.acceleration };
   if (bowling) {
+    if (!bowlingDetector && turnReady()) {
+      const tilt = bowlingTiltAim(event.accelerationIncludingGravity, Math.hypot(sample.rotationAlpha, sample.rotationBeta, sample.rotationGamma));
+      if (tilt !== null) {
+        if (lastTiltReading === null || now - lastTiltReading >= 500) liveAim = Number(element('aim').value);
+        lastTiltReading = now;
+        liveAim += (tilt - liveAim) * .18;
+        element('aim').value = String(Math.round(liveAim * 100) / 100);
+        element('aim').oninput();
+      }
+    }
     const result = bowlingDetector?.push(sample);
-    if (result) roll(result.power);
+    if (bowlingDetector) {
+      bowlingReadout = result ?? bowlingDetector.preview;
+      showBowlingReadout(bowlingReadout);
+    }
+    if (result) roll(result.power, result.spin);
   } else { stream.push(sample); if (element('response').value !== 'complete') analyze(); }
 }
 async function requestMotion() {

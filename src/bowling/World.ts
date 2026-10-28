@@ -17,6 +17,9 @@ export class BowlingWorld {
   private pins = new Map<number, THREE.Group>();
   private ball = new THREE.Group();
   private aimLine: THREE.Line;
+  private trail: THREE.Line;
+  private trailPositions = new Float32Array(512 * 3);
+  private trailCount = 0;
   private observer: ResizeObserver;
   private running = false;
   private disposed = false;
@@ -44,10 +47,10 @@ export class BowlingWorld {
     this.renderer.domElement.style.height = '100%';
     this.renderer.domElement.setAttribute('aria-label', 'Three-dimensional bowling lane and pins');
     this.container.append(this.renderer.domElement);
-    this.scene.background = new THREE.Color('#dce6d7');
-    this.scene.fog = new THREE.Fog('#dce6d7', 23, 48);
-    this.scene.add(new THREE.HemisphereLight(0xf6fff1, 0x3c5147, 2.6));
-    const sun = new THREE.DirectionalLight(0xfff2d8, 3.2);
+    this.scene.background = new THREE.Color('#203a32');
+    this.scene.fog = new THREE.Fog('#203a32', 25, 48);
+    this.scene.add(new THREE.HemisphereLight(0xfff8e8, 0x3c5147, 2.0));
+    const sun = new THREE.DirectionalLight(0xfff2d8, 2.7);
     sun.position.set(-4, 8, 11);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
@@ -62,6 +65,12 @@ export class BowlingWorld {
       color: 0x496c25, dashSize: 0.15, gapSize: 0.13, transparent: true, opacity: 0.65,
     }));
     this.scene.add(this.aimLine);
+    const trailGeometry = new THREE.BufferGeometry();
+    trailGeometry.setAttribute('position', new THREE.BufferAttribute(this.trailPositions, 3).setUsage(THREE.DynamicDrawUsage));
+    trailGeometry.setDrawRange(0, 0);
+    this.trail = new THREE.Line(trailGeometry, new THREE.LineBasicMaterial({color: '#edffbd', transparent: true, opacity: 0.72}));
+    this.trail.frustumCulled = false;
+    this.scene.add(this.trail);
     this.setAim(0);
     this.camera.position.copy(this.cameraPosition);
     this.camera.lookAt(this.cameraTarget);
@@ -96,6 +105,9 @@ export class BowlingWorld {
     if (!validRoll(roll)) return {ok: false, error: 'Choose a valid aim, power, and spin.'};
     if (!this.physics.roll(roll)) return {ok: false, error: 'This delivery could not start.'};
     this.rolling = true;
+    this.trailCount = 0;
+    this.trail.geometry.setDrawRange(0, 0);
+    this.trail.visible = true;
     this.aimLine.visible = false;
     this.onState?.(this.getState());
     return {ok: true};
@@ -122,6 +134,7 @@ export class BowlingWorld {
     this.settlement = null;
     this.revealTime = 0;
     this.aimLine.visible = true;
+    this.trail.visible = false;
     this.syncBodies();
     this.render();
     this.onState?.(this.getState());
@@ -176,11 +189,13 @@ export class BowlingWorld {
         else if (!this.match.getState().complete) this.physics.sweep(this.settlement.remaining);
         this.settlement = null;
         this.rolling = false;
+        this.trail.visible = false;
         this.aimLine.visible = !this.match.getState().complete;
         this.onState?.(this.getState());
       }
     }
     this.syncBodies();
+    this.updateTrail();
     const advance = this.rolling ? Math.max(0, Math.min(this.physics.ball.position.z - 2.2, 15.4)) : 0;
     this.cameraPosition.set(0.1, this.rolling ? 2.35 : 2.25, advance - (this.rolling ? 2.9 : 4));
     this.cameraTarget.set(0, 0.05, Math.min(advance + 7.8, 18.8));
@@ -203,6 +218,17 @@ export class BowlingWorld {
     }
     this.ball.position.copy(this.physics.ball.position as unknown as THREE.Vector3);
     this.ball.quaternion.copy(this.physics.ball.quaternion as unknown as THREE.Quaternion);
+  }
+
+  /** Draw the measured path, so players can read their wrist-created hook. */
+  private updateTrail(): void {
+    const {x, z} = this.physics.ball.position;
+    if (!this.rolling || z > LANE.length || Math.abs(x) > LANE.width / 2 || this.trailCount >= 512) return;
+    const previous = (this.trailCount - 1) * 3;
+    if (this.trailCount && Math.hypot(x - this.trailPositions[previous], z - this.trailPositions[previous + 2]) < 0.06) return;
+    this.trailPositions.set([x, 0.014, z], this.trailCount++ * 3);
+    this.trail.geometry.getAttribute('position').needsUpdate = true;
+    this.trail.geometry.setDrawRange(0, this.trailCount);
   }
 
   private render(): void { this.renderer.render(this.scene, this.camera); }
@@ -248,10 +274,10 @@ export class BowlingWorld {
 
   private buildAlley(): void {
     const wood = new THREE.MeshStandardMaterial({map: this.woodTexture(), roughness: 0.32, metalness: 0.05});
-    const gutter = new THREE.MeshStandardMaterial({color: '#455c53', roughness: 0.55, metalness: 0.3});
+    const gutter = new THREE.MeshStandardMaterial({color: '#344d43', roughness: 0.45, metalness: 0.3});
     const trim = new THREE.MeshStandardMaterial({color: '#f5f1e3', roughness: 0.5});
     const lime = new THREE.MeshStandardMaterial({color: '#b2d568', emissive: '#6b961d', emissiveIntensity: 0.2});
-    this.mesh(new THREE.BoxGeometry(18, 0.15, 34), new THREE.MeshStandardMaterial({color: '#b9cbbb', roughness: 0.9}), 0, -0.42, 10);
+    this.mesh(new THREE.BoxGeometry(18, 0.15, 34), new THREE.MeshStandardMaterial({color: '#344c40', roughness: 0.9}), 0, -0.475, 10);
     for (const offset of [-3.2, -1.6, 0, 1.6, 3.2]) {
       this.mesh(new THREE.BoxGeometry(LANE.width, 0.2, LANE.deckEnd + 1.6), wood, offset, -0.1, (LANE.deckEnd - 1.6) / 2);
       for (const side of [-1, 1]) {
@@ -264,6 +290,21 @@ export class BowlingWorld {
       }
     }
     const dark = new THREE.MeshStandardMaterial({color: '#263a32', roughness: 0.75});
+    const wall = new THREE.MeshStandardMaterial({color: '#3b5647', roughness: 0.85});
+    const lamp = new THREE.MeshStandardMaterial({color: '#fff3cf', emissive: '#fff3cf', emissiveIntensity: 1.8, roughness: 0.3});
+    // A small clubhouse around the existing lanes, keeping the pins and the
+    // warm wood brightest rather than covering the game with new UI.
+    for (const side of [-1, 1]) {
+      this.mesh(new THREE.BoxGeometry(0.18, 4.5, 29), wall, side * 4.5, 1.7, 8);
+      this.mesh(new THREE.BoxGeometry(0.025, 0.12, 27), lime, side * 4.39, 0.85, 8);
+      for (const z of [0, 5, 10, 15]) {
+        this.mesh(new THREE.BoxGeometry(0.2, 3.8, 0.09), dark, side * 4.35, 1.5, z);
+      }
+    }
+    this.mesh(new THREE.BoxGeometry(9.2, 0.16, 29), dark, 0, 4, 8);
+    for (const x of [-3.2, -1.6, 0, 1.6, 3.2]) {
+      this.mesh(new THREE.BoxGeometry(0.04, 0.025, 19.5), lamp, x, 3.9, 9);
+    }
     this.mesh(new THREE.BoxGeometry(9, 2.5, 0.35), dark, 0, 1.0, 20.6);
     this.mesh(new THREE.BoxGeometry(8.5, 0.13, 0.45), lime, 0, 2.3, 20.3);
     this.mesh(new THREE.BoxGeometry(8.5, 0.5, 1.3), dark, 0, -0.37, 19.8);
@@ -274,10 +315,23 @@ export class BowlingWorld {
     context.textAlign = 'center'; context.fillStyle = '#eff5e8';
     context.font = '800 72px sans-serif'; context.fillText('WEE SPORTS', 512, 120);
     context.fillStyle = '#bddf79'; context.font = '500 28px sans-serif';
-    context.fillText('TEN PINS. YOUR MOMENT.', 512, 182);
+    context.fillText('THE CLUBHOUSE LANES', 512, 182);
     const signTexture = new THREE.CanvasTexture(sign); signTexture.colorSpace = THREE.SRGBColorSpace;
     const signMesh = this.mesh(new THREE.PlaneGeometry(4, 1), new THREE.MeshBasicMaterial({map: signTexture}), 0, 1.25, 20.39);
     signMesh.rotation.y = Math.PI;
+    for (let lane = 0; lane < 5; lane++) {
+      const label = document.createElement('canvas');
+      label.width = 128; label.height = 128;
+      const paint = label.getContext('2d')!;
+      paint.fillStyle = lane === 2 ? '#bedf7c' : '#47624e';
+      paint.beginPath(); paint.arc(64, 64, 53, 0, Math.PI * 2); paint.fill();
+      paint.textAlign = 'center'; paint.textBaseline = 'middle';
+      paint.fillStyle = lane === 2 ? '#203a32' : '#f5f1e3';
+      paint.font = '800 64px sans-serif'; paint.fillText(String(lane + 1).padStart(2, '0'), 64, 68);
+      const map = new THREE.CanvasTexture(label); map.colorSpace = THREE.SRGBColorSpace;
+      const number = this.mesh(new THREE.PlaneGeometry(0.32, 0.32), new THREE.MeshBasicMaterial({map, transparent: true}), (lane - 2) * 1.6, 0.33, 20.38);
+      number.rotation.y = Math.PI;
+    }
     this.mesh(new THREE.BoxGeometry(LANE.width, 0.004, 0.025), dark, 0, 0.004, 0.02);
     const arrowMaterial = new THREE.MeshBasicMaterial({color: '#716038'});
     for (let index = -3; index <= 3; index++) {

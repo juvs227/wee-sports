@@ -6,18 +6,19 @@ import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { io } from 'socket.io-client';
-import { EVENTS, MAX_PLAYERS, PHASES, PROTOCOL_VERSION } from '@wee/shared/protocol.js';
+import { EVENTS, playerCapacity, PHASES, PROTOCOL_VERSION } from '@wee/shared/protocol.js';
 
 const TIMEOUT_MS = 5000;
 const TARGET_MS = 75;
 const v = PROTOCOL_VERSION;
+const PHONES_PER_LOBBY = playerCapacity('tennis');
 const help = `Usage: npm run stress -- [options]
   --lobbies 10,25,50,100,200  Increasing stages, up to 2000 lobbies each
   --seconds 10              Measured seconds per stage (1–600)
   --interval-ms 250         One phone update per lobby at this interval (10–10000)
   --output stress-results/latest.json
 
-Starts an isolated local server. Each lobby has one TV and four phones;
+Starts an isolated local server. Each lobby has one TV and two phones;
 one phone toggles ready, and latency ends when its TV receives the update.
 Stops at the first failed stage. Exit codes: 0 all pass, 1 threshold/failure,
 2 invalid options or harness error, 130 interrupted. No tennis simulation.`;
@@ -102,7 +103,7 @@ function readyUpdate(room) {
     };
     const onUpdate = state => {
       if (state.code === room.code && state.phase === PHASES.READY && !state.paused &&
-          state.players.length === MAX_PLAYERS && state.players.find(p => p.slot === room.slot)?.ready === ready) {
+          state.players.length === PHONES_PER_LOBBY && state.players.find(p => p.slot === room.slot)?.ready === ready) {
         latency ??= performance.now() - started;
         finish();
       }
@@ -169,7 +170,7 @@ async function main(options) {
     const host = await connect();
     const { code } = await send(host, EVENTS.HOST_CREATE, { v, sport: 'tennis' });
     let phone, slot;
-    for (let i = 0; i < MAX_PLAYERS; i += 1) {
+    for (let i = 0; i < PHONES_PER_LOBBY; i += 1) {
       const player = await connect();
       const joined = await send(player, EVENTS.PLAYER_JOIN, { v, code, name: `Player ${i + 1}` });
       if (joined.ok && joined.slot < 2) await send(player, EVENTS.PLAYER_SETUP, { setup: 'buttons' });
@@ -178,7 +179,7 @@ async function main(options) {
     rooms.push({ code, host, phone, slot, ready: false });
   }
   try {
-    console.log('Local lobby load test: four phones + one TV per lobby, one ready toggle per interval.');
+    console.log('Local lobby load test: two phones + one TV per lobby, one ready toggle per interval.');
     for (const target of options.lobbies) {
       if (interrupted) break;
       const before = disconnects;
@@ -199,7 +200,7 @@ async function main(options) {
       const measured = !setupErrors && !interrupted ? await measure(rooms, options, () => interrupted)
         : { attempted: 0, skipped: 0, errors: 0, latenciesMs: [], errorCounts: {} };
       const stage = assessStage({ lobbies: target, establishedLobbies: rooms.length,
-        players: rooms.length * MAX_PLAYERS, connections: sockets.filter(socket => socket.connected).length,
+        players: rooms.length * PHONES_PER_LOBBY, connections: sockets.filter(socket => socket.connected).length,
         seconds: options.seconds, setupMs, setupErrors, setupErrorCounts,
         unexpectedDisconnects: disconnects - before, ...measured });
       if (interrupted) stage.passed = false;
@@ -217,19 +218,19 @@ async function main(options) {
       generatedAt: new Date().toISOString(), serverRevision: revision,
       environment: { node: process.version, platform: os.platform(), arch: os.arch(),
         cpu: os.cpus()[0]?.model, logicalCpus: os.cpus().length, memoryGiB: Math.round(os.totalmem() / 2 ** 30) },
-      workload: { transport: 'websocket', phonesPerLobby: MAX_PLAYERS, activePhonesPerLobby: 1,
+      workload: { transport: 'websocket', phonesPerLobby: PHONES_PER_LOBBY, activePhonesPerLobby: 1,
         intervalMs: options.intervalMs, secondsPerStage: options.seconds, requestedStages: options.lobbies,
         metric: 'Phone emit to matching TV lobby update; both simulated clients share a clock',
         scope: 'Local lobby/ready traffic only. No motion sensing, rendering, Wi-Fi, tennis, or match recovery. Server and load generator are separate processes on the same machine.' },
       passRule: { targetMs: TARGET_MS, minimumFraction: 0.9, allowedErrors: 0, allowedSkippedSends: 0, allowedDisconnects: 0 },
-      highestPassingLobbies: highest, highestPassingPlayers: highest * MAX_PLAYERS,
+      highestPassingLobbies: highest, highestPassingPlayers: highest * PHONES_PER_LOBBY,
       firstFailingLobbies: stages.find(stage => !stage.passed)?.lobbies ?? null,
       stoppedBecause: interrupted ? 'interrupted' : stages.some(stage => !stage.passed) ? 'failed-stage' : 'configured-cap',
       stages,
     };
     await mkdir(dirname(resolve(options.output)), { recursive: true });
     await writeFile(options.output, `${JSON.stringify(report, null, 2)}\n`);
-    console.log(`Highest passing tested load: ${highest} lobbies / ${highest * MAX_PLAYERS} players. Report: ${options.output}`);
+    console.log(`Highest passing tested load: ${highest} lobbies / ${highest * PHONES_PER_LOBBY} players. Report: ${options.output}`);
     if (report.stoppedBecause === 'configured-cap') console.log('The configured cap passed; the maximum has not been found.');
     process.exitCode = interrupted ? 130 : report.stoppedBecause === 'failed-stage' ? 1 : 0;
   } finally {

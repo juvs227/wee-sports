@@ -11,42 +11,57 @@ Tutorial voting remains separate work; its old protocol needs adapting before me
 
 ## Run the combined app
 
-Use Node 24 and the npm lockfile:
+Use Node 24 and the npm lockfile. Install Cloudflare’s tunnel client once on macOS:
 
 ```sh
+brew install cloudflared
 npm ci
 npm run dev
 ```
 
-Open `http://localhost:5173` for the homepage. One server serves the homepage,
-Socket.io lobby, tennis, and swing relay; no separate `:3001` process is needed.
-For a phone tunnel, set `NGROK_HOST` to the tunnel hostname before starting the
-server. `VITE_PUBLIC_URL` can also set the QR's public origin. Real phone motion
-requires HTTPS. Same-Wi-Fi joining still works over HTTP.
+For Windows or Linux, use the [official cloudflared downloads](https://developers.cloudflare.com/tunnel/downloads/).
+`npm run dev` builds the app, starts a temporary secure phone connection, and serves
+the built homepage, lobby, tennis and bowling together. Open `http://localhost:5173`
+on the TV/laptop; its lobby QR automatically uses the secure phone address. There
+is no separate `:3001` server or tunnel address to copy into configuration.
+`npm run dev:phone` is an alias for this same flow.
+
+Keep that terminal open while playing. The temporary public URL changes with each
+session and stops when the session stops. Scan the current QR when starting a new
+session. This uses a [Cloudflare Quick Tunnel](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/),
+intended for development and device testing; anyone with the temporary URL can
+open the app. No Cloudflare account or domain is required.
+
+For local editing with Vite, use `npm run dev:local`. This does not create a secure
+phone connection. The TV can use local HTTP, but real phone sensors need the
+secure phone page. Do not bypass browser certificate warnings or disable browser
+security. For an existing trusted deployment/tunnel, `PUBLIC_GAME_URL` supplies its
+HTTPS origin to the server; its QR is discovered at runtime.
 
 1. Choose **Tennis** or **Bowling** on the TV/laptop and scan its QR code.
-   Tennis uses P1/P2 (one phone plays a bot; P3/P4 watch). Bowling lets all four
-   phones play, taking turns through ten frames.
-2. Tap **Calibrate** directly, allow motion access, and place the phone still on
-   a table. The controller ignores the initial tap/set-down movement and waits
-   for a fresh, continuous still window. It explains denied permissions, HTTP,
-   missing gyroscope data, or movement instead of silently leaving setup blocked.
-   Alternatively choose **Use button controls**. Then everyone presses **Ready**.
-3. The TV presses **Play**. Calibrated motion starts automatically when the
-   countdown ends. In tennis, P1 swings to serve, then each player swings as the
-   ball approaches their side. If a grip does not work with the team's automatic
-   classifier, choose an explicit simple forehand/backhand mapping in controller
-   settings. Button controls use the same game path.
-4. For bowling, aim and choose curve on the phone. **Arm motion roll**, hold the
-   phone screen up, swing forward underhand, and slow down while keeping your
-   grip. A measured motion sets power; **Roll ball** uses the power slider.
-   Only the current player can roll. Watch the TV for pinfall, the scorecard,
-   final rankings, and **Play again** after the tenth frame.
-5. A dropped connection pauses the running world. Seats are held for 60 seconds.
-   Reloading a phone requires setup again before play resumes. Motion resumes
-   automatically unless you explicitly stopped it. Leaving an active controller
-   seat ends the match and returns everyone to the lobby. Closing the lobby ends
-   it for everyone.
+   Tennis has **two playing seats**: one phone plays the bot, or two phones play
+   each other. Bowling has **four playing seats**, taking turns through ten frames.
+2. Tap **Calibrate** on the phone, allow motion access, and place it still on a
+   table. Calibration waits for fresh gyroscope readings and a continuous still
+   window. Then each player presses **Ready**. The button fallback is available
+   inside controller settings for devices without sensors or desktop testing.
+3. The TV presses **Play**. The countdown and game fill the screen. Supported
+   browsers enter native fullscreen from this click; otherwise the game fills the
+   browser window. **Exit full screen** / **Windowed view** and **Full screen**
+   switch views without restarting the game. Calibrated phone motion starts when
+   the countdown ends.
+4. In tennis, P1 swings to serve, then each player swings as the ball approaches
+   their side. If a grip does not work with the team’s automatic classifier,
+   controller settings offer an explicit forehand/backhand mapping.
+5. In bowling, use the phone to aim, make an underhand swing for power, and twist
+   through the release to add curve. The controller shows the measured release.
+   Keep a firm grip; never let go of the phone. Only the current player can roll.
+   Watch the lane for pinfall, the scorecard, final rankings and **Play again**
+   after the tenth frame. Sliders and the Roll button remain a fallback.
+6. A dropped connection pauses the game. Seats are held for 60 seconds. Reloading
+   a phone requires calibration again before play resumes; a temporary network
+   reconnect keeps calibration. Leaving an active seat ends the match and returns
+   everyone to the lobby. Closing the lobby ends it for everyone.
 
 The default tennis sensor mode uses the team's **fast confirmation** from
 `experiment/early-swing-prediction` (`80ec8f7`). It confirms the direction after
@@ -63,12 +78,13 @@ fallback disclosure for connection testing or devices without sensors. Tennis
 still uses the team's recognized forehand/backhand gestures to drive the racket
 animation; it does not claim one-to-one tracking of the phone's 3D position.
 
-Phone motion requires HTTPS: a LAN HTTP link can join the lobby but cannot use
-sensors. Start your HTTPS tunnel to port 5173 and open the app at its HTTPS URL
-before scanning the QR; or configure `NGROK_HOST` / `VITE_PUBLIC_URL` before
-starting the app. Do not bypass browser certificate warnings. The controller has
-live sensor diagnostics under **Motion not working?**. Desktop browsers without
-gyroscopes correctly fail calibration; use buttons for desktop testing.
+The browser still asks for motion permission after the secure page opens; the
+app cannot grant that permission on the player’s behalf. Tap **Calibrate** directly
+in Safari or Chrome on the phone. See [the browser motion-permission requirements](https://developer.mozilla.org/en-US/docs/Web/API/DeviceMotionEvent/requestPermission_static).
+Live diagnostics are under **Motion not working?**. A desktop without a gyroscope
+correctly fails sensor calibration. Automated recordings and simulated motion
+verify code behavior; **actual phone hardware, permission prompts, and game feel
+still require device playtesting**.
 
 Protocol v3 adds controller setup and server-assigned player numbers. Bowling
 adds authenticated roll delivery and TV-owned turn snapshots. The server stamps
@@ -94,7 +110,9 @@ page reload preserve both games, including a rolling bowling ball.
 Standalone pages remain at `/game.html`, `/bowling.html` (local button practice),
 and `/controller.html?room=<room-id>` (tennis relay). `npm run build` builds all
 four pages and checks model assets. `npm run preview` serves the built app locally
-with both relays. `npm start` runs the same combined app as `npm run dev`.
+with both relays. `npm start` runs the local combined server without creating a
+tunnel, like `npm run dev:local`. Re-run `npm run dev` after source changes to
+rebuild the phone-play session.
 
 ## Checks
 

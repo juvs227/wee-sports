@@ -20,7 +20,11 @@ export const CODE_ALPHABET = '23456789CDFGHJKLMNPQRTVWXYZ';
 /** Four characters: easy to read off a TV and quick to type on a phone. */
 export const CODE_LENGTH = 4;
 
+/** Largest supported party; tennis has two playing seats. */
 export const MAX_PLAYERS = 4;
+export function playerCapacity(sport) {
+  return sport === 'tennis' ? 2 : sport === 'bowling' ? MAX_PLAYERS : 0;
+}
 export const NAME_MAX = 12;
 
 /** One controller can play the current tennis prototype against the bot. */
@@ -32,7 +36,7 @@ export const COUNTDOWN_SECONDS = 5;
 export const OPEN_SPORTS = ['tennis', 'bowling'];
 
 export function isController(sport, slot) {
-  return Number.isInteger(slot) && slot >= 0 && slot < (sport === 'bowling' ? MAX_PLAYERS : 2);
+  return Number.isInteger(slot) && slot >= 0 && slot < playerCapacity(sport);
 }
 
 /**

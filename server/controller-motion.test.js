@@ -40,9 +40,9 @@ beforeEach(() => {
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 const emit = (type, data) => { for (const listener of listeners.get(type) ?? []) listener(data); };
 const state = data => emit('message', { source: parent, origin: location.origin, data: { type: 'wee:lobby-state', connected: true, paused: true, playing: false, ...data } });
-const tick = (ms = 20, rate = { alpha: 0.1, beta: -.1, gamma: .2 }) => {
+const tick = (ms = 20, rate = { alpha: 0.1, beta: -.1, gamma: .2 }, sensors = {}) => {
   now += ms;
-  if (rate) emit('devicemotion', { rotationRate: rate });
+  if (rate) emit('devicemotion', { rotationRate: rate, ...sensors });
   vi.advanceTimersByTime(ms);
 };
 async function calibrate() {
@@ -151,7 +151,7 @@ test('bowling presents the other player, own turn, armed roll, delivery and pers
   expect(elements.get('shot-adjustments').hidden).toBe(true);
   expect(elements.get('cancel-roll').hidden).toBe(false);
   elements.get('cancel-roll').onclick();
-  for (let i = 0; i < 40; i++) tick(20, { alpha: 0, beta: i < 20 ? 400 * Math.sin(Math.PI * i / 20) : 0, gamma: 0 });
+  for (let i = 0; i < 40; i++) tick(20, { alpha: i < 20 ? 400 * Math.sin(Math.PI * i / 20) : 0, beta: 0, gamma: 0 });
   expect(messages.filter(message => message.type === 'wee:player-roll')).toHaveLength(0);
   expect(elements.get('shot-adjustments').hidden).toBe(false);
   expect(elements.get('play-title').textContent).toBe('Your turn');
@@ -161,7 +161,7 @@ test('bowling presents the other player, own turn, armed roll, delivery and pers
   expect(elements.get('play-title').textContent).toBe('Your turn');
   expect(messages.filter(message => message.type === 'wee:player-roll')).toHaveLength(0);
   elements.get('arm-roll').onclick();
-  for (let i = 0; i < 40; i++) tick(20, { alpha: 0, beta: i < 20 ? 400 * Math.sin(Math.PI * i / 20) : 0, gamma: 0 });
+  for (let i = 0; i < 40; i++) tick(20, { alpha: i < 20 ? 400 * Math.sin(Math.PI * i / 20) : 0, beta: 0, gamma: 0 });
   expect(messages.filter(message => message.type === 'wee:player-roll')).toHaveLength(1);
   expect(elements.get('play-title').textContent).toBe('Watch the lane');
   expect(elements.get('bowling-controls').hidden).toBe(true);
@@ -260,13 +260,54 @@ test('calibrated bowling motion only rolls when explicitly armed on the current 
   state({ playing: true, paused: false });
   emit('message', { source: parent, origin: location.origin,
     data: { type: 'wee:bowling-state', canRoll: true, currentPlayer: 1, phase: 'ready' } });
-  const bowl = () => { for (let i = 0; i < 40; i++) tick(20, { alpha: 0, beta: i < 20 ? 400 * Math.sin(Math.PI * i / 20) : 0, gamma: 0 }); };
+  const bowl = () => { for (let i = 0; i < 40; i++) tick(20, { alpha: i < 20 ? 400 * Math.sin(Math.PI * i / 20) : 0, beta: 0, gamma: 0 }); };
   bowl();
   expect(messages.filter(message => message.type === 'wee:player-roll')).toHaveLength(0);
   elements.get('arm-roll').onclick();
   bowl();
   expect(messages.filter(message => message.type === 'wee:player-roll')).toHaveLength(1);
   expect(relay.sendSwing).not.toHaveBeenCalled();
+});
+
+test('bowling tilt aims before arming, locks during delivery and sends measured power and twist', async () => {
+  location.search += '&sport=bowling';
+  await import('../src/controller/main.js');
+  await calibrate();
+  state({ playing: true, paused: false });
+  emit('message', { source: parent, origin: location.origin,
+    data: { type: 'wee:bowling-state', canRoll: true, currentPlayer: 1, phase: 'ready' } });
+  for (let i = 0; i < 35; i++) tick(20, undefined, { accelerationIncludingGravity: { x: -3, y: 0, z: 9.3 } });
+  const aim = Number(elements.get('aim').value);
+  expect(aim).toBeGreaterThan(.5);
+  expect(elements.get('aim').hidden).toBe(true);
+  expect(elements.get('curve-buttons').hidden).toBe(true);
+  elements.get('spin').value = '-1'; // A stale button preference must not override the wrist.
+  elements.get('arm-roll').onclick();
+  for (let i = 0; i < 40; i++) tick(20, { alpha: (i < 20 ? 400 * Math.sin(Math.PI * i / 20) : 0) + .1, beta: 69.9, gamma: .2 }, {
+    accelerationIncludingGravity: { x: 3, y: 0, z: 9.3 }, acceleration: { x: 0, y: 12, z: 0 },
+  });
+  const rolls = messages.filter(message => message.type === 'wee:player-roll');
+  expect(rolls).toHaveLength(1);
+  expect(rolls[0].event.aim).toBe(aim);
+  expect(rolls[0].event.spin).toBeGreaterThan(.3);
+  expect(rolls[0].event.power).toBeGreaterThan(.5);
+  expect(Number(elements.get('motion-power').value)).toBe(rolls[0].event.power);
+  expect(elements.get('motion-curve').textContent).toMatch(/^Right/);
+  expect(elements.get('bowling-readout').hidden).toBe(false);
+});
+
+test('losing usable gravity restores manual aim while gyro motion remains live', async () => {
+  location.search += '&sport=bowling';
+  await import('../src/controller/main.js');
+  await calibrate();
+  state({ playing: true, paused: false });
+  emit('message', { source: parent, origin: location.origin,
+    data: { type: 'wee:bowling-state', canRoll: true, currentPlayer: 1, phase: 'ready' } });
+  for (let i = 0; i < 30; i++) tick(20, undefined, { accelerationIncludingGravity: { x: -3, y: 0, z: 9.3 } });
+  expect(elements.get('aim').hidden).toBe(true);
+  for (let i = 0; i < 40; i++) tick();
+  expect(elements.get('aim').hidden).toBe(false);
+  expect(elements.get('play-title').textContent).toBe('Your turn');
 });
 
 const teamRecordings = [

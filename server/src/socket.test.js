@@ -61,16 +61,16 @@ test('real sockets: timeout sweep releases a seat without incoming messages', as
   phone.disconnect(); await expired;
 });
 
-test('lobby swings reach only their TV, reject spectators and stale sessions, and resume with P1', async t => {
+test('lobby swings reach only their TV, reject extra phones and stale sessions, and resume with P1', async t => {
   let now = 0;
   const store = new RoomStore({ now: () => now });
   const { client } = await fixture(t, { store });
-  const host = await client(), phone = await client(), second = await client(), spectator = await client(), otherHost = await client();
+  const host = await client(), phone = await client(), second = await client(), outsider = await client(), otherHost = await client();
   const room = await send(host, EVENTS.HOST_CREATE, { v, sport: 'tennis' });
   const otherRoom = await send(otherHost, EVENTS.HOST_CREATE, { v, sport: 'tennis' });
   const seat = await send(phone, EVENTS.PLAYER_JOIN, { v, code: room.code, name: 'P1' });
-  await send(second, EVENTS.PLAYER_JOIN, { v, code: room.code, name: 'P2' });
-  await send(spectator, EVENTS.PLAYER_JOIN, { v, code: room.code, name: 'Watcher' });
+  const secondSeat = await send(second, EVENTS.PLAYER_JOIN, { v, code: room.code, name: 'P2' });
+  assert.equal((await send(outsider, EVENTS.PLAYER_JOIN, { v, code: room.code, name: 'Extra' })).error, 'room-full');
   const received = [], otherReceived = [];
   host.on(EVENTS.GAME_SWING, (event, ack) => { received.push(event); ack({ ok: true }); });
   otherHost.on(EVENTS.GAME_SWING, (event, ack) => { otherReceived.push(event); ack({ ok: true }); });
@@ -80,11 +80,10 @@ test('lobby swings reach only their TV, reject spectators and stale sessions, an
   await send(second, EVENTS.PLAYER_SETUP, { setup: 'buttons' });
   await send(phone, EVENTS.PLAYER_READY, { ready: true });
   await send(second, EVENTS.PLAYER_READY, { ready: true });
-  await send(spectator, EVENTS.PLAYER_READY, { ready: true });
   await send(host, EVENTS.HOST_START);
   now += 5000; store.finishCountdown(room.code);
   assert.equal(store.lobby(room.code).phase, PHASES.TUTORIAL);
-  assert.equal((await send(spectator, EVENTS.PLAYER_SWING, event)).error, 'not-controller');
+  assert.equal((await send(outsider, EVENTS.PLAYER_SWING, event)).error, 'not-controller');
   assert.equal((await send(phone, EVENTS.PLAYER_SWING, { ...event, label: 'bad' })).error, 'bad-swing');
   assert.equal((await send(phone, EVENTS.PLAYER_SWING, event)).receivers, 1);
   assert.deepEqual(received, [{ type: 'swing', id: 'one', label: 'Forehand', hand: 'Right', player: 1 }]);
@@ -92,11 +91,12 @@ test('lobby swings reach only their TV, reject spectators and stale sessions, an
   assert.equal(received[1].player, 2);
   assert.deepEqual(otherReceived, []);
   const paused = nextSnapshot(host, state => state.paused);
-  spectator.emit(EVENTS.SESSION_AWAY, { code: room.code });
+  second.emit(EVENTS.SESSION_AWAY, { code: room.code });
   await paused;
   assert.equal((await send(phone, EVENTS.PLAYER_SWING, event)).error, 'paused');
-  // Free the reserved spectator through the store to isolate controller recovery.
-  now += 60000; store.expireDisconnected();
+  // The second player's reserved seat resumes without resetting the match.
+  const secondBack = await client();
+  await send(secondBack, EVENTS.SESSION_RESUME, { v, code: room.code, token: secondSeat.token, role: 'player' });
   const replacement = await client();
   await send(replacement, EVENTS.SESSION_RESUME, { v, code: room.code, token: seat.token, role: 'player' });
   assert.equal((await send(phone, EVENTS.PLAYER_SWING, event)).error, 'not-controller');

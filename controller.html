@@ -27,11 +27,17 @@
     <p id="latest" class="swing-feedback" role="status"></p>
     <p id="play-notice" role="status" hidden></p>
     <button id="record" class="primary" disabled hidden>Resume motion</button>
+    <div id="bowling-readout" class="motion-readout" hidden>
+      <label for="motion-power">Swing power <output id="motion-power-value">0%</output></label>
+      <meter id="motion-power" min="0" max="1" value="0">0%</meter>
+      <p>Curve <strong id="motion-curve">Straight</strong></p>
+    </div>
     <section id="bowling-controls" hidden aria-label="Bowling controls">
       <div id="shot-adjustments">
-      <label class="range-label" for="aim">Aim <output id="aim-value" for="aim">Center</output></label>
+      <label class="range-label" for="aim"><span id="aim-label">Aim</span> <output id="aim-value" for="aim">Center</output></label>
       <input id="aim" type="range" min="-1" max="1" step="0.05" value="0">
-      <details class="shot-options"><summary>Adjust curve</summary>
+      <p id="tilt-help" class="play-muted" hidden>Tilt left or right to aim, then arm your roll.</p>
+      <details class="shot-options" id="curve-buttons"><summary>Adjust curve</summary>
       <label class="range-label" for="spin">Curve <output id="spin-value" for="spin">Straight</output></label>
       <input id="spin" type="range" min="-1" max="1" step="0.05" value="0">
       </details>

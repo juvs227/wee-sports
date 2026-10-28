@@ -1,12 +1,13 @@
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
 * { box-sizing: border-box; }
 body { margin: 0; background: #f4f6ec; color: #263a32; font-family: Nunito, system-ui, sans-serif; }
-#bowling-app { max-width: 1500px; margin: auto; padding: 18px 24px 12px; }
+#bowling-app { width: 100%; height: 100dvh; min-height: 640px; margin: auto; padding: 16px 24px 12px; display: flex; flex-direction: column; }
+#bowling-app > :not(#lane) { flex-shrink: 0; }
 .bowling-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 12px; }
 .play-eyebrow { margin: 0 0 3px; font-size: 11px; text-transform: uppercase; letter-spacing: .16em; font-weight: 900; color: #60744b; }
 h1 { margin: 0; font-size: clamp(21px, 2.5vw, 32px); line-height: 1.2; }
 .bowling-pill { border: 1px solid #bfcba8; background: #e8efd9; border-radius: 30px; padding: 8px 15px; font-weight: 800; white-space: nowrap; font-size: 13px; }
-#lane { height: clamp(270px, 48vh, 510px); overflow: hidden; border-radius: 20px; box-shadow: 0 6px 25px #263a3215; }
+#lane { flex: 1 0 250px; min-height: 250px; overflow: hidden; border-radius: 20px; box-shadow: 0 6px 25px #263a3215; }
 .bowling-status { display: flex; justify-content: space-between; gap: 14px; align-items: center; margin: 12px 2px; }
 .bowling-status p { margin: 0; font-size: 14px; }
 #roll-status { font-weight: 900; } #pin-status { color: #60744b; }

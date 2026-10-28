@@ -21,6 +21,10 @@
 .controller-page .shot-options { margin-top: 4px; color: var(--text-muted); font-size: .85rem; }
 .controller-page #cancel-roll { display: block; margin: 0 auto; }
 .controller-page #stop { margin-bottom: 12px; }
+.controller-page .motion-readout { text-align: left; padding: 14px 16px; border-radius: var(--radius-sm); background: var(--accent-soft); margin: 16px 0; }
+.controller-page .motion-readout label, .controller-page .motion-readout p { display: flex; justify-content: space-between; gap: 12px; font-size: .9rem; }
+.controller-page .motion-readout meter { width: 100%; height: 18px; accent-color: var(--accent-bottom); }
+.controller-page #tilt-help { font-size: .8rem; }
 .controller-page .play-state[data-state="paused"] .play-pill { background: var(--warn-soft); color: var(--warn-ink); }
 .controller-page .controller-symbol { position: relative; width: 52px; height: 88px; margin: 24px auto; border: 3px solid var(--accent-bottom); border-radius: 16px; background: linear-gradient(135deg, white, var(--accent-soft)); transform: rotate(-12deg); }
 .controller-page .controller-symbol span { position: absolute; top: 16px; left: 13px; width: 20px; height: 20px; border-radius: 50%; background: var(--accent-bottom); }

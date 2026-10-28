@@ -1,0 +1,160 @@
+/* Homepage-only identity. Shared game, lobby, and phone styles stay unchanged. */
+.wee-home {
+  --club-ink: #213f35;
+  --club-muted: #58665b;
+  --club-paper: #f6f5ed;
+  --club-line: #d6dacb;
+  --club-lime: #d7f36b;
+  min-height: 100dvh;
+  background: var(--club-paper);
+  color: var(--club-ink);
+  font-family: 'Avenir Next', 'Segoe UI', sans-serif;
+}
+
+.wee-home .club-page { width: min(100%, 76rem); margin-inline: auto; padding-inline: clamp(1.1rem, 4vw, 3rem); }
+.wee-home a { color: inherit; }
+.wee-home :focus-visible { outline: 3px solid #9b491f; outline-offset: 5px; }
+.wee-home .club-header { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; min-height: 6.3rem; border-bottom: 1px solid var(--club-line); }
+.wee-home .club-wordmark { display: inline-flex; gap: .6rem; align-items: center; text-decoration: none; font-size: 1.9rem; font-weight: 850; letter-spacing: -.075em; }
+.wee-home .club-wordmark svg { width: 2rem; height: 2rem; }
+.wee-home .club-wordmark__sports { font-weight: 550; }
+.wee-home .club-wordmark__period { color: #a84d26; }
+.wee-home .club-nav { display: flex; gap: 1.75rem; font-size: .83rem; font-weight: 650; }
+.wee-home .club-nav a { text-decoration: none; padding-block: .7rem; }
+.wee-home .club-nav a:hover { text-decoration: underline; text-underline-offset: .3rem; }
+
+.wee-home .club-hero { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, .85fr); gap: clamp(2rem, 7vw, 6rem); align-items: center; padding-block: clamp(2.75rem, 6vw, 5.3rem); }
+.wee-home .club-eyebrow { display: flex; gap: .65rem; align-items: center; font-size: .7rem; font-weight: 750; letter-spacing: .13em; text-transform: uppercase; }
+.wee-home .club-hero__copy > .club-eyebrow span { width: .45rem; height: .45rem; flex: 0 0 auto; background: #a45330; border-radius: 50%; box-shadow: 0 0 0 4px #eaded0; }
+.wee-home .club-hero h1 { margin-top: 1.25rem; font-size: clamp(3.7rem, 6.9vw, 6.1rem); line-height: 1.01; font-weight: 650; letter-spacing: -.065em; }
+.wee-home .club-hero h1 em { position: relative; font-family: Georgia, 'Times New Roman', serif; font-weight: 400; letter-spacing: -.065em; }
+.wee-home .club-hero h1 em::after { position: absolute; content: ''; left: -.03em; right: -.03em; bottom: -.06em; height: .045em; background: #cbe35c; border-radius: 50%; transform: rotate(-3deg); }
+.wee-home .club-hero__lede { max-width: 37ch; margin-top: 1.6rem; font-size: 1.05rem; line-height: 1.7; color: var(--club-muted); }
+.wee-home .club-button { display: inline-flex; justify-content: space-between; align-items: center; gap: 1.75rem; min-height: 3rem; padding: .85rem 1.15rem; border: 1px solid var(--club-ink); border-radius: .5rem; background: var(--club-ink); color: white; font-size: .85rem; font-weight: 650; text-decoration: none; cursor: pointer; transition: background-color 160ms, transform 160ms; }
+.wee-home .club-button > span { font-size: 1.25rem; line-height: 1; }
+.wee-home .club-button:hover:not(:disabled) { background: #315e49; transform: translateY(-2px); }
+.wee-home .club-button:active:not(:disabled) { transform: translateY(0); }
+.wee-home .club-button:disabled { background: #e4e8df; border-color: #c9d0c4; color: #58665b; cursor: default; }
+.wee-home .club-hero__action { margin-top: 1.75rem; }
+.wee-home .club-hero__footnote { margin-top: .85rem; color: var(--club-muted); font-size: .7rem; }
+
+.wee-home .club-join { border: 1px solid #bec9b3; border-radius: 1.1rem; background: #fffef8; overflow: hidden; box-shadow: 0 10px 0 -5px #e8e9db; scroll-margin-top: 1rem; }
+.wee-home .club-join__banner { display: flex; align-items: center; justify-content: space-between; gap: .7rem; padding: 1.5rem 1.6rem; background-color: #dfedb7; background-image: radial-gradient(#53734d22 .7px, transparent .7px); background-size: 7px 7px; border-bottom: 1px solid #bec9b3; }
+.wee-home .club-join__banner .club-eyebrow { font-size: .7rem; letter-spacing: .1em; }
+.wee-home .club-join__headline { margin-top: .65rem; font-size: 1.35rem; font-weight: 650; letter-spacing: -.035em; line-height: 1.23; }
+.wee-home .club-join__phone { flex: 0 0 auto; width: 6.6rem; height: 7.1rem; }
+.wee-home .join-card { padding: 1.65rem; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.wee-home .join-card__title { font-family: inherit; font-size: 1.05rem; font-weight: 700; letter-spacing: -.02em; }
+.wee-home .join-card__sub { max-width: 29ch; margin-top: .5rem; color: var(--club-muted); font-size: .8rem; line-height: 1.6; }
+.wee-home .join-form { gap: .6rem; margin-top: 1.15rem; }
+.wee-home .code-input { height: 3.25rem; padding-inline: .4rem; border: 1px solid #a8b4a5; border-radius: .45rem; background: #f4f5eb; color: var(--club-ink); font-family: ui-monospace, monospace; font-size: 1.35rem; letter-spacing: .2em; text-indent: .2em; }
+.wee-home .code-input::placeholder { color: #7a8778; }
+.wee-home .code-input:focus { border-color: #213f35; box-shadow: 0 0 0 3px #d7f36b80; background: white; }
+.wee-home .join-form .btn { height: 3.25rem; padding-inline: 1.1rem; border: 1px solid var(--club-ink); border-radius: .45rem; background: var(--club-ink); color: white; box-shadow: none; font-size: .9rem; }
+.wee-home .join-form .btn:disabled { color: #64705f; border-color: #d9dfcf; background: #e9ecdf; }
+.wee-home .join-form .btn:hover:not(:disabled) { background: #315e49; box-shadow: none; }
+.wee-home .join-card__hint { color: var(--club-muted); font-size: .7rem; }
+
+.wee-home .club-games { scroll-margin-top: 2rem; padding-block: 1rem 3.7rem; }
+.wee-home .club-section-head { display: flex; justify-content: space-between; align-items: end; gap: 1.5rem; margin-bottom: 1.6rem; }
+.wee-home .club-section-head .club-eyebrow { margin-bottom: .55rem; color: #6c725b; }
+.wee-home .club-section-head h2 { font-size: clamp(1.7rem, 2.7vw, 2.4rem); line-height: 1.15; font-weight: 600; letter-spacing: -.045em; }
+.wee-home .club-section-head > p { color: var(--club-muted); font-size: .75rem; line-height: 1.6; }
+.wee-home .club-sports { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.3rem; }
+.wee-home .club-sport { overflow: hidden; display: grid; grid-template-columns: .9fr 1fr; border: 1px solid var(--club-line); border-radius: .8rem; background: #fffef8; }
+.wee-home .club-sport__art { position: relative; display: grid; align-items: center; min-height: 16.5rem; overflow: hidden; background: #2b5a45; color: #d7f0c7; }
+.wee-home .club-sport--bowling .club-sport__art { background: #d89569; color: #77432d; }
+.wee-home .club-sport__number { position: absolute; top: .85rem; left: 1rem; z-index: 1; font-size: .7rem; font-family: ui-monospace, monospace; }
+.wee-home .club-sport--bowling .club-sport__number { color: #3d3725; }
+.wee-home .club-sport__drawing { width: 128%; margin-left: -14%; }
+.wee-home .club-sport__body { display: flex; flex-direction: column; align-items: start; padding: 1.6rem 1.35rem; }
+.wee-home .club-sport__players { color: var(--club-muted); font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .025em; }
+.wee-home .club-sport__players span { margin-inline: .2rem; color: #8d9786; }
+.wee-home .club-sport h3 { margin-top: .65rem; font-size: 2rem; font-weight: 650; letter-spacing: -.05em; line-height: 1.1; }
+.wee-home .club-sport__description { margin-block: .75rem 1.4rem; color: var(--club-muted); font-size: .85rem; line-height: 1.55; }
+.wee-home .club-sport__action { width: 100%; margin-top: auto; padding: .7rem .8rem; min-height: 2.8rem; gap: .5rem; font-size: .7rem; }
+.wee-home .club-sport__error { margin-top: .65rem; color: #a02d31; font-size: .75rem; line-height: 1.4; }
+.wee-home .club-next { display: flex; flex-wrap: wrap; gap: .4rem 1.3rem; align-items: baseline; margin-top: 1.3rem; padding: 1rem 0; border-bottom: 1px solid var(--club-line); font-size: .75rem; }
+.wee-home .club-next__label { color: var(--club-muted); font-size: .7rem; font-weight: 650; letter-spacing: .07em; text-transform: uppercase; }
+.wee-home .club-next p { font-weight: 700; }
+.wee-home .club-next p span { font-weight: 400; color: var(--club-muted); }
+.wee-home .club-next__note { margin-left: auto; font-size: .7rem; color: var(--club-muted); }
+
+.wee-home .club-how { padding-bottom: 3.25rem; scroll-margin-top: 2rem; }
+.wee-home .club-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; padding: 0; list-style: none; }
+.wee-home .club-step { padding: .3rem 1.8rem .5rem; border-left: 1px solid var(--club-line); }
+.wee-home .club-step:first-child { padding-left: 0; border-left: 0; }
+.wee-home .club-step:last-child { padding-right: 0; }
+.wee-home .club-step__top { display: flex; align-items: center; gap: .75rem; }
+.wee-home .club-step__top svg { width: 2.1rem; height: 2.1rem; padding: .2rem; }
+.wee-home .club-step__top span { font-family: ui-monospace, monospace; color: #737b68; font-size: .7rem; }
+.wee-home .club-step h3 { margin-top: .8rem; font-size: 1rem; font-weight: 650; letter-spacing: -.025em; }
+.wee-home .club-step p { max-width: 32ch; margin-top: .5rem; color: var(--club-muted); font-size: .8rem; line-height: 1.65; }
+.wee-home .club-footer { display: flex; justify-content: space-between; gap: 1rem; padding-block: 1.5rem 2rem; border-top: 1px solid var(--club-line); color: var(--club-muted); font-size: .7rem; }
+.wee-home .club-footer > span span { margin-inline: .4rem; }
+.wee-home .club-footer a { text-decoration: none; font-weight: 650; }
+.wee-home .club-footer a:hover { text-decoration: underline; }
+
+@media (max-width: 1000px) {
+  .wee-home .club-hero { gap: 2.5rem; grid-template-columns: 1.05fr 1fr; }
+  .wee-home .club-hero h1 { font-size: clamp(3.4rem, 7vw, 5rem); }
+  .wee-home .club-sport { grid-template-columns: 1fr; }
+  .wee-home .club-sport__art { height: 12rem; min-height: 0; }
+  .wee-home .club-sport__drawing { width: 100%; height: 100%; margin: 0; }
+  .wee-home .club-sport__body { padding: 1.3rem; }
+  .wee-home .club-sport__players { font-size: .7rem; }
+  .wee-home .club-sport__description { max-width: 35ch; font-size: .85rem; }
+  .wee-home .club-sport__action { font-size: .85rem; }
+  .wee-home .club-next__note { display: none; }
+}
+
+@media (max-width: 700px) {
+  .wee-home .club-header { min-height: 5rem; }
+  .wee-home .club-wordmark { font-size: 1.65rem; }
+  .wee-home .club-nav { gap: .9rem; font-size: .72rem; }
+  .wee-home .club-hero { grid-template-columns: minmax(0, 1fr); gap: 2rem; padding-block: 2.3rem 2.75rem; }
+  .wee-home .club-hero h1 { margin-top: 1rem; font-size: clamp(3.7rem, 13.8vw, 5rem); }
+  .wee-home .club-hero__lede { max-width: 40ch; margin-top: 1.2rem; font-size: .95rem; }
+  .wee-home .club-hero__action { margin-top: 1.25rem; }
+  .wee-home .club-hero__footnote { display: none; }
+  .wee-home .club-join__banner { padding: 1rem 1.3rem; }
+  .wee-home .club-join__phone { width: 5rem; height: 5rem; }
+  .wee-home .club-join__headline { font-size: 1.15rem; }
+  .wee-home .join-card { padding: 1.3rem; }
+  .wee-home .join-card__sub { max-width: none; }
+  .wee-home .club-games { padding-block: .3rem 2.6rem; }
+  .wee-home .club-section-head { display: block; }
+  .wee-home .club-section-head > p { margin-top: .7rem; }
+  .wee-home .club-section-head > p br { display: none; }
+  .wee-home .club-section-head h2 { font-size: 1.8rem; }
+  .wee-home .club-sports { gap: 1rem; }
+  .wee-home .club-sport__body { padding: 1rem; }
+  .wee-home .club-sport__players { font-size: .7rem; }
+  .wee-home .club-sport h3 { font-size: 1.7rem; }
+  .wee-home .club-sport__description { font-size: .75rem; }
+  .wee-home .club-sport__action { font-size: .75rem; }
+  .wee-home .club-step { padding-inline: 1rem; }
+  .wee-home .club-step h3 { font-size: .9rem; }
+  .wee-home .club-step p { font-size: .75rem; }
+  .wee-home .club-footer { flex-wrap: wrap; }
+}
+
+@media (max-width: 480px) {
+  .wee-home .club-wordmark svg { width: 1.5rem; height: 1.5rem; }
+  .wee-home .club-wordmark { gap: .4rem; }
+  .wee-home .club-nav a:first-child { display: none; }
+  .wee-home .club-sports { grid-template-columns: minmax(0, 1fr); }
+  .wee-home .club-sport { grid-template-columns: .75fr 1fr; }
+  .wee-home .club-sport__art { height: auto; }
+  .wee-home .club-sport__drawing { width: 145%; height: auto; margin-left: -22.5%; }
+  .wee-home .club-sport__body { padding: 1.25rem 1rem; }
+  .wee-home .club-sport__players { font-size: .7rem; white-space: normal; }
+  .wee-home .club-sport h3 { font-size: 1.8rem; }
+  .wee-home .club-sport__description { margin-bottom: 1rem; }
+  .wee-home .club-sport__action { font-size: .7rem; min-height: 2.8rem; padding-inline: .6rem; }
+  .wee-home .club-steps { grid-template-columns: minmax(0, 1fr); gap: 1.2rem; }
+  .wee-home .club-step, .wee-home .club-step:first-child { padding: 0 0 1.2rem; border-left: 0; border-bottom: 1px solid var(--club-line); }
+  .wee-home .club-step:last-child { border-bottom: 0; padding-bottom: 0; }
+  .wee-home .club-step h3 { margin-top: .5rem; font-size: 1rem; }
+  .wee-home .club-step p { max-width: 40ch; font-size: .8rem; }
+}

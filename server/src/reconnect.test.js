@@ -14,11 +14,11 @@ function setup(count = 1) {
 const restore = (store, socket, session) => store.resume(socket, { v, code: session.code, token: session.token, role: session.role });
 
 test('a disconnect reserves the same name and seat, including readiness', () => {
-  const { store, players, code } = setup(4);
+  const { store, players, code } = setup(2);
   store.setReady('p0', { ready: true });
   store.disconnect('p0');
   assert.equal(store.lobby(code).paused, true);
-  assert.equal(store.lobby(code).players.length, 4);
+  assert.equal(store.lobby(code).players.length, 2);
   assert.equal(store.setReady('p1', { ready: true }).error, 'paused');
   const resumed = restore(store, 'new-phone', players[0]);
   assert.equal(resumed.name, players[0].name);
@@ -95,8 +95,8 @@ test('all missing participants must return before the flow resumes', () => {
 });
 
 test('countdown freezes on disconnect and continues with its remaining duration', () => {
-  const { store, players, clock, code } = setup(4);
-  for (let i = 0; i < 4; i++) store.setReady(`p${i}`, { ready: true });
+  const { store, players, clock, code } = setup(2);
+  for (let i = 0; i < 2; i++) store.setReady(`p${i}`, { ready: true });
   store.start('host'); clock.now += 2000;
   store.disconnect('p0'); clock.now += 20_000;
   assert.equal(store.finishCountdown(code), null);
@@ -108,8 +108,8 @@ test('countdown freezes on disconnect and continues with its remaining duration'
 });
 
 test('reconnecting during the tutorial preserves the current flow', () => {
-  const { store, players, clock, code } = setup(4);
-  for (let i = 0; i < 4; i++) store.setReady(`p${i}`, { ready: true });
+  const { store, players, clock, code } = setup(2);
+  for (let i = 0; i < 2; i++) store.setReady(`p${i}`, { ready: true });
   store.start('host'); clock.now += 5000; store.finishCountdown(code);
   store.disconnect('p1');
   assert.equal(store.lobby(code).paused, true);
@@ -117,13 +117,13 @@ test('reconnecting during the tutorial preserves the current flow', () => {
 });
 
 test('expiration frees the reserved seat and invalidates the old token', () => {
-  const { store, players, clock, code } = setup(4);
+  const { store, players, clock, code } = setup(2);
   store.disconnect('p0'); clock.now += RECONNECT_MS;
   // Expired tokens are rejected even before the background sweep runs.
   assert.equal(restore(store, 'late', players[0]).error, 'bad-session');
   store.expireDisconnected();
   assert.equal(store.lobby(code).phase, PHASES.LOBBY);
-  assert.equal(store.lobby(code).players.length, 3);
+  assert.equal(store.lobby(code).players.length, 1);
   assert.equal(store.join('replacement', { v, code, name: 'Replacement' }).slot, 0);
   assert.equal(restore(store, 'late', players[0]).ok, false);
 });

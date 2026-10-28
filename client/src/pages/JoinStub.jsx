@@ -4,7 +4,7 @@
  * (leave), with every failure said in plain words.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   CODE_LENGTH,
@@ -24,6 +24,7 @@ import { useReconnect } from '../lib/useReconnect.js';
 import { ReconnectNotice } from '../components/ReconnectNotice.jsx';
 import { sportName } from '../lib/sports.js';
 import { PrototypeFrame } from '../components/PrototypeFrame.jsx';
+import { usePhoneLink } from '../lib/usePhoneLink.js';
 
 const NAME_KEY = 'wee:name';
 
@@ -48,11 +49,19 @@ export default function JoinStub() {
   const [params, setParams] = useSearchParams();
   const [code, setCode] = useState(() => normalizeCode(params.get('code')));
   const [name, setName] = useState(loadName);
+  const { url: secureUrl, loading: phoneLinkLoading } = usePhoneLink(code);
+  const needsSecurePage = window.location.protocol === 'http:';
+  const openingSecurePage = needsSecurePage && (phoneLinkLoading || Boolean(secureUrl));
+  useEffect(() => {
+    // React Router can arrive here without an HTTP request, so server redirects
+    // alone cannot recover a phone that joined from an old LAN homepage.
+    if (needsSecurePage && !phoneLinkLoading && secureUrl) window.location.replace(secureUrl);
+  }, [needsSecurePage, phoneLinkLoading, secureUrl]);
   const { snapshot: seat, reconnecting, ended, storageWarning, accept, leave: leaveSession } = useReconnect('player', code);
   const lobby = seat;
   const [error, setError] = useState(null);
   const [joining, setJoining] = useState(false);
-  const canJoin = isRoomCode(code) && cleanName(name) !== '' && !joining;
+  const canJoin = !openingSecurePage && isRoomCode(code) && cleanName(name) !== '' && !joining;
 
   async function join(event) {
     event.preventDefault();
@@ -73,6 +82,8 @@ export default function JoinStub() {
   async function leave() {
     if (!(await leaveSession())) setError('disconnected');
   }
+
+  if (openingSecurePage) return <main className="stub"><p className="eyebrow">Wee Sports · phone controller</p><h1>Opening your controller…</h1><p className="stub__muted" role="status">Connecting your phone for motion play.</p></main>;
 
   if (seat) {
     const players = lobby?.players ?? [];
@@ -123,9 +134,7 @@ export default function JoinStub() {
             </p>
           </div>
         </div>
-        {playing ? (
-          !isController(seat.sport, seat.slot) ? <p className="stub__status" role="status">You’re watching this match. Follow the action on the TV.</p> : null
-        ) : phase === PHASES.LOBBY ? (
+        {playing ? null : phase === PHASES.LOBBY ? (
           <p className="stub__status">Waiting for a player to join the P1 controller seat…</p>
         ) : (
           <PhoneReady lobby={lobby} slot={seat.slot} disabled={reconnecting || (lobby.paused && phase !== PHASES.TUTORIAL)} />
@@ -139,7 +148,7 @@ export default function JoinStub() {
               paused={phase !== PHASES.TUTORIAL || reconnecting || seat.paused}
               showPause={reconnecting} />
           </>
-        ) : !playing ? <p>The first two phones control the blue and red players. You have a spectator seat.</p> : null}
+        ) : null}
         {playing ? (
           <details className="phone-session__options">
             <summary>Lobby options <span>{seat.code}</span></summary>

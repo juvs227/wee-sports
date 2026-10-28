@@ -1,12 +1,10 @@
-import { MAX_PLAYERS } from '@wee/shared/protocol.js';
-
 /**
  * Every failure the server or network can produce, said the way a person
  * holding a phone needs to hear it. Pattern from gameboystudio's REJECTION_TEXT.
  */
 const TEXT = {
   'no-room': 'No game is using that code. Check the TV and try again.',
-  'room-full': `That lobby already has ${MAX_PLAYERS} players.`,
+  'room-full': 'That lobby is full. Ask the host to open another game.',
   'bad-name': 'Type a name first.',
   'bad-version': 'This page is out of date. Reload and try again.',
   'bad-sport': "That sport isn't open yet.",

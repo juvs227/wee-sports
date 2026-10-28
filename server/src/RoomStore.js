@@ -34,6 +34,7 @@ import {
   isSwing,
   isRoll,
   isController,
+  playerCapacity,
 } from '@wee/shared/protocol.js';
 
 const MAX_CODE_ATTEMPTS = 50;
@@ -321,13 +322,13 @@ export class RoomStore {
     const leavingSlot = room.players.get(id)?.slot;
     room.players.delete(id);
     this.#updatePause(room);
-    // A controller leaving ends this match; spectators can leave freely.
+    // A player leaving ends this match; temporary drops keep their reserved seat.
     if (room.phase === PHASES.TUTORIAL && isController(room.sport, leavingSlot)) {
       room.phase = PHASES.LOBBY;
       this.#clearReady(room);
     }
     // Any seat change before play cancels the countdown and asks the remaining
-    // players to confirm again. P1 must exist, even if spectator seats remain.
+    // players to confirm again. Tennis needs P1 before a new match can start.
     if (BEFORE_PLAY.has(room.phase) || room.phase === PHASES.COUNTDOWN) {
       const countdownCancelled = room.phase === PHASES.COUNTDOWN;
       room.deadline = null;
@@ -441,7 +442,7 @@ export class RoomStore {
   /** Lowest open seat, so a seat freed by a leaver is the next one filled. */
   #freeSlot(room) {
     const taken = new Set([...room.players.values()].map((player) => player.slot));
-    for (let slot = 0; slot < this.#maxPlayers; slot += 1) {
+    for (let slot = 0; slot < Math.min(this.#maxPlayers, playerCapacity(room.sport)); slot += 1) {
       if (!taken.has(slot)) return slot;
     }
     return null;

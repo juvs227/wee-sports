@@ -1,0 +1,97 @@
+/* The host stage owns the viewport; the embedded game keeps its existing state. */
+.game-session {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: min(860px, 94dvh);
+  min-height: 320px;
+  max-width: 1600px;
+  margin: 3dvh auto;
+  overflow: hidden;
+  background: #081a20;
+  color: #f3f7ef;
+}
+.game-session--immersive,
+.game-countdown--immersive {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  width: 100%;
+  height: 100dvh;
+  min-height: 0;
+  max-width: none;
+  margin: 0;
+}
+.game-session__bar {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 58px;
+  padding: 6px max(16px, env(safe-area-inset-right)) 6px max(16px, env(safe-area-inset-left));
+  border-bottom: 1px solid #ffffff1f;
+  background: #0a2028;
+}
+.game-session__identity,
+.game-session__actions { display: flex; align-items: center; gap: 16px; }
+.game-session__brand { color: #d5f487; font-size: 1.6rem; font-weight: 900; letter-spacing: -0.08em; }
+.game-session__identity h1 { margin: 0; font-size: 1rem; font-weight: 800; }
+.game-session__room { font-size: 0.75rem; letter-spacing: 0.14em; color: #a3bcc1; }
+.game-session__mode { color: #a3bcc1; font-size: 0.8rem; }
+.game-session button,
+.game-session summary,
+.game-countdown__view {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  border: 1px solid #ffffff35;
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: #ffffff0b;
+  color: #f3f7ef;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.game-session button:hover,
+.game-session summary:hover,
+.game-countdown__view:hover { background: #ffffff1c; }
+.game-session button:focus-visible,
+.game-session summary:focus-visible,
+.game-countdown__view:focus-visible { outline: 3px solid #d5f487; outline-offset: 3px; }
+.game-session summary { list-style: none; }
+.game-session summary::-webkit-details-marker { display: none; }
+.game-session__menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 16px;
+  width: min(330px, calc(100vw - 32px));
+  border: 1px solid #ffffff35;
+  border-radius: 12px;
+  padding: 20px;
+  background: #102c34;
+  box-shadow: 0 12px 40px #0005;
+}
+.game-session__menu-panel p { margin: 0 0 16px; font-size: 0.9rem; line-height: 1.6; }
+.game-session__error { margin: 0; padding: 8px 16px; background: #542820; color: #fff1e9; }
+.game-session .prototype-frame { flex: 1 1 auto; min-height: 0; margin: 0; }
+.game-session .prototype-frame iframe { width: 100%; height: 100%; min-height: 0; border: 0; border-radius: 0; box-shadow: none; }
+.game-session .prototype-frame > p { position: absolute; z-index: 2; top: 16px; left: 16px; margin: 0; padding: 12px 16px; background: #102c34; border-radius: 10px; }
+.game-session .prototype-frame__pause { border-radius: 0; color: #14332d; }
+.game-countdown { position: relative; background: var(--bg, #f3f7ef); }
+.game-countdown--immersive { position: fixed; }
+.game-countdown__view { position: absolute; z-index: 1; top: 16px; right: 16px; background: #102c34; }
+@media (max-width: 760px) {
+  .game-session__bar { gap: 6px; min-height: 54px; padding-inline: 10px; }
+  .game-session__identity, .game-session__actions { gap: 8px; }
+  .game-session__room, .game-session__mode { display: none; }
+}
+@media (max-height: 450px) {
+  .game-session__bar { min-height: 44px; padding-block: 2px; }
+  .game-session button, .game-session summary { min-height: 36px; padding-block: 6px; }
+}
