@@ -58,7 +58,7 @@ try {
     tunnel.once('exit', () => { clearTimeout(timer); reject(new Error('The secure connection stopped before it was ready.')); });
   });
   if (stopping) process.exit(0);
-  const server = launch(process.execPath, ['server/main.js', '--preview'], { env: { ...process.env, PORT: String(port), PUBLIC_GAME_URL: origin } });
+  const server = launch(process.execPath, ['server/main.js', '--preview'], { env: { ...phoneBuildEnvironment(process.env), PORT: String(port), PUBLIC_GAME_URL: origin } });
   server.once('error', error => { console.error(error.message); stop(1); });
   server.once('exit', code => { if (!stopping) stop(code || 1); });
   tunnel.once('exit', () => { if (!stopping) { console.error('The secure phone connection ended. Restart this session to get a fresh QR code.'); stop(1); } });

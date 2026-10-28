@@ -4,7 +4,7 @@ import { phoneBuildEnvironment, waitForGameServer } from '../scripts/phone-sessi
 test('a phone build overrides stale origins without mutating the caller environment', () => {
   const original = { PATH: '/bin', VITE_SERVER_URL: 'http://localhost:3001', VITE_PUBLIC_URL: 'https://old.example', NGROK_HOST: 'old.example' };
   const env = phoneBuildEnvironment(original);
-  expect(env).toEqual({ PATH: '/bin', VITE_SERVER_URL: '', VITE_PUBLIC_URL: '', NGROK_HOST: '' });
+  expect(env).toEqual({ PATH: '/bin', VITE_SERVER_URL: '', VITE_PUBLIC_URL: '', NGROK_HOST: '', WEE_BUILD_DIR: '.phone-build' });
   expect(original.VITE_SERVER_URL).toBe('http://localhost:3001');
 });
 

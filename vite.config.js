@@ -22,6 +22,7 @@ export default defineConfig(({ mode }) => {
       allowedHosts: true, // Allows your ngrok tunnel and other external hosts during development
     },
     build: {
+      outDir: env.WEE_BUILD_DIR || 'dist',
       rollupOptions: {
         input: {
           home: fileURLToPath(new URL('./index.html', import.meta.url)),

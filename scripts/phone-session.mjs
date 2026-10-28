@@ -2,7 +2,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 /** The phone bundle must talk to the combined server on its own public origin. */
 export function phoneBuildEnvironment(env) {
-  return { ...env, VITE_SERVER_URL: '', VITE_PUBLIC_URL: '', NGROK_HOST: '' };
+  return { ...env, VITE_SERVER_URL: '', VITE_PUBLIC_URL: '', NGROK_HOST: '', WEE_BUILD_DIR: '.phone-build' };
 }
 
 /** Print a ready URL only after the actual combined server answers health checks. */
