@@ -82,7 +82,7 @@ function renderPlayState() {
   element('toggle-settings').disabled = Boolean(calibration) || permissionPending;
   element('toggle-settings').textContent = settingsOpen ? 'Back to controller' : 'Controller settings';
   element('toggle-settings').ariaExpanded = String(settingsOpen);
-  element('stop').hidden = !recording || settingsOpen;
+  element('stop').hidden = !setup || buttonMode || !gameActive || !settingsOpen;
   let state = 'ready';
   let status = buttonMode ? 'Buttons ready' : 'Calibrated';
   let title = 'You’re ready';
@@ -107,7 +107,7 @@ function renderPlayState() {
   } else if (gameActive) {
     state = 'playing'; status = buttonMode ? 'Button controls' : 'Motion on';
     title = buttonMode ? 'Tap to swing' : 'Swing to play';
-    help = 'Watch the TV. Swing as the ball approaches your side.';
+    help = 'Watch the TV.';
     if (buttonMode) help = 'Watch the TV and choose your shot.';
     if (bowling) {
       if (pendingRoll || (currentPlayer === player && !canRoll)) {
@@ -132,20 +132,22 @@ function renderPlayState() {
   element('record').hidden = !setup || buttonMode || !gameActive || lobbyPaused || !connected || recording || settingsOpen || state === 'finished';
   element('record').disabled = !gameActive || lobbyPaused || !connected || !enabled || !bias || recording || Boolean(calibration) || !recentReadings();
   element('bowling-controls').hidden = !bowling || state !== 'playing' || !turnReady();
-  element('arm-roll').hidden = buttonMode;
+  element('shot-adjustments').hidden = Boolean(bowlingDetector);
+  element('arm-roll').hidden = buttonMode || Boolean(bowlingDetector);
+  element('cancel-roll').hidden = !bowlingDetector;
   element('bowling-buttons').hidden = !buttonMode;
   element('manual-controls').hidden = bowling || !buttonMode || state !== 'playing';
   element('latest').hidden = !gameActive || state === 'paused' || performance.now() >= feedbackUntil;
 }
 function controls() {
-  element('setup-next').textContent = gameActive
+  element('setup-next').textContent = settingsOpen ? 'Return to the controller when you’re ready.' : gameActive
     ? 'Motion starts automatically once setup is complete and everyone is connected.'
-    : 'Once set up, press Ready above. Calibrated motion starts automatically when the TV starts the match.';
+    : 'After calibration, press Ready above.';
   element('enable').disabled = permissionPending || (enabled && recentReadings());
   element('enable').textContent = enabled ? 'Retry motion access' : 'Enable motion';
   element('calibrate').disabled = permissionPending || Boolean(calibration);
   element('calibrate').textContent = calibration ? 'Calibrating…' : bias ? 'Calibrate again' : 'Calibrate';
-  element('stop').disabled = !recording;
+  element('stop').disabled = !gameActive || !motionWanted;
   for (const id of ['hand', 'response', 'stroke-mode', 'suppress-returns']) element(id).disabled = recording || Boolean(calibration);
   for (const id of ['forehand', 'backhand']) element(id).disabled = !gameActive || lobbyPaused || !connected;
   element('roll').disabled = !turnReady() || (!buttonMode && !bias);
@@ -204,6 +206,12 @@ element('arm-roll').onclick = () => {
   playNotice = '';
   element('motion').textContent = 'Armed. Screen up, swing gently forward underhand and slow down. Keep holding the phone.';
   controls();
+  element('cancel-roll').focus?.();
+};
+element('cancel-roll').onclick = () => {
+  cancelArmedRoll();
+  controls();
+  element('arm-roll').focus?.();
 };
 for (const id of ['aim', 'spin', 'power']) {
   element(id).oninput = () => {
@@ -391,7 +399,7 @@ setInterval(() => {
         settingsOpen = false;
         element('motion').textContent = gameActive ? 'Calibrated. Motion starts when the match is ready.' : 'Calibrated. Press Ready above; motion will start with the match.';
       } else element('motion').textContent = result.reason === 'no-readings' || result.reason === 'stale'
-        ? 'Calibration could not get live gyroscope readings. Check the sensor message below, then retry or use button controls.'
+        ? 'Calibration could not get live gyroscope readings. Open Controller help, then retry or use button controls.'
         : 'The phone kept moving. Place it on a stable table and tap Calibrate again.';
       controls();
     } else element('motion').textContent = result.state === 'settling' ? 'Put the phone down. Waiting for it to settle…'

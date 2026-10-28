@@ -12,15 +12,11 @@
   <p id="connection" class="play-muted" role="status">Connecting…</p>
   </header>
   <section class="play-card" id="setup-panel">
-    <div class="play-card-heading"><h2>1. Get comfortable</h2><span class="play-pill" id="setup-status" role="status">Set up your controller</span></div>
+    <div class="play-card-heading"><h2>Phone setup</h2><span class="visually-hidden" id="setup-status" role="status">Set up your controller</span></div>
     <label class="hand-label">Playing hand <select id="hand"><option>Right</option><option>Left</option></select></label>
-    <h2>2. Calibrate your phone</h2>
-    <p class="play-muted">Tap Calibrate, allow sensor access, then put your phone on a table. Your swings will control the game.</p>
-    <p id="motion" role="status">Calibrate to play with your phone’s motion sensors.</p>
-    <p id="sensor-status" class="sensor-status" role="status">Checking motion support…</p>
+    <p id="motion" role="status">Tap Calibrate, allow motion access, then put your phone on a table.</p>
     <progress id="calibration-progress" max="1" value="0" aria-label="Calibration progress" hidden></progress>
-    <div class="buttons"><button id="calibrate" class="primary" disabled>Calibrate</button><button id="enable">Enable motion</button></div>
-    <details><summary>Button fallback · no sensors</summary><button id="use-buttons" class="subtle">Use button controls</button></details>
+    <div class="buttons"><button id="calibrate" class="primary" disabled>Calibrate</button></div>
     <p class="play-muted" id="setup-next">Once set up, press Ready above and wait for Play on the TV.</p>
   </section>
   <section class="play-card play-state" id="play-panel" hidden aria-labelledby="play-title">
@@ -32,27 +28,30 @@
     <p id="play-notice" role="status" hidden></p>
     <button id="record" class="primary" disabled hidden>Resume motion</button>
     <section id="bowling-controls" hidden aria-label="Bowling controls">
+      <div id="shot-adjustments">
       <label class="range-label" for="aim">Aim <output id="aim-value" for="aim">Center</output></label>
       <input id="aim" type="range" min="-1" max="1" step="0.05" value="0">
+      <details class="shot-options"><summary>Adjust curve</summary>
       <label class="range-label" for="spin">Curve <output id="spin-value" for="spin">Straight</output></label>
       <input id="spin" type="range" min="-1" max="1" step="0.05" value="0">
+      </details>
+      </div>
       <button id="arm-roll" class="primary" disabled>Arm motion roll</button>
+      <button id="cancel-roll" class="settings-toggle" hidden>Cancel roll</button>
       <details id="bowling-buttons"><summary>Button fallback</summary>
       <label class="range-label" for="power">Button power <output id="power-value" for="power">70%</output></label>
       <input id="power" type="range" min="0" max="1" step="0.05" value="0.7">
       <button id="roll" disabled>Roll ball</button></details>
-      <small id="bowling-hint">Keep holding your phone as you swing.</small>
     </section>
     <section id="manual-controls" hidden aria-label="Tennis button controls">
       <div class="buttons"><button id="forehand" class="primary">Forehand</button><button id="backhand">Backhand</button></div>
     </section>
-    <small class="play-state__footer">Keep this screen open · hold your phone securely</small>
   </section>
   <div class="controller-toolbar">
     <button id="toggle-settings" class="settings-toggle" aria-expanded="false" aria-controls="controller-options setup-panel" hidden>Controller settings</button>
-    <button id="stop" class="settings-toggle" hidden>Pause motion</button>
   </div>
   <div id="controller-options">
+  <button id="stop" class="subtle" hidden>Keep motion paused</button>
   <details class="play-card" id="tennis-settings"><summary>Motion settings</summary>
     <label>Stroke detection <select id="stroke-mode"><option value="auto">Auto forehand / backhand</option><option value="Forehand">Simple forehand motion</option><option value="Backhand">Simple backhand motion</option></select></label>
     <p class="play-muted">If your grip is not recognized, choose a simple stroke. Any deliberate swing then plays that shot.</p>
@@ -61,9 +60,13 @@
     <small>Filters your follow-through so one physical swing sends one shot.</small>
     <small id="timing">Fast confirmation waits briefly for your swing direction to settle.</small>
   </details>
-  <details class="play-card"><summary>Motion not working?</summary>
+  <details class="play-card"><summary>Controller help</summary>
+    <p id="sensor-status" class="sensor-status" role="status">Checking motion support…</p>
+    <button id="enable">Enable motion</button>
     <p class="play-muted" id="motion-help">Open this link directly in Safari or Chrome on your phone and allow Motion &amp; Orientation access. Keep the screen on. If readings stay at zero events, check the browser’s site permissions. Button controls work without motion permission.</p>
     <p class="play-muted">A local address beginning with http:// can open the lobby but cannot provide phone motion. Use the host’s secure HTTPS link.</p>
+    <p class="play-muted">For tennis, hold the phone upright and swing as the ball approaches your side. Grip securely and leave room to swing.</p>
+    <button id="use-buttons" class="subtle">Use button controls</button>
     <p id="connection-help" class="play-muted">Open the game in the same room.</p>
     <p id="delivery"></p>
     <small id="detector-state">Detector idle</small>

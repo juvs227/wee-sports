@@ -148,6 +148,14 @@ test('bowling presents the other player, own turn, armed roll, delivery and pers
   expect(elements.get('bowling-buttons').hidden).toBe(true);
   elements.get('arm-roll').onclick();
   expect(elements.get('play-title').textContent).toBe('Swing forward');
+  expect(elements.get('shot-adjustments').hidden).toBe(true);
+  expect(elements.get('cancel-roll').hidden).toBe(false);
+  elements.get('cancel-roll').onclick();
+  for (let i = 0; i < 40; i++) tick(20, { alpha: 0, beta: i < 20 ? 400 * Math.sin(Math.PI * i / 20) : 0, gamma: 0 });
+  expect(messages.filter(message => message.type === 'wee:player-roll')).toHaveLength(0);
+  expect(elements.get('shot-adjustments').hidden).toBe(false);
+  expect(elements.get('play-title').textContent).toBe('Your turn');
+  elements.get('arm-roll').onclick();
   elements.get('toggle-settings').onclick();
   elements.get('toggle-settings').onclick();
   expect(elements.get('play-title').textContent).toBe('Your turn');

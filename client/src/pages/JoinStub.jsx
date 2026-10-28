@@ -78,7 +78,6 @@ export default function JoinStub() {
     const players = lobby?.players ?? [];
     const phase = lobby?.phase ?? PHASES.LOBBY;
     const playing = phase === PHASES.TUTORIAL;
-    const setup = players.find(player => player.slot === seat.slot)?.setup;
     const lobbyOptions = (
       <>
         <h2>In this lobby</h2>
@@ -135,7 +134,6 @@ export default function JoinStub() {
         {reconnecting || lobby.reconnecting?.length ? <ReconnectNotice lobby={lobby} reconnecting={reconnecting} /> : null}
         {isController(seat.sport, seat.slot) ? (
           <>
-            {!playing && !setup ? <p>Calibrate your phone below, then press Ready.</p> : null}
             <PrototypeFrame code={seat.code} controller player={seat.slot + 1} sport={seat.sport} gameId={seat.gameId} gameState={seat.gameState}
               playing={phase === PHASES.TUTORIAL}
               paused={phase !== PHASES.TUTORIAL || reconnecting || seat.paused}
