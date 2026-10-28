@@ -2,6 +2,7 @@ export interface BallForecast {
     position: { x: number; y: number; z: number };
     velocity: { x: number; y: number; z: number };
     gravity: number;
+    bounceCount?: number;
 }
 
 export interface Intercept { x: number; y: number; time: number }
@@ -11,6 +12,7 @@ export interface Intercept { x: number; y: number; time: number }
 export function predictBaselineIntercept(ball: BallForecast, targetZ: number, maxTime = 4): Intercept | null {
     let { x, y, z } = ball.position;
     let { x: vx, y: vy, z: vz } = ball.velocity;
+    let bounceCount = ball.bounceCount ?? 0;
     if (![x, y, z, vx, vy, vz, ball.gravity, targetZ, maxTime].every(Number.isFinite) ||
         maxTime <= 0 || ball.gravity < 0 || Math.abs(vz) < 1e-5 || (targetZ - z) * vz < 0) return null;
     if (Math.abs(targetZ - z) < 1e-5) return { x, y, time: 0 };
@@ -23,6 +25,7 @@ export function predictBaselineIntercept(ball: BallForecast, targetZ: number, ma
         y += vy * frameScale;
         z += vz * frameScale;
         if (y <= 0.1) {
+            if (++bounceCount >= 2) return null;
             y = 0.1;
             if (Math.abs(vy) < 0.04) { vy = 0; vx *= 0.9; vz *= 0.9; }
             else { vy = -vy * 0.55; vx *= 0.65; vz *= 0.65; }

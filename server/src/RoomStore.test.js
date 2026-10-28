@@ -33,7 +33,7 @@ test('createRoom opens a tennis lobby with a valid, empty code', () => {
 test('createRoom rejects an old client and a sport that is not open', () => {
   const store = new RoomStore();
   assert.deepEqual(store.createRoom('tv', { v: 0, sport: 'tennis' }), { ok: false, error: ERRORS.BAD_VERSION });
-  assert.deepEqual(store.createRoom('tv', { v, sport: 'bowling' }), { ok: false, error: ERRORS.BAD_SPORT });
+  assert.deepEqual(store.createRoom('tv', { v, sport: 'golf' }), { ok: false, error: ERRORS.BAD_SPORT });
   assert.equal(store.roomCount, 0);
 });
 

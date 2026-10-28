@@ -10,3 +10,9 @@ for (const name of ['player', 'racket']) {
   }
   console.log(`Verified dist/assets/${name}.glb (${bytes.length} bytes)`);
 }
+
+for (const page of ['index', 'game', 'controller', 'bowling']) {
+  const html = readFileSync(new URL(`../dist/${page}.html`, import.meta.url), 'utf8');
+  if (!html.includes('type="module"')) throw new Error(`Missing built entry point: ${page}`);
+}
+console.log('Verified all four built pages');

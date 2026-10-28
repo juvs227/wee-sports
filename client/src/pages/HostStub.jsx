@@ -6,7 +6,7 @@
 
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { EVENTS, MAX_PLAYERS, PHASES } from '@wee/shared/protocol.js';
+import { EVENTS, MAX_PLAYERS, PHASES, isController } from '@wee/shared/protocol.js';
 import { QrCode } from '../components/QrCode.jsx';
 import { TvCountdown } from '../components/TvCountdown.jsx';
 import { TvReady } from '../components/TvReady.jsx';
@@ -85,7 +85,7 @@ export default function HostStub() {
     <main className="stub host-lobby">
       <p className="eyebrow">TV lobby</p>
       <h1>{sportName(lobby.sport)} lobby</h1>
-      <p className="stub__muted">Bring a friend: the first two phones control P1 and P2. One phone plays against the bot. Two extra seats are available for spectators.</p>
+      <p className="stub__muted">{lobby.sport === 'bowling' ? 'One to four players. Take turns rolling through ten frames, with your phone as the controller.' : 'Bring a friend: the first two phones control P1 and P2. One phone plays against the bot. Two extra seats are available for spectators.'}</p>
       {storageWarning ? <p className="alert">Browser storage is unavailable. Keep this tab open to preserve your session.</p> : null}
       <p className="stub__muted">Scan with your phone camera, or open the link and type the code.</p>
 
@@ -106,6 +106,8 @@ export default function HostStub() {
         </p>
       )}
 
+      {!url.startsWith('https:') ? <p className="stub__warn">This Wi-Fi link supports button controls. Phone motion and calibration need HTTPS. Open the app through your HTTPS tunnel, then scan its QR code.</p> : null}
+
       {/* The ready check happens right here in the lobby, in place of the seat list. */}
       {lobby.phase === PHASES.LOBBY ? (
         <>
@@ -122,7 +124,7 @@ export default function HostStub() {
                 >
                   P{slot + 1}
                 </span>
-                {player ? player.name : slot < 2 ? 'Join to play' : 'Join to watch'}
+                {player ? player.name : isController(lobby.sport, slot) ? 'Join to play' : 'Join to watch'}
               </li>
             ))}
           </ul>

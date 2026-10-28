@@ -138,6 +138,13 @@ export function updateBallMotion(
     if (ball.position.y <= BALL_RADIUS) {
         ball.position.y = BALL_RADIUS; // Snap to ground level
         handleGroundBounce(ball);
+        // A tennis point ends on the first out bounce or the second bounce.
+        // Waiting for the ball to roll to a stop allowed several illegal returns
+        // and made an ordinary miss look like a frozen game.
+        if (!userData.firstBounceInBounds || userData.bounceCount >= 2) {
+            resetBallForServe(ball, COURT_BOUNDS, onPointScored);
+            return;
+        }
         // If bounce velocity is low, treat it as sliding/rolling on the floor
         if (Math.abs(userData.velocity.y) < 0.04) {
             userData.velocity.y = 0;
@@ -183,7 +190,10 @@ export function handleGroundBounce(
     const zPos = ball.position.z;
 
     // Check if the bounce is inside the valid court area
-    const isInside = Math.abs(xPos) <= courtBounds.width && Math.abs(zPos) <= courtBounds.length;
+    const opponentSide = !userData.lastHitBy ||
+        (userData.lastHitBy === 'player1' ? zPos < 0 : zPos > 0);
+    const isInside = opponentSide && Math.abs(xPos) <= courtBounds.width &&
+        Math.abs(zPos) <= courtBounds.length;
 
     if (userData.bounceCount === 1) {
         // Record whether the first bounce landed inside

@@ -29,7 +29,11 @@ export const READY_AT_PLAYERS = 1;
 export const COUNTDOWN_SECONDS = 5;
 
 /** Sports a lobby can be opened for. Art and copy live in client/src/lib/sports.js. */
-export const OPEN_SPORTS = ['tennis'];
+export const OPEN_SPORTS = ['tennis', 'bowling'];
+
+export function isController(sport, slot) {
+  return Number.isInteger(slot) && slot >= 0 && slot < (sport === 'bowling' ? MAX_PLAYERS : 2);
+}
 
 /**
  * Where a lobby is:
@@ -82,6 +86,9 @@ export const EVENTS = {
   /** Joined P1/P2 -> server -> its TV. The server assigns the player number. */
   PLAYER_SWING: 'player:swing',
   GAME_SWING: 'game:swing',
+  PLAYER_ROLL: 'player:roll',
+  GAME_ROLL: 'game:roll',
+  HOST_GAME_STATE: 'host:game-state',
   /** Server -> everyone in a lobby: the snapshot. */
   LOBBY_UPDATE: 'lobby:update',
   /** Server -> phones: the TV closed the lobby or its reconnect window expired. */
@@ -92,6 +99,13 @@ export function isSwing(event) {
   return event?.type === 'swing' && typeof event.id === 'string' && event.id.length > 0 &&
     event.id.length <= 100 && ['Forehand', 'Backhand'].includes(event.label) &&
     ['Left', 'Right'].includes(event.hand);
+}
+
+export function isRoll(event) {
+  return event?.type === 'roll' && typeof event.id === 'string' && event.id.length > 0 &&
+    event.id.length <= 100 && Number.isFinite(event.power) && event.power >= 0 && event.power <= 1 &&
+    Number.isFinite(event.spin) && Math.abs(event.spin) <= 1 &&
+    Number.isFinite(event.aim) && Math.abs(event.aim) <= 1;
 }
 
 export const ERRORS = {

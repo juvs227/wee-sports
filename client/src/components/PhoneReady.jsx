@@ -5,7 +5,7 @@
  */
 
 import { useState } from 'react';
-import { EVENTS, PHASES } from '@wee/shared/protocol.js';
+import { EVENTS, PHASES, isController } from '@wee/shared/protocol.js';
 import { errorText } from '../lib/errors.js';
 import { request } from '../lib/socket.js';
 import { useCountdown } from '../lib/useCountdown.js';
@@ -39,7 +39,7 @@ export function PhoneReady({ lobby, slot, disabled = false }) {
   if (lobby.phase === PHASES.TUTORIAL) {
     return (
       <section className="phone-ready" aria-live="polite">
-        <h2 className="phone-ready__title">Tennis is ready</h2>
+        <h2 className="phone-ready__title">{lobby.sport === 'bowling' ? 'Bowling' : 'Tennis'} is ready</h2>
         <p className="stub__status">Watch the TV</p>
       </section>
     );
@@ -47,7 +47,7 @@ export function PhoneReady({ lobby, slot, disabled = false }) {
 
   // The snapshot is the source of truth, so the button always matches the TV.
   const ready = lobby.players.find((player) => player.slot === slot)?.ready ?? false;
-  const needsSetup = slot < 2 && !lobby.players.find(player => player.slot === slot)?.setup;
+  const needsSetup = isController(lobby.sport, slot) && !lobby.players.find(player => player.slot === slot)?.setup;
   const readyCount = lobby.players.filter((player) => player.ready).length;
 
   async function toggle() {

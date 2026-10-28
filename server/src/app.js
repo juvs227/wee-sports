@@ -61,6 +61,26 @@ export function createGameServer({ store = new RoomStore(), origins = [], tickMs
       reply(ack, result);
       if (result.ok) broadcast(result.code);
     });
+    socket.on(EVENTS.HOST_GAME_STATE, (payload, ack) => {
+      const result = store.setGameState(socket.id, payload);
+      reply(ack, result);
+      if (result.ok) broadcast(result.code);
+    });
+    socket.on(EVENTS.PLAYER_ROLL, (event, ack) => {
+      const result = store.rollTarget(socket.id, event);
+      if (!result.ok) return reply(ack, result);
+      const host = io.sockets.sockets.get(result.hostSocketId);
+      if (!host) {
+        store.finishRollDelivery(result.code, result.event.id);
+        return reply(ack, { ok: false, error: 'disconnected' });
+      }
+      // Acknowledge the actual game result; never buffer or retry a release.
+      host.timeout(2500).emit(EVENTS.GAME_ROLL, result.event, (error, received) => {
+        store.finishRollDelivery(result.code, result.event.id);
+        reply(ack, !error && received?.ok ? { ok: true, id: result.event.id, receivers: 1 }
+          : { ok: false, error: received?.error || 'game-loading' });
+      });
+    });
     socket.on(EVENTS.PLAYER_SWING, (event, ack) => {
       const result = store.swingTarget(socket.id, event);
       if (!result.ok) return reply(ack, result);

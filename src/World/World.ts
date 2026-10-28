@@ -194,6 +194,7 @@ export class World {
     }
 
     public stop(): void {
+        this.gameLogic.clearPendingInputs();
         if (this.animationFrameId !== null) {
             cancelAnimationFrame(this.animationFrameId);
             this.animationFrameId = null;

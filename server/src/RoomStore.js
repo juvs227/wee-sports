@@ -32,6 +32,8 @@ import {
   cleanName,
   isRoomCode,
   isSwing,
+  isRoll,
+  isController,
 } from '@wee/shared/protocol.js';
 
 const MAX_CODE_ATTEMPTS = 50;
@@ -101,7 +103,8 @@ export class RoomStore {
     }
     if (!code) return { ok: false, error: ERRORS.SERVER_BUSY };
 
-    this.#rooms.set(code, { code, sport, hostId, phase: PHASES.LOBBY, players: new Map(), deadline: null, pausedAt: null });
+    this.#rooms.set(code, { code, sport, hostId, phase: PHASES.LOBBY, players: new Map(), deadline: null, pausedAt: null,
+      gameId: null, gameState: null, pendingRoll: null, seenRolls: new Set() });
     const memberId = this.#addSession(hostId, code, 'host');
     this.#rooms.get(code).hostId = memberId;
     return this.#sessionView(memberId);
@@ -150,7 +153,7 @@ export class RoomStore {
     if (typeof ready !== 'boolean') return { ok: false, error: ERRORS.BAD_READY };
 
     const player = room.players.get(playerId);
-    if (ready && player.slot < 2 && !player.setup) return { ok: false, error: 'setup-required' };
+    if (ready && isController(room.sport, player.slot) && !player.setup) return { ok: false, error: 'setup-required' };
     player.ready = ready;
     const advanced = [...room.players.values()].every((player) => player.ready);
     if (advanced) {
@@ -170,6 +173,7 @@ export class RoomStore {
     if (room.pausedAt !== null) return { ok: false, error: ERRORS.PAUSED };
 
     room.phase = PHASES.COUNTDOWN;
+    room.gameId = randomUUID();
     room.deadline = this.#now() + COUNTDOWN_SECONDS * 1000;
     return { ok: true, code: room.code, msLeft: COUNTDOWN_SECONDS * 1000 };
   }
@@ -178,7 +182,7 @@ export class RoomStore {
     const member = this.#members.get(this.#sockets.get(socketId));
     const room = member && this.#rooms.get(member.code);
     const player = room?.players.get(member.id);
-    if (!player || player.slot > 1) return { ok: false, error: 'not-controller' };
+    if (!player || !isController(room.sport, player.slot)) return { ok: false, error: 'not-controller' };
     if (![null, 'motion', 'buttons'].includes(payload?.setup)) return { ok: false, error: 'bad-setup' };
     if (player.setup !== payload.setup) {
       player.setup = payload.setup;
@@ -198,7 +202,7 @@ export class RoomStore {
     const member = this.#members.get(this.#sockets.get(socketId));
     const room = member && this.#rooms.get(member.code);
     const player = room?.players.get(member.id);
-    if (member?.role !== 'player' || !player || player.slot > 1) {
+    if (member?.role !== 'player' || !player || room.sport !== 'tennis' || player.slot > 1) {
       return { ok: false, error: 'not-controller' };
     }
     if (!isSwing(event)) return { ok: false, error: 'bad-swing' };
@@ -206,6 +210,48 @@ export class RoomStore {
     if (room.phase !== PHASES.TUTORIAL) return { ok: false, error: 'not-playing' };
     return { ok: true, hostSocketId: this.#members.get(room.hostId)?.socketId,
       event: { type: 'swing', id: event.id, label: event.label, hand: event.hand, player: player.slot + 1 } };
+  }
+
+  /** The TV owns bowling simulation; only its authenticated session can publish turns. */
+  setGameState(socketId, payload) {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    const room = member && this.#rooms.get(member.code);
+    if (member?.role !== 'host') return { ok: false, error: ERRORS.NOT_HOST };
+    if (room.sport !== 'bowling' || room.phase !== PHASES.TUTORIAL || payload?.gameId !== room.gameId) {
+      return { ok: false, error: 'not-playing' };
+    }
+    const { phase, currentPlayer, frame } = payload ?? {};
+    const validPlayer = phase === 'complete' ? currentPlayer === null :
+      [...room.players.values()].some(player => player.slot + 1 === currentPlayer);
+    if (!['ready', 'rolling', 'complete'].includes(phase) || !validPlayer ||
+        !Number.isInteger(frame) || frame < 1 || frame > 10) return { ok: false, error: 'bad-game-state' };
+    room.gameState = { phase, currentPlayer, frame };
+    return { ok: true, code: room.code };
+  }
+
+  rollTarget(socketId, event) {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    const room = member && this.#rooms.get(member.code);
+    const player = room?.players.get(member.id);
+    if (!player || room.sport !== 'bowling') return { ok: false, error: 'not-controller' };
+    if (!isRoll(event)) return { ok: false, error: 'bad-roll' };
+    if (room.pausedAt !== null) return { ok: false, error: ERRORS.PAUSED };
+    if (room.phase !== PHASES.TUTORIAL) return { ok: false, error: 'not-playing' };
+    if (room.seenRolls.has(event.id)) return { ok: false, error: 'duplicate-roll' };
+    if (!room.gameState) return { ok: false, error: 'game-loading' };
+    if (room.gameState.phase !== 'ready' || room.pendingRoll) return { ok: false, error: 'not-ready-to-roll' };
+    if (room.gameState.currentPlayer !== player.slot + 1) return { ok: false, error: 'not-your-turn' };
+    room.pendingRoll = event.id;
+    room.seenRolls.add(event.id);
+    if (room.seenRolls.size > 256) room.seenRolls.delete(room.seenRolls.values().next().value);
+    return { ok: true, code: room.code, hostSocketId: this.#members.get(room.hostId)?.socketId,
+      event: { type: 'roll', id: event.id, power: event.power, spin: event.spin, aim: event.aim,
+        player: player.slot + 1, gameId: room.gameId } };
+  }
+
+  finishRollDelivery(code, id) {
+    const room = this.#rooms.get(code);
+    if (room?.pendingRoll === id) room.pendingRoll = null;
   }
 
   /**
@@ -236,7 +282,8 @@ export class RoomStore {
         msLeft: Math.max(0, this.#graceMs - (this.#now() - member.disconnectedAt)) }));
     return { code: room.code, sport: room.sport, phase: room.phase, players, countdown,
       paused: room.pausedAt !== null, reconnecting,
-      setupPending: players.filter(player => player.slot < 2 && !player.setup).map(player => player.name) };
+      setupPending: players.filter(player => isController(room.sport, player.slot) && !player.setup).map(player => player.name),
+      gameId: room.gameId, gameState: room.gameState };
   }
 
   /** The code this id is hosting, or null. */
@@ -275,7 +322,7 @@ export class RoomStore {
     room.players.delete(id);
     this.#updatePause(room);
     // A controller leaving ends this match; spectators can leave freely.
-    if (room.phase === PHASES.TUTORIAL && leavingSlot < 2) {
+    if (room.phase === PHASES.TUTORIAL && isController(room.sport, leavingSlot)) {
       room.phase = PHASES.LOBBY;
       this.#clearReady(room);
     }
@@ -318,7 +365,7 @@ export class RoomStore {
 
   #updatePause(room) {
     const missing = [...this.#members.values()].some(member => member.code === room.code && member.disconnectedAt !== null) ||
-      (room.phase === PHASES.TUTORIAL && [...room.players.values()].some(player => player.slot < 2 && !player.setup));
+      (room.phase === PHASES.TUTORIAL && [...room.players.values()].some(player => isController(room.sport, player.slot) && !player.setup));
     if (missing && room.pausedAt === null) room.pausedAt = this.#now();
     else if (!missing && room.pausedAt !== null) {
       if (room.deadline !== null) room.deadline += this.#now() - room.pausedAt;
@@ -386,8 +433,9 @@ export class RoomStore {
 
   #resetReady(room) {
     this.#clearReady(room);
+    room.gameId = null; room.gameState = null; room.pendingRoll = null; room.seenRolls.clear();
     room.phase = room.players.size >= READY_AT_PLAYERS &&
-      [...room.players.values()].some(player => player.slot === 0) ? PHASES.READY : PHASES.LOBBY;
+      (room.sport === 'bowling' || [...room.players.values()].some(player => player.slot === 0)) ? PHASES.READY : PHASES.LOBBY;
   }
 
   /** Lowest open seat, so a seat freed by a leaver is the next one filled. */

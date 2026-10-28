@@ -7,7 +7,7 @@
  * solid), a check mark, and a word.
  */
 
-import { PHASES } from '@wee/shared/protocol.js';
+import { PHASES, isController } from '@wee/shared/protocol.js';
 import { CheckIcon } from './icons.jsx';
 
 /**
@@ -47,7 +47,7 @@ export function TvReady({ lobby }) {
             <span className="ready-card__name">{name}</span>
             <span className="ready-card__status">
               {ready ? <CheckIcon className="ready-card__icon" /> : null}
-              {ready ? 'Ready' : slot > 1 ? 'Watching' : setup === 'motion' ? 'Calibrated · press Ready' : setup === 'buttons' ? 'Buttons · press Ready' : 'Set up your controller'}
+              {ready ? 'Ready' : !isController(lobby.sport, slot) ? 'Watching' : setup === 'motion' ? 'Calibrated · press Ready' : setup === 'buttons' ? 'Buttons · press Ready' : 'Set up your controller'}
             </span>
           </li>
         ))}

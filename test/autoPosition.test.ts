@@ -18,7 +18,7 @@ test('forecast matches actual ball integration through a bounce', () => {
     const ball = createBall(0, 0.4, 0);
     const velocity = new THREE.Vector3(0.08, -0.04, 0.2);
     hitBall(ball, velocity, 'player2');
-    const predicted = predictBaselineIntercept({ position: ball.position, velocity, gravity: 0.006 }, 3);
+    const predicted = predictBaselineIntercept({ position: ball.position, velocity, gravity: 0.006 }, 1.5);
     if (predicted === null) throw new Error('Expected an intercept after the bounce');
     let previous = ball.position.clone();
     let actualX = 0;
@@ -26,8 +26,8 @@ test('forecast matches actual ball integration through a bounce', () => {
     for (let i = 0; i < 480; i++) {
         previous.copy(ball.position);
         updateBallMotion(ball, 1 / 120);
-        if (ball.position.z >= 3) {
-            const fraction = (3 - previous.z) / (ball.position.z - previous.z);
+        if (ball.position.z >= 1.5) {
+            const fraction = (1.5 - previous.z) / (ball.position.z - previous.z);
             actualX = previous.x + fraction * (ball.position.x - previous.x);
             actualY = previous.y + fraction * (ball.position.y - previous.y);
             break;
@@ -44,6 +44,13 @@ test('stationary, invalid, and beyond-horizon balls produce no intercept', () =>
     assert.equal(predictBaselineIntercept(ball, 10), null);
     assert.equal(predictBaselineIntercept({ ...ball, velocity: { x: 0, y: 0, z: NaN } }, 10), null);
     assert.equal(predictBaselineIntercept({ ...ball, velocity: { x: 0, y: 0, z: 0.001 } }, 10), null);
+});
+
+test('prediction does not offer a return after the point-ending second bounce', () => {
+    const incoming = { position: { x: 0, y: .4, z: 0 },
+        velocity: { x: .08, y: -.04, z: .2 }, gravity: .006 };
+    assert.equal(predictBaselineIntercept(incoming, 3), null);
+    assert.equal(predictBaselineIntercept({ ...incoming, bounceCount: 1 }, 1.5), null);
 });
 
 test('steering slows near the target, stays bounded, and does not overshoot at normal frame rates', () => {

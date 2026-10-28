@@ -24,48 +24,62 @@ For a phone tunnel, set `NGROK_HOST` to the tunnel hostname before starting the
 server. `VITE_PUBLIC_URL` can also set the QR's public origin. Real phone motion
 requires HTTPS. Same-Wi-Fi joining still works over HTTP.
 
-1. Choose Tennis on the TV/laptop. Scan its QR code with one or two phones.
-   The first phone is P1 (blue), the second is P2 (red). A single phone plays
-   against the bot. Seats 3 and 4 are spectators and must also press Ready.
-2. On each controller, choose a playing hand, **Enable motion**, then **Calibrate**
-   with the phone still for two seconds. Alternatively choose **Use button controls**.
-   Ready is disabled until that phone finishes setup. Failed/stale calibration
-   cannot mark it ready. Use HTTPS on physical phones for motion access.
-3. Everyone presses **Ready**, then the TV presses **Play**. The same controllers
-   stay loaded through the countdown, preserving calibration and hand selection.
-   For motion play, tap **Start swings** on each phone. For buttons, use Forehand
-   and Backhand. P1's first swing serves; P2 returns when the ball reaches the racket.
-4. The server assigns each stroke to the authenticated P1/P2 seat and sends it
-   only to that lobby's TV. The bot is disabled when P2 joins. The TV shows both
-   names, points, and games won using the team's scoring system.
-5. A dropped connection pauses the same running world. Seats are held for 60 seconds.
-   Reloading a phone requires controller setup again before play resumes. After
-   reconnecting, motion users tap **Start swings** again. An explicit P1 or P2
-   Leave ends that match and returns the remaining group to the lobby. Closing
-   the lobby ends it for everyone.
+1. Choose **Tennis** or **Bowling** on the TV/laptop and scan its QR code.
+   Tennis uses P1/P2 (one phone plays a bot; P3/P4 watch). Bowling lets all four
+   phones play, taking turns through ten frames.
+2. Tap **Calibrate** directly, allow motion access, and place the phone still on
+   a table. The controller ignores the initial tap/set-down movement and waits
+   for a fresh, continuous still window. It explains denied permissions, HTTP,
+   missing gyroscope data, or movement instead of silently leaving setup blocked.
+   Alternatively choose **Use button controls**. Then everyone presses **Ready**.
+3. The TV presses **Play**. Calibrated motion starts automatically when the
+   countdown ends. In tennis, P1 swings to serve, then each player swings as the
+   ball approaches their side. If a grip does not work with the team's automatic
+   classifier, choose an explicit simple forehand/backhand mapping in controller
+   settings. Button controls use the same game path.
+4. For bowling, aim and choose curve on the phone. **Arm motion roll**, hold the
+   phone screen up, swing forward underhand, and slow down while keeping your
+   grip. A measured motion sets power; **Roll ball** uses the power slider.
+   Only the current player can roll. Watch the TV for pinfall, the scorecard,
+   final rankings, and **Play again** after the tenth frame.
+5. A dropped connection pauses the running world. Seats are held for 60 seconds.
+   Reloading a phone requires setup again before play resumes. Motion resumes
+   automatically unless you explicitly stopped it. Leaving an active controller
+   seat ends the match and returns everyone to the lobby. Closing the lobby ends
+   it for everyone.
 
-Protocol v3 adds controller setup and server-assigned player numbers. Reload old
-pages after updating. Its post-countdown phase is still named `tutorial` internally,
-but displays tennis. The homepage lobby owns membership/readiness/reconnects;
-a same-origin bridge connects the existing controller and game without another
-lobby. The standalone `/swings` prototype relay remains available.
+Phone motion requires HTTPS: a LAN HTTP link can join the lobby but cannot use
+sensors. Start your HTTPS tunnel to port 5173 and open the app at its HTTPS URL
+before scanning the QR; or configure `NGROK_HOST` / `VITE_PUBLIC_URL` before
+starting the app. Do not bypass browser certificate warnings. The controller has
+live sensor diagnostics under **Motion not working?**. Desktop browsers without
+gyroscopes correctly fail calibration; use buttons for desktop testing.
 
-This is the team's tennis prototype: automatic positioning, preset strokes,
-existing ball physics and scoring. P1 serves each point; regulation service turns,
-service boxes and a full match-end/rematch flow are not implemented. The new serve
-setup places the held ball at the existing racket strike pose; normal collision and
-trajectory code still decide the hit. No classifier thresholds or ball physics were
-retuned for the lobby integration.
+Protocol v3 adds controller setup and server-assigned player numbers. Bowling
+adds authenticated roll delivery and TV-owned turn snapshots. The server stamps
+the player's seat and match ID, rejects duplicate/out-of-turn rolls, and waits for
+an actual game acknowledgement. Reload old pages after updating. The internal
+post-countdown phase is still named `tutorial`; tutorial voting is separate work.
 
-**Recovery limit:** refreshing the TV restores the lobby but starts a fresh tennis
-world. Scores/points are still local to that page; authoritative match recovery and
-restarting an interrupted point remain future work. Direct prototype URLs keep the
-existing relay behavior and do not participate in lobby recovery.
+Tennis keeps the team's models, preset strokes, trajectory calculation and
+scoring. Assisted contact timing and stroke-aware tracking compensate for phone
+recognition delay; a hit still requires the ball to cross the animated racket.
+P1 serves each point; regulation service turns, service boxes and a full tennis
+match-end/rematch flow remain future work.
 
-Standalone prototypes remain at `/game.html` and `/controller.html?room=<room-id>`.
-`npm run build` builds all three pages and checks model assets. After building, `npm run preview`
-serves the built app locally with both relays (local preview, not a deployment setup).
-`npm start` runs the same combined app as `npm run dev`.
+Bowling reuses the lobby, calibration, controller bridge and Three.js, with a
+separate cannon-es rigid-body simulation suitable for a ball and ten pins. See
+[bowling rules, physics decisions, sources, and tests](docs/bowling.md).
+
+**Recovery limit:** refreshing the TV restores the lobby but starts a fresh local
+game. Scores and physics remain local to that page; server-persisted match
+recovery is future work. Keep the TV tab open during play. Network drops without
+page reload preserve both games, including a rolling bowling ball.
+
+Standalone pages remain at `/game.html`, `/bowling.html` (local button practice),
+and `/controller.html?room=<room-id>` (tennis relay). `npm run build` builds all
+four pages and checks model assets. `npm run preview` serves the built app locally
+with both relays. `npm start` runs the same combined app as `npm run dev`.
 
 ## Checks
 
@@ -92,79 +106,83 @@ Before submitting a Pull Request, please run the following commands locally:
   npm run check
   ```
   
-## Racket contact prototype
+## Racket contact and phone timing
 
-Phone strokes and keyboard J/K now start a swing for player 1 even when the ball
-is out of reach. A hit is awarded only when the ball crosses the virtual racket's
-hitbox during the striking part of the animation. The same collision path handles
-releasing a prepared serve and returning an already-moving rally ball.
+Phone strokes and keyboard J/K start an animation, but a hit still requires the
+ball to cross the animated racket's hitbox during its strike window. The same
+collision path releases a prepared serve and returns a moving rally ball. In a
+homepage lobby, paired phones control P1 and P2; standalone prototype links keep
+their original Player 1 relay. P1 swings to serve each point.
 
-To test in the Mac game:
+With **Automatic movement** enabled, phone/button inputs can be buffered for up
+to 450 ms while an incoming ball approaches. The game samples the shipped racket
+animations and chooses a remaining wind-up that can meet the ball. This adjusts
+the animation timing; it does not move the ball or guarantee a hit. Swing as the
+ball approaches your side. A stroke received after the ball has passed can miss.
+Pausing, disconnecting, starting a new point, or feeding a practice ball clears
+prepared inputs so they cannot replay later.
+
+To test on the TV/laptop:
 
 1. Wait for the player and racket models to load.
-2. Press **B** to feed a practice ball toward the forehand contact pose, or
-   **Shift+B** for the backhand pose. Each feed explicitly resets the ball without
-   awarding a point and aims at the player's current position.
-3. Press **K** (forehand) or **J** (backhand) as the incoming ball reaches the
-   racket. Phone strokes can trigger the same action; default target is player 1.
-4. Watch the Hit/Miss feedback. A valid hit sends the ball back across the court.
-5. Press **H** to toggle the debug boxes. Amber = inactive, blue = contact window,
-   green = this swing made contact. A miss still plays the full animation.
+2. Press **B** for a forehand practice feed or **Shift+B** for a backhand feed.
+   A feed resets the ball without awarding a point and targets the current player
+   position. **N** / **Shift+N** feed Player 2 instead.
+3. Use a phone/button stroke as the ball approaches your side, or **K** (forehand)
+   / **J** (backhand) for Player 1's ordinary keyboard swing animation.
+4. Watch Hit/Miss feedback. **H** toggles contact boxes: amber = inactive,
+   blue = strike window, green = contact made.
 
-The contact window is initially 20–70% of the animation, configurable via
-`CONTACT_START` and `CONTACT_END` in `racketContact.ts`. The hitbox approximates
-the outer 55% of the racket along its longest local axis, at the end farthest
-from the grip origin, with 0.08 world-unit padding plus the ball radius during
-collision checks. This is a heuristic for the supplied asset; use the overlay
-to check and tune alignment. It is a generous box, not exact string-bed geometry.
+The forehand contact window is 20–70% of the animation; the backhand window is
+10–80%. The hitbox approximates the outer 55% of the racket along its longest
+local axis, at the end farthest from the grip, with 0.16 world-unit padding plus
+the ball radius. This is a gameplay box around the supplied asset, not exact
+string-bed geometry. Hand selection chooses the animation direction; it does
+not move the model's racket to its other physical hand.
 
-Physics and animation advance together in steps of at most 1/120 second. Collision
-sweeps between ball and racket poses to reduce tunneling; rotating poses are
-approximated between substeps, not solved as exact continuous mesh collision.
-A swing can hit only once, and a player cannot repeatedly hit their own outgoing
-shot. Outgoing direction/lift are deterministic prototype values. Ball spin,
-realistic impact physics, net collision, and full tennis rules are not added here.
+Physics and animation advance at a fixed 120 Hz, independent of rendering frame
+rate. Collision sweeps between ball and racket poses to reduce tunneling. A swing
+can hit only once, and a player cannot hit their own outgoing shot again. Returns
+use the team's court-targeted trajectory calculation and stroke-side variation;
+physical spin, exact racket impact response, and net collisions remain outside
+this tennis prototype.
 
-Keyboard swing input is edge-triggered and uses the same command path as the
-phone, avoiding duplicate handling of J/K. Hand selection chooses the corresponding
-animation direction, but does not swap the existing model's racket to another
-physical hand. In homepage lobbies, the second paired phone controls Player 2;
-standalone prototype links retain their original Player 1 relay.
+A first bounce outside the opponent's court, or the second bounce after a valid
+landing, ends the point immediately and awards it once. The ball then waits for
+P1's next serve. It no longer stays live through repeated bounces while rolling
+to a stop. Regulation service turns, service boxes, and a complete tennis match
+format remain future work.
 
-Validation: `npm run compile`, `npm run test:physics` (Node 24), and `npm run build`.
-Physics tests cover fast ball crossings, moving/scaled rackets, contact timing,
-rally-hit state reset, and construction against the actual racket GLB. Visual
-hitbox alignment, animation timing, and real-phone timing still need playtesting.
+Validation uses the actual shipped player/racket GLBs: both players, both hands,
+both strokes, several shot directions, input arrival from 0–300 ms before the
+strike plane, consecutive returns, late misses, pause cancellation, scoring, and
+30/60/144 FPS. Run `npm run test:physics`, `npm run compile`, and `npm run build`.
+Real-phone recognition/network delay and rendered feel still need device playtesting.
 
 ## Assisted ball tracking
 
-**Auto position · both players** is enabled by default in the Mac game panel.
-Disable it for WASD movement; keyboard and phone swings work in either mode.
-Automatic movement never triggers a swing. Player 2 follows the ball but still
-needs a swing command through the game API to return it.
+**Automatic movement** is enabled by default under **Court controls**. Disable it
+for WASD movement. Tracking itself does not trigger a human's swing; the solo
+Player 2 bot has its own stroke logic.
 
-Incoming balls are forecast up to four seconds ahead using the existing gravity
-and ground-bounce response. The assistant predicts an intercept at the player's
-current depth, subtracts a racket strike offset, and moves sideways toward that
-position within the court bounds. Each racket offset is sampled once from the
-loaded model at 45% of its left/right swing animation. The nearest candidate
-position is chosen; timing and the matching stroke are still up to the player.
-Neither racket displacement nor reach is guaranteed for every ball height.
+Incoming balls are forecast up to four seconds ahead using the current gravity
+and bounce response, stopping at the point-ending second bounce. Tracking predicts
+an intercept at the player's current depth, subtracts the racket strike offset,
+and moves sideways toward that position within court bounds. Before a stroke is
+chosen it uses the nearest left/right candidate; a prepared or active stroke
+uses that stroke's offset instead. Offsets are sampled from the loaded models.
 
-Players slow as they approach the target and hold position during swings. When
-the ball travels away, they recover toward center; while waiting for a serve they
-hold position. There is no automatic forward/backward chase in this first version.
-If you move manually and re-enable assistance, your new depth is retained.
-Blue/red ground rings show the desired player positions; H hides them along with
-the racket hitboxes. Movement remains speed-limited, so wide or late balls can
-still be unreachable. Forecasts do not predict future opponent hits or net impacts.
+Players slow near their target and continue ordinary speed-limited foot movement
+during an assisted swing until contact. They recover toward center when the ball
+travels away and hold position while waiting for a serve. There is no automatic
+forward/backward chase; manually changing depth is retained when assistance is
+re-enabled. Wide, late, or vertically unreachable balls can still miss.
 
-Test with B / Shift+B practice feeds, then use your phone or J/K for timing. To
-check lateral tracking, disable assistance, move sideways with A/D, launch a feed,
-and move away from it before re-enabling assistance. Observe the target ring and
-try to return the incoming ball. Visual tuning is still needed for the model and
-normal phone timing. `npm run test:physics` now includes intercept, bounce, and
-steering tests in addition to racket contact tests.
+**H** shows the blue/red target rings with the racket boxes. To inspect tracking,
+disable assistance, move sideways with A/D, feed a practice ball, move away, then
+re-enable assistance. Forecasts do not predict future opponent hits or net impacts.
+The physics tests cover intercepts, bounce limits, steering, actual-model stroke
+alignment, human rallies, and bot returns.
 
 ## Player 2 bot
 

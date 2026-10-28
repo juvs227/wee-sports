@@ -13,6 +13,7 @@ import {
   PHASES,
   PROTOCOL_VERSION,
   cleanName,
+  isController,
   isRoomCode,
   normalizeCode,
 } from '@wee/shared/protocol.js';
@@ -98,21 +99,22 @@ export default function JoinStub() {
           </div>
         </div>
         {phase === PHASES.TUTORIAL ? (
-          <p role="status">{seat.slot > 1 ? 'You’re watching this match. Follow the action on the TV.'
+          <p role="status">{!isController(seat.sport, seat.slot) ? 'You’re watching this match. Follow the action on the TV.'
             : !setup ? 'Finish controller setup below to resume the match.'
             : lobby.paused ? 'Match paused. Waiting for everyone to reconnect and finish setup.'
+            : seat.sport === 'bowling' ? 'Watch the TV for your turn. Aim below, then roll with motion or the Roll button.'
             : setup === 'buttons' ? 'Use Forehand and Backhand below, and watch the TV.'
-            : 'Tap Start swings below, then watch the TV.'}</p>
+            : 'Motion starts automatically. Swing as the ball approaches your side; watch the TV.'}</p>
         ) : phase === PHASES.LOBBY ? (
           <p className="stub__status">Waiting for a player to join the P1 controller seat…</p>
         ) : (
           <PhoneReady lobby={lobby} slot={seat.slot} disabled={reconnecting || (lobby.paused && phase !== PHASES.TUTORIAL)} />
         )}
 
-        {seat.slot < 2 ? (
+        {isController(seat.sport, seat.slot) ? (
           <>
             {phase !== PHASES.TUTORIAL ? <p>Choose motion or button controls, then press Ready. Your setup stays with you when the match starts.</p> : null}
-            <PrototypeFrame code={seat.code} controller player={seat.slot + 1}
+            <PrototypeFrame code={seat.code} controller player={seat.slot + 1} sport={seat.sport} gameId={seat.gameId} gameState={seat.gameState}
               playing={phase === PHASES.TUTORIAL}
               paused={phase !== PHASES.TUTORIAL || reconnecting || seat.paused}
               showPause={reconnecting} />

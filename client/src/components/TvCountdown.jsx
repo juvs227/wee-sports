@@ -3,6 +3,7 @@
  * it; this only shows the time left.
  */
 
+import { sportName } from '../lib/sports.js';
 import { useCountdown } from '../lib/useCountdown.js';
 
 export function TvCountdown({ lobby }) {
@@ -15,7 +16,7 @@ export function TvCountdown({ lobby }) {
       <p key={secondsLeft} className="countdown__number" aria-hidden="true">
         {secondsLeft > 0 ? secondsLeft : 'Go!'}
       </p>
-      <p className="countdown__label">Tennis is about to start</p>
+      <p className="countdown__label">{sportName(lobby.sport)} is about to start</p>
       {/* Announced once, rather than once a second. */}
       <p className="visually-hidden" role="status">
         Starting in {Math.ceil((lobby.countdown?.msLeft ?? 0) / 1000)} seconds.

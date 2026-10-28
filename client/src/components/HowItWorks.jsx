@@ -14,7 +14,7 @@ const STEPS = [
   {
     Icon: SwingIcon,
     title: 'Swing',
-    text: 'Hold your phone like a racket. It reads your swing and the TV plays it back.',
+    text: 'Calibrate your phone for motion or choose button controls. Watch the TV and play together.',
   },
 ];
 

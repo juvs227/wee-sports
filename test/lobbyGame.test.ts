@@ -99,3 +99,143 @@ test('team scoring handles deuce, advantage reversal, and a completed game', () 
     score.awardPoint('player2', 'player1'); score.awardPoint('player2', 'player1');
     expect(score.getScore()).toEqual({ player1: 0, player2: 0, roundsPlayer1: 0, roundsPlayer2: 1 });
 });
+
+// Choose when a human input arrives, not which stroke will succeed. The public
+// swing method must handle both stroke choices with the shipped animations.
+function swingNearArrival(state: Awaited<ReturnType<typeof court>>, number: 1 | 2,
+    hand: 'Left' | 'Right', label: 'Forehand' | 'Backhand', lead: number, fps = 120) {
+    const { game, ball } = state;
+    const player = number === 1 ? state.player1 : state.player2;
+    const animation = (label === 'Backhand') !== (hand === 'Left') ? 'SwingLeft' : 'SwingRight';
+    let delay = Infinity;
+    for (let step = 0; step < fps * 5; step++) {
+        const data = ball.userData as BallUserData;
+        if (data.lastHitBy === (number === 1 ? 'player2' : 'player1') && !data.waitingForRacketHit) {
+            const intercept = predictBaselineIntercept({
+                position: ball.position, velocity: data.velocity, gravity: data.gravity,
+                bounceCount: data.bounceCount,
+            }, player.group.position.z + player.strikeOffsets[animation].z);
+            if (intercept && intercept.time <= Math.max(0, lead) + 1 / fps && delay === Infinity) {
+                delay = Math.max(0, -lead);
+            }
+        }
+        if (delay !== Infinity) delay -= 1 / fps;
+        if (delay <= 0) {
+            game.swing({ label, hand, player: number });
+            return;
+        }
+        game.update(1 / fps);
+    }
+    throw new Error(`The live ball did not approach Player ${number}`);
+}
+
+for (const number of [1, 2] as const) for (const hand of ['Right', 'Left'] as const) {
+    for (const label of ['Forehand', 'Backhand'] as const) {
+        test(`P${number} ${hand} ${label} tolerates inputs arriving 0–300 ms early with real model contact`, async () => {
+            const random = vi.spyOn(Math, 'random');
+            for (const seed of [.2, .5, .8]) for (const lead of [0, .08, .16, .3]) {
+                random.mockReturnValue(seed);
+                const state = await court();
+                state.game.swing({ label: 'Forehand', hand: 'Right', player: 1 });
+                if (number === 1) {
+                    swingNearArrival(state, 2, 'Right', 'Forehand', .3);
+                    for (let step = 0; step < 70; step++) state.game.update(1 / 120);
+                    expect((state.ball.userData as BallUserData).lastHitBy).toBe('player2');
+                }
+                state.feedback.length = 0;
+                swingNearArrival(state, number, hand, label, lead);
+                for (let step = 0; step < 90; step++) state.game.update(1 / 120);
+                expect(state.feedback.some(message => message.startsWith(`Player ${number}: Hit!`)),
+                    `random=${seed}, lead=${lead}: ${state.feedback.join('; ')}`).toBe(true);
+            }
+        });
+    }
+}
+
+test('a late stroke misses, and pausing discards a prepared stroke', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(.5);
+    const late = await court();
+    late.game.swing({ label: 'Forehand', hand: 'Right', player: 1 });
+    swingNearArrival(late, 2, 'Right', 'Forehand', -.08);
+    for (let step = 0; step < 120; step++) late.game.update(1 / 120);
+    expect(late.feedback.some(message => message.startsWith('Player 2: Hit!'))).toBe(false);
+    const paused = await court();
+    paused.game.swing({ label: 'Forehand', hand: 'Right', player: 1 });
+    swingNearArrival(paused, 2, 'Right', 'Forehand', .3);
+    expect(paused.feedback.some(message => message.includes('meeting the incoming ball'))).toBe(true);
+    paused.game.clearPendingInputs();
+    for (let step = 0; step < 240; step++) paused.game.update(1 / 120);
+    expect(paused.feedback.some(message => message.startsWith('Player 2: Hit!'))).toBe(false);
+    expect(paused.game.getScore().player1).toBe(15);
+});
+
+test('consecutive human returns keep normal contact, then a missed ball scores only once', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(.5);
+    const state = await court();
+    state.game.swing({ label: 'Forehand', hand: 'Right', player: 1 });
+    for (let shot = 0; shot < 8; shot++) {
+        const number = shot % 2 === 0 ? 2 : 1;
+        state.feedback.length = 0;
+        swingNearArrival(state, number, shot % 3 === 0 ? 'Left' : 'Right',
+            shot % 2 === 0 ? 'Forehand' : 'Backhand', .3);
+        for (let step = 0; step < 65; step++) state.game.update(1 / 120);
+        expect(state.feedback.some(message => message.startsWith(`Player ${number}: Hit!`)),
+            `shot=${shot}: ${state.feedback.join('; ')}`).toBe(true);
+        expect(state.game.getScore().player1).toBe(0);
+        expect(state.game.getScore().player2).toBe(0);
+    }
+    for (let step = 0; step < 600; step++) state.game.update(1 / 120);
+    expect(state.game.getScore().player1).toBe(15);
+    expect(state.game.getScore().player2).toBe(0);
+});
+
+test('cached racket poses match the live authored backhand animation', async () => {
+    const { player1 } = await court();
+    player1.stopAnimation();
+    player1.swingBackhand = true;
+    player1.playAnimation('SwingRight');
+    const action = player1.actions['SwingRight'];
+    action.stopFading();
+    action.setEffectiveWeight(1);
+    for (let sample = 1; sample <= 15; sample++) {
+        player1.update(action.getClip().duration * .05);
+        const actual = player1.group.matrixWorld.clone().invert().multiply(player1.hitbox!.pose());
+        const cached = player1.swingPoses['SwingRight:true'][sample];
+        const difference = Math.max(...actual.elements.map((value, index) => Math.abs(value - cached.elements[index])));
+        expect(difference, `pose ${sample}`).toBeLessThan(.00001);
+    }
+});
+
+test('the solo bot returns a phone serve using the shipped racket and normal contact', async () => {
+    const random = vi.spyOn(Math, 'random');
+    for (const seed of [.2, .5, .8]) {
+        random.mockReturnValue(seed);
+        const state = await court();
+        state.game.botEnabled = true;
+        state.game.swing({ label: 'Forehand', hand: 'Right', player: 1 });
+        for (let step = 0; step < 480; step++) state.game.update(1 / 120);
+        expect(state.feedback.some(message => message.startsWith('Player 2: Hit!')),
+            `seed=${seed}: ${state.feedback.join('; ')}`).toBe(true);
+    }
+});
+
+test('a prepared keyboard serve can still be released by a phone swing', async () => {
+    const state = await court();
+    state.game.playerServe();
+    expect((state.ball.userData as BallUserData).waitingForRacketHit).toBe(true);
+    state.game.swing({ label: 'Forehand', hand: 'Right', player: 1 });
+    for (let step = 0; step < 80; step++) state.game.update(1 / 120);
+    expect(state.feedback.some(message => message.startsWith('Player 1: Hit!'))).toBe(true);
+});
+
+test('phone timing assistance remains playable at 30, 60, and 144 FPS', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(.5);
+    for (const fps of [30, 60, 144]) for (const label of ['Forehand', 'Backhand'] as const) {
+        const state = await court();
+        state.game.swing({ label: 'Forehand', hand: 'Right', player: 1 });
+        swingNearArrival(state, 2, 'Right', label, .16, fps);
+        for (let frame = 0; frame < fps; frame++) state.game.update(1 / fps);
+        expect(state.feedback.some(message => message.startsWith('Player 2: Hit!')),
+            `${fps} FPS ${label}: ${state.feedback.join('; ')}`).toBe(true);
+    }
+});

@@ -1,0 +1,26 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
+* { box-sizing: border-box; }
+body { margin: 0; background: #f4f6ec; color: #263a32; font-family: Nunito, system-ui, sans-serif; }
+#bowling-app { max-width: 1500px; margin: auto; padding: 18px 24px 12px; }
+.bowling-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 12px; }
+.play-eyebrow { margin: 0 0 3px; font-size: 11px; text-transform: uppercase; letter-spacing: .16em; font-weight: 900; color: #60744b; }
+h1 { margin: 0; font-size: clamp(21px, 2.5vw, 32px); line-height: 1.2; }
+.bowling-pill { border: 1px solid #bfcba8; background: #e8efd9; border-radius: 30px; padding: 8px 15px; font-weight: 800; white-space: nowrap; font-size: 13px; }
+#lane { height: clamp(270px, 48vh, 510px); overflow: hidden; border-radius: 20px; box-shadow: 0 6px 25px #263a3215; }
+.bowling-status { display: flex; justify-content: space-between; gap: 14px; align-items: center; margin: 12px 2px; }
+.bowling-status p { margin: 0; font-size: 14px; }
+#roll-status { font-weight: 900; } #pin-status { color: #60744b; }
+.bowling-scores { overflow-x: auto; border-radius: 14px; border: 1px solid #d7dfc8; background: #fffef9; }
+table { border-collapse: collapse; width: 100%; text-align: center; min-width: 690px; font-size: 13px; }
+th { padding: 7px 9px; } thead { background: #e8eedc; color: #55684a; }
+tbody th { min-width: 135px; text-align: left; border-left: 5px solid var(--player-color); }
+td { border-left: 1px solid #e3e7d9; padding: 4px 6px; min-width: 41px; height: 48px; }
+td strong { display: block; height: 18px; } tbody tr + tr { border-top: 1px solid #d7dfc8; }
+tr[data-active='true'] { background: #f1f8df; } .bowling-marks { display: block; min-height: 17px; font-size: 12px; letter-spacing: .05em; }
+.bowling-total { font-size: 20px; font-weight: 900; } .bowling-help { color: #60744b; font-size: 12px; text-align: center; margin: 10px 0 0; }
+button { border: 0; border-radius: 22px; background: #315a28; color: white; padding: 11px 22px; font: 800 14px Nunito, system-ui, sans-serif; cursor: pointer; }
+button:disabled { opacity: .45; cursor: default; } button:focus-visible, input:focus-visible { outline: 3px solid #8567c4; outline-offset: 3px; }
+.bowling-controls { display: flex; flex-wrap: wrap; gap: 24px; align-items: center; } .bowling-controls label { display: flex; gap: 10px; align-items: center; font-weight: 800; } input { accent-color: #6a4ba0; }
+.bowling-results { margin: 14px 0; padding: 18px; border-radius: 18px; background: #e8efd9; text-align: center; }
+.bowling-results h2 { margin: 0 0 8px; } .bowling-results ol { padding: 0; list-style: none; } .bowling-results li { margin: 4px; font-weight: 800; }
+@media (max-width: 600px) { #bowling-app { padding: 12px; } .bowling-heading { align-items: flex-start; } .bowling-pill { padding: 7px 9px; font-size: 10px; } #lane { height: 330px; } .bowling-status { align-items: flex-start; } #pin-status { white-space: nowrap; font-size: 11px; } }

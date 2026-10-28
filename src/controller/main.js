@@ -1,177 +1,337 @@
 import { createSwingStream } from './swingStream.js';
+import { createSimpleSwingStream, createBowlingMotionDetector } from './motionGestures.js';
 import { connectSwings } from '../network/swingConnection.js';
-import { calibrationBias } from './calibration.js';
+import { createInputId } from '../network/inputId.js';
+import { createCalibrationSession } from './calibration.js';
 import '../../client/src/styles/tokens.css';
 import '../play.css';
+import './controller.css';
 
-if (window.parent !== window) {
-  new ResizeObserver(entries => window.parent.postMessage({ type: 'wee:controller-height',
-    height: Math.ceil(entries[0].target.getBoundingClientRect().height) + 2 }, location.origin))
+const element = id => document.getElementById(id);
+const embedded = window.parent !== window;
+const query = new URLSearchParams(location.search);
+const bowling = query.get('sport') === 'bowling';
+const room = query.get('room');
+if (!/^[a-zA-Z0-9-]{6,40}$/.test(room ?? '')) throw new Error('Open the controller link from the game to join its room.');
+const player = Math.max(1, Math.min(4, Number(query.get('player')) || 1));
+const post = data => { if (embedded) window.parent.postMessage(data, location.origin); };
+const lobbyCode = query.get('lobby');
+element('room').textContent = lobbyCode && embedded ? `Lobby ${lobbyCode} · P${player}` : `Room: ${room}`;
+if (embedded) element('connection-help').textContent = 'Your controller is connected through the homepage lobby.';
+if (bowling) {
+  element('controller-title').textContent = 'Your bowling ball';
+  element('play-title').textContent = '3. Bowl your frame';
+  element('play-help').textContent = 'Choose your line and curve, then roll when it is your turn. Motion sets power from your underhand swing; the button uses the power slider.';
+  element('latest').textContent = 'Let’s bowl';
+  element('bowling-controls').hidden = false;
+  element('manual-controls').hidden = true;
+  element('tennis-settings').hidden = true;
+}
+if (embedded && window.ResizeObserver) {
+  new ResizeObserver(entries => post({ type: 'wee:controller-height',
+    height: Math.ceil(entries[0].target.getBoundingClientRect().height) + 2 }))
     .observe(document.querySelector('main'));
 }
 
-const element = id => document.getElementById(id);
-let lobbyPaused = window.parent !== window;
-const room = new URLSearchParams(location.search).get('room');
-if (!/^[a-zA-Z0-9-]{6,40}$/.test(room ?? '')) throw new Error('Open the controller link from the game to join its room.');
-const lobbyCode = new URLSearchParams(location.search).get('lobby');
-const player = new URLSearchParams(location.search).get('player') === '2' ? 2 : 1;
-element('room').textContent = lobbyCode && window.parent !== window ? `Lobby ${lobbyCode} · P${player} · ${player === 1 ? 'Blue' : 'Red'}` : `Room: ${room}`;
-if (lobbyCode && window.parent !== window) element('connection-help').textContent = 'These buttons control the tennis game on your TV. No second room to join.';
-const connection = connectSwings({ room, role: 'phone',
-  onStatus: text => { element('connection').textContent = text; },
-  onAck: event => { element('delivery').textContent = event.ok === false
-    ? (event.error === 'game-loading' ? 'Tennis is still loading. Try again when it appears on the TV.' : 'Game paused or disconnected. Try again after reconnecting.')
-    : event.receivers
-    ? 'Delivered to game.' : 'No game connected in this room. Open the game first.'; },
-});
-function send(label) {
-  if (lobbyPaused) { element('delivery').textContent = 'Paused — waiting for everyone to reconnect.'; return; }
-  const sent = connection.sendSwing(label, element('hand').value);
-  element('delivery').textContent = sent ? 'Sent; waiting for relay…' : 'Disconnected: swing was not sent. Try again after reconnecting.';
-}
-element('forehand').onclick = () => send('Forehand');
-element('backhand').onclick = () => send('Backhand');
-
+let connected = !embedded;
+let lobbyPaused = embedded;
+let gameActive = !embedded;
 let enabled = false;
+let permissionPending = false;
+let permissionAt = 0;
 let bias = null;
-let calibrating = false;
-let calibrationSamples = [];
+let calibration = null;
 let stream = null;
 let recording = false;
+let motionWanted = false;
 let started = 0;
-let lastReading = 0;
-let calibrationStarted = 0;
+let lastReading = null;
+let latestRate = null;
+let eventsSeen = 0;
+let validReadings = 0;
 let buttonMode = false;
 let lastSetup;
 let wasConnected = false;
-let gameActive = window.parent === window;
+let canRoll = false;
+let currentPlayer = null;
+let bowlingPhase = 'waiting';
+let bowlingDetector = null;
+let armedAt = null;
+let pendingRoll = null;
+let sensorUpdatedAt = 0;
 
+function recentReadings() { return lastReading !== null && performance.now() - lastReading < 1500; }
 function publishSetup() {
   const setup = buttonMode ? 'buttons' : bias ? 'motion' : null;
   element('setup-status').textContent = setup === 'motion' ? 'Calibrated ✓' : setup === 'buttons' ? 'Button controls selected ✓' : 'Set up your controller';
-  if (window.parent !== window && setup !== lastSetup) {
+  if (embedded && setup !== lastSetup) {
     lastSetup = setup;
-    window.parent.postMessage({ type: 'wee:controller-setup', setup }, location.origin);
+    post({ type: 'wee:controller-setup', setup });
   }
 }
-
-
+function turnReady() { return bowling && gameActive && connected && !lobbyPaused && canRoll && currentPlayer === player && !pendingRoll; }
+function cancelArmedRoll() { bowlingDetector = null; armedAt = null; }
 function controls() {
-  element('setup-next').textContent = gameActive ? 'Finishing setup resumes the match. Then start swinging or use the buttons below.' : 'Once set up, press Ready above and wait for Play on the TV.';
-  element('enable').disabled = enabled;
-  element('calibrate').disabled = !enabled || recording || calibrating;
-  element('record').disabled = lobbyPaused || !enabled || !bias || recording || calibrating;
+  element('setup-next').textContent = gameActive
+    ? 'Motion starts automatically once setup is complete and everyone is connected.'
+    : 'Once set up, press Ready above. Calibrated motion starts automatically when the TV starts the match.';
+  element('enable').disabled = permissionPending || (enabled && recentReadings());
+  element('enable').textContent = enabled ? 'Retry motion access' : 'Enable motion';
+  element('calibrate').disabled = permissionPending || Boolean(calibration);
+  element('calibrate').textContent = calibration ? 'Calibrating…' : bias ? 'Calibrate again' : 'Calibrate';
+  element('record').disabled = !gameActive || lobbyPaused || !enabled || !bias || recording || Boolean(calibration);
   element('stop').disabled = !recording;
-  element('hand').disabled = recording || calibrating;
-  element('response').disabled = recording;
-  element('suppress-returns').disabled = recording;
-  element('forehand').disabled = lobbyPaused;
-  element('backhand').disabled = lobbyPaused;
+  for (const id of ['hand', 'response', 'stroke-mode', 'suppress-returns']) element(id).disabled = recording || Boolean(calibration);
+  for (const id of ['forehand', 'backhand']) element(id).disabled = !gameActive || lobbyPaused || !connected;
+  element('roll').disabled = !turnReady() || (!buttonMode && !bias);
+  element('arm-roll').disabled = !turnReady() || !recording || Boolean(bowlingDetector);
+  element('arm-roll').textContent = bowlingDetector ? 'Armed · swing forward' : 'Arm motion roll';
+  if (bowling) element('bowling-turn').textContent = !gameActive ? 'Ready up, then start the match on the TV.'
+    : lobbyPaused || !connected ? 'Paused · waiting for everyone to reconnect.'
+    : bowlingPhase === 'complete' || bowlingPhase === 'finished' ? 'Match complete! See the TV for the final scores.'
+    : pendingRoll ? 'Ball delivered · watch the lane.'
+    : canRoll && currentPlayer === player ? 'Your turn! Choose your line and roll.'
+    : currentPlayer === player ? 'The pins are settling…'
+    : currentPlayer ? `P${currentPlayer} is bowling. Your turn will appear here.` : 'Waiting for the lane…';
   publishSetup();
 }
-window.addEventListener('message', event => {
-  if (event.source !== window.parent || event.origin !== location.origin) return;
-  if (event.data?.type === 'wee:setup-ack') {
-    if (!event.data.result?.ok) element('setup-status').textContent = 'Setup could not be saved. Reconnect or select your controls again.';
-    return;
-  }
-  if (event.data?.type !== 'wee:lobby-state' || typeof event.data.paused !== 'boolean') return;
-  if (event.data.connected && !wasConnected) lastSetup = undefined;
-  wasConnected = event.data.connected;
-  gameActive = event.data.playing === true;
-  lobbyPaused = event.data.paused;
-  if (lobbyPaused) stop('Paused. When everyone reconnects, tap Start swings to continue.');
-  controls();
+function deliveryResult(event, kind = 'swing') {
+  element('delivery').textContent = event.ok === false
+    ? event.error === 'game-loading' ? 'The game is loading. Try again when it appears on the TV.'
+      : event.error === 'not-your-turn' || event.error === 'roll-rejected' ? 'Wait until the TV and your controller show your turn.'
+      : `The ${kind} was not accepted. Wait for the game to reconnect, then try again.`
+    : event.receivers ? 'Delivered to game.' : 'No game connected. Check the TV.';
+}
+const connection = connectSwings({ room, role: 'phone',
+  onStatus: text => { element('connection').textContent = text; },
+  onAck: event => deliveryResult(event),
 });
-controls();
-element('use-buttons').onclick = () => {
-  stop(); buttonMode = true; lastSetup = undefined;
-  element('manual-controls').open = true;
-  element('motion').textContent = 'Use Forehand and Backhand below once the match starts.';
+function send(label) {
+  if (bowling || lobbyPaused || !gameActive || !connected || document.hidden) return;
+  const sent = connection.sendSwing(label, element('hand').value);
+  element('delivery').textContent = sent ? 'Sending stroke…' : 'Disconnected: the stroke was not sent.';
+}
+element('forehand').onclick = () => send('Forehand');
+element('backhand').onclick = () => send('Backhand');
+function roll(power) {
+  if (!turnReady() || document.hidden) return;
+  cancelArmedRoll();
+  const event = { type: 'roll', id: createInputId(), power,
+    aim: Number(element('aim').value), spin: Number(element('spin').value) };
+  pendingRoll = { id: event.id, at: performance.now() };
+  post({ type: 'wee:player-roll', event });
+  element('delivery').textContent = 'Sending your roll…';
+  element('latest').textContent = `${Math.round(power * 100)}% power`;
+  controls();
+}
+element('roll').onclick = () => roll(Number(element('power').value));
+element('arm-roll').onclick = () => {
+  if (!turnReady() || !recording || !recentReadings()) return;
+  bowlingDetector = createBowlingMotionDetector();
+  armedAt = performance.now();
+  element('motion').textContent = 'Armed. Screen up, swing gently forward underhand and slow down. Keep holding the phone.';
   controls();
 };
-function analyze(final = false) {
-  for (const swing of stream?.analyze(final) ?? []) {
-    element('latest').textContent = `${swing.label}${swing.early ? ' · early' : ''}`;
-    element('timing').textContent = swing.early
-      ? `Prediction ${Math.round(swing.detectionDelayMs)} ms after motion threshold; excludes network and rendering.`
+for (const id of ['aim', 'spin', 'power']) {
+  element(id).oninput = () => {
+    const value = Number(element(id).value);
+    element(`${id}-value`).textContent = id === 'power' ? `${Math.round(value * 100)}%`
+      : value === 0 ? id === 'aim' ? 'Center' : 'Straight'
+      : `${value < 0 ? 'Left' : 'Right'} ${Math.round(Math.abs(value) * 100)}%`;
+  };
+}
+function analyze() {
+  if (!recording || bowling) return;
+  for (const swing of stream?.analyze() ?? []) {
+    element('latest').textContent = swing.label === 'Unknown' ? 'Try a clearer swing' : swing.label;
+    element('timing').textContent = swing.simple ? 'Simple motion mapping · your selected shot.' : swing.early
+      ? `Recognized in ${Math.round(swing.detectionDelayMs)} ms, before network and game response.`
       : 'Stroke classified after completion.';
     if ((swing.complete || swing.early) && swing.label !== 'Unknown') send(swing.label);
   }
-  element('detector-state').textContent = !recording ? 'Detector idle' : stream?.phase === 'recovering'
-    ? 'Recovering · return to rest before the next stroke' : 'Ready for a swing';
 }
-function stop(message = 'Recording stopped. Ready for another session.') {
-  if (!recording) return;
+function stop(message = 'Motion stopped. Tap Start motion when you are ready.', user = false) {
+  if (user) motionWanted = false;
+  const wasRecording = recording;
   recording = false;
-  analyze(true);
-  element('motion').textContent = message;
+  stream = null; // Never flush an unfinished gesture when stopping or disconnecting.
+  cancelArmedRoll();
+  if (wasRecording || user) element('motion').textContent = message;
   controls();
 }
-function motion(event) {
-  const rate = event.rotationRate;
-  const axes = ['alpha', 'beta', 'gamma'];
-  if (!rate || !axes.every(axis => Number.isFinite(rate[axis]))) return;
-  lastReading = performance.now();
-  if (calibrating && calibrationSamples.length < 1000) calibrationSamples.push(Object.fromEntries(axes.map(axis => [axis, rate[axis]])));
-  if (!recording) return;
-  const timeMs = performance.now() - started;
-  stream.push({ timeMs, rotationAlpha: rate.alpha - bias.alpha,
-    rotationBeta: rate.beta - bias.beta, rotationGamma: rate.gamma - bias.gamma });
-  if (element('response').value === 'early') analyze();
-}
-element('enable').onclick = async () => {
-  try {
-    if (!window.isSecureContext || !window.DeviceMotionEvent) throw new Error('Use the HTTPS tunnel on your phone.');
-    const permission = typeof DeviceMotionEvent.requestPermission === 'function'
-      ? await DeviceMotionEvent.requestPermission() : 'granted';
-    if (permission !== 'granted') throw new Error('Motion access denied.');
-    window.addEventListener('devicemotion', motion);
-    enabled = true;
-    element('motion').textContent = 'Motion enabled. Set phone down, then calibrate.';
-    controls();
-  } catch (error) { element('motion').textContent = error.message; }
-};
-element('calibrate').onclick = () => {
-  buttonMode = false;
-  calibrating = true;
-  calibrationStarted = performance.now();
-  calibrationSamples = [];
-  bias = null;
-  element('motion').textContent = 'Keep still for two seconds…';
-  controls();
-};
-element('record').onclick = () => {
-  if (performance.now() - lastReading > 1500 || !lastReading) {
-    element('motion').textContent = 'No recent gyro readings. Keep the page visible and try again.';
-    return;
-  }
-  stream = createSwingStream(element('hand').value, {
-    early: element('response').value === 'early',
-    suppressReturns: element('suppress-returns').checked,
-  });
+function startMotion() {
+  if (recording || !motionWanted || !bias || buttonMode || calibration || !enabled || !gameActive || lobbyPaused || !connected || document.hidden || !recentReadings()) return;
+  const mode = element('stroke-mode').value;
+  stream = bowling ? null : mode === 'auto' ? createSwingStream(element('hand').value, {
+    early: element('response').value === 'early', suppressReturns: element('suppress-returns').checked,
+  }) : createSimpleSwingStream(mode);
   started = performance.now();
   recording = true;
-  element('latest').textContent = 'Listening…';
-  element('motion').textContent = 'Listening continuously. Swing now; tap Stop when finished.';
+  element('latest').textContent = bowling ? 'Ready to bowl' : 'Motion is live';
+  element('motion').textContent = bowling ? 'Motion is live. Arm a roll when it is your turn.' : 'Motion is live. Swing to play; use Stop motion to pause your detector.';
+  controls();
+}
+window.addEventListener('message', event => {
+  if (!embedded || event.source !== window.parent || event.origin !== location.origin) return;
+  const data = event.data;
+  if (data?.type === 'wee:setup-ack') {
+    if (!data.result?.ok) element('setup-status').textContent = 'Setup could not be saved. Reconnect or select your controls again.';
+    return;
+  }
+  if (data?.type === 'wee:bowling-state' && bowling) {
+    canRoll = data.canRoll === true;
+    currentPlayer = data.currentPlayer;
+    bowlingPhase = data.phase;
+    if (!canRoll || currentPlayer !== player) cancelArmedRoll();
+    controls(); return;
+  }
+  if (data?.type === 'wee:roll-ack' && bowling) {
+    if (!pendingRoll || (data.result?.id && data.result.id !== pendingRoll.id)) return;
+    pendingRoll = null;
+    deliveryResult(data.result ?? { ok: false }, 'roll');
+    controls(); return;
+  }
+  if (data?.type !== 'wee:lobby-state' || typeof data.paused !== 'boolean') return;
+  if (data.connected && !wasConnected) lastSetup = undefined;
+  connected = data.connected === true;
+  wasConnected = connected;
+  gameActive = data.playing === true;
+  lobbyPaused = data.paused;
+  if (lobbyPaused || !connected || !gameActive) stop('Paused. Motion will resume when the match is ready.');
+  startMotion();
+  controls();
+});
+
+function motion(event) {
+  eventsSeen++;
+  const rate = event.rotationRate;
+  if (!rate || !['alpha', 'beta', 'gamma'].every(axis => Number.isFinite(rate[axis]))) return;
+  const now = performance.now();
+  validReadings++;
+  lastReading = now;
+  latestRate = { alpha: rate.alpha, beta: rate.beta, gamma: rate.gamma };
+  calibration?.push(rate, now);
+  if (!recording) return;
+  const sample = { timeMs: now - started, rotationAlpha: rate.alpha - bias.alpha,
+    rotationBeta: rate.beta - bias.beta, rotationGamma: rate.gamma - bias.gamma };
+  if (bowling) {
+    const result = bowlingDetector?.push(sample);
+    if (result) roll(result.power);
+  } else { stream.push(sample); if (element('response').value === 'early') analyze(); }
+}
+async function requestMotion() {
+  if (!window.isSecureContext) throw new Error('Motion needs HTTPS. The lobby can open over HTTP, but phone sensors cannot. Ask the TV host for the secure HTTPS link, or use buttons.');
+  if (!window.DeviceMotionEvent) throw new Error('This browser does not expose phone motion. Open the link in Safari or Chrome on a phone, or use buttons.');
+  const policy = document.permissionsPolicy ?? document.featurePolicy;
+  if (policy?.allowsFeature && ['accelerometer', 'gyroscope'].some(feature => !policy.allowsFeature(feature))) {
+    throw new Error('This page is blocked from using motion sensors by its permissions policy. Open the original game link directly in your phone browser, or use buttons.');
+  }
+  permissionPending = true;
+  controls();
+  try {
+    // Called directly from the tap handler: iOS requires transient activation.
+    const permission = typeof DeviceMotionEvent.requestPermission === 'function'
+      ? await DeviceMotionEvent.requestPermission() : 'granted';
+    if (permission !== 'granted') throw new Error('Motion access was denied. Allow Motion & Orientation in this site’s browser permissions, then reload and try again. Button controls are available now.');
+    window.addEventListener('devicemotion', motion);
+    enabled = true;
+    permissionAt = performance.now();
+    element('motion').textContent = recentReadings() ? 'Sensor readings received. Tap Calibrate and put the phone down.' : 'Permission allowed. Waiting for actual sensor readings…';
+  } finally { permissionPending = false; controls(); }
+}
+function showMotionError(error) {
+  element('motion').textContent = error.name === 'NotAllowedError'
+    ? 'Motion permission needs a direct tap. Open this page in Safari or Chrome, tap Enable motion and allow access.' : error.message;
+  element('sensor-status').dataset.state = 'error';
+}
+element('enable').onclick = () => requestMotion().catch(showMotionError);
+element('calibrate').onclick = async () => {
+  stop();
+  try {
+    // One tap also requests permission; disabled Calibrate used to hide this step.
+    if (!enabled || !recentReadings()) await requestMotion();
+    buttonMode = false;
+    bias = null;
+    calibration = createCalibrationSession(performance.now());
+    element('calibration-progress').hidden = false;
+    element('calibration-progress').value = 0;
+    element('motion').textContent = 'Put the phone down. Waiting for it to settle…';
+    controls();
+  } catch (error) { showMotionError(error); }
+};
+element('record').onclick = () => { motionWanted = true; startMotion(); };
+element('stop').onclick = () => stop(undefined, true);
+element('use-buttons').onclick = () => {
+  stop(undefined, true);
+  calibration = null;
+  element('calibration-progress').hidden = true;
+  buttonMode = true;
+  lastSetup = undefined;
+  element('manual-controls').open = true;
+  element('motion').textContent = bowling ? 'Button controls ready. Set aim, curve and power, then Roll ball on your turn.' : 'Button controls ready. Use Forehand and Backhand when the match starts.';
   controls();
 };
-element('stop').onclick = () => stop();
+function sensorStatus(now) {
+  if (now - sensorUpdatedAt < 250) return;
+  sensorUpdatedAt = now;
+  const status = element('sensor-status');
+  status.dataset.state = 'ready';
+  if (!window.isSecureContext) {
+    status.textContent = 'HTTP connection: phone motion is unavailable. Use an HTTPS link or button controls.';
+    status.dataset.state = 'error';
+  } else if (!window.DeviceMotionEvent) {
+    status.textContent = 'No motion API on this device. Button controls are available.';
+    status.dataset.state = 'error';
+  } else if (recentReadings()) status.textContent = `Gyroscope connected · ${validReadings} readings received`;
+  else if (enabled && now - permissionAt > 2500) {
+    status.textContent = eventsSeen ? 'Motion events arrived without gyroscope data. Check browser permissions or use buttons.' : 'Permission allowed, but no readings arrived. Keep this page visible and check browser motion permissions.';
+    status.dataset.state = 'error';
+  } else status.textContent = enabled ? 'Waiting for sensor readings…' : 'Motion requires permission. Tap Calibrate or Enable motion.';
+  element('sensor-detail').textContent = `${window.isSecureContext ? 'Secure context' : 'Insecure context'} · ${eventsSeen} events · ${validReadings} valid gyro readings${latestRate ? ` · ${Math.round(Math.hypot(...Object.values(latestRate)))}°/s · last reading ${Math.round(now - lastReading)} ms ago` : ''}`;
+  element('detector-state').textContent = !recording ? 'Motion idle' : bowling ? bowlingDetector ? 'Armed for one underhand delivery' : 'Motion live · arm your roll on your turn'
+    : stream?.phase === 'recovering' ? 'Return to rest for the next stroke' : 'Motion live · ready for a swing';
+}
 setInterval(() => {
-  if (calibrating && performance.now() - calibrationStarted >= 2000) {
-    calibrating = false;
-    bias = calibrationBias(calibrationSamples, performance.now() - lastReading);
-    element('motion').textContent = bias ? (gameActive ? 'Calibrated. Tap Start swings to play.' : 'Calibrated. Press Ready above; when the match starts, tap Start swings.') : 'Calibration failed: keep still with the page visible and retry, or use button controls.';
-    controls();
+  const now = performance.now();
+  sensorStatus(now);
+  if (calibration) {
+    const result = calibration.read(now);
+    element('calibration-progress').value = result.progress;
+    if (result.state === 'done' || result.state === 'failed') {
+      bias = result.bias ?? null;
+      calibration = null;
+      element('calibration-progress').hidden = true;
+      if (bias) {
+        motionWanted = true;
+        element('motion').textContent = gameActive ? 'Calibrated. Motion starts when the match is ready.' : 'Calibrated. Press Ready above; motion will start with the match.';
+      } else element('motion').textContent = result.reason === 'no-readings' || result.reason === 'stale'
+        ? 'Calibration could not get live gyroscope readings. Check the sensor message below, then retry or use button controls.'
+        : 'The phone kept moving. Place it on a stable table and tap Calibrate again.';
+      controls();
+    } else element('motion').textContent = result.state === 'settling' ? 'Put the phone down. Waiting for it to settle…'
+      : result.state === 'moving' ? 'Movement detected. Keep the phone on the table; calibration will continue automatically.'
+      : result.state === 'no-readings' || result.state === 'stale' ? 'Waiting for live gyroscope readings…'
+      : `Keep still… ${Math.round(result.progress * 100)}%`;
   }
-  if (!recording) return;
-  if (performance.now() - lastReading > 1500) {
-    stop('Sensor readings stopped. Keep the page visible, then tap Start swings.');
-  } else analyze();
+  if (recording && !recentReadings()) stop('Sensor readings paused. Keep the page visible; motion resumes when readings return.');
+  if (armedAt !== null && now - armedAt > 6000) {
+    cancelArmedRoll(); element('motion').textContent = 'Roll timed out. Arm again when you are ready.'; controls();
+  }
+  if (pendingRoll && now - pendingRoll.at > 4000) {
+    pendingRoll = null; element('delivery').textContent = 'No roll confirmation yet. Watch the TV before trying again.'; controls();
+  }
+  startMotion();
+  analyze();
 }, 30);
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) return;
-  stop('Stopped because the page became hidden.');
-  if (calibrating) { calibrating = false; bias = null; controls(); }
+  if (!document.hidden) { startMotion(); return; }
+  stop('Motion paused while the page is hidden. Return to this page to continue.');
+  if (calibration) {
+    calibration = null; bias = null;
+    element('calibration-progress').hidden = true;
+    element('motion').textContent = 'Calibration stopped because the page was hidden. Keep it visible and try again.';
+    controls();
+  }
 });
+controls();
+sensorStatus(performance.now() + 250);
