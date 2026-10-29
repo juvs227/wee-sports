@@ -2,7 +2,7 @@ import { World } from './World/World';
 import { InputController } from './Controllers/inputController';
 import { connectSwings } from './network/swingConnection.js';
 import { renderScore } from './scoreRenderer';
-import { Menu } from './Menu/Menu';
+import { Menu } from './Overlay/Menu';
 
 async function main(): Promise<void> {
     const container = document.querySelector('#scene-container');
