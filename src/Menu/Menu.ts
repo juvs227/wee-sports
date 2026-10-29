@@ -16,6 +16,10 @@ export class Menu {
         this.resumeButton.addEventListener('click', () => {
             this.toggleMenu();
         });
+        this.resetButton.addEventListener('click', () => {
+            this.toggleMenu();
+            this.world.resetRound();
+        });
     }
 
     // This will trigger the menu to pause the game and show the menu overlay,
@@ -30,6 +34,4 @@ export class Menu {
         }
         this.menu.hidden = !this.menu.hidden;
     }
-
-    // TODO: Implement resetting game in either World.ts or gameLogic.ts, and call that function here when the reset button is clicked.
 }

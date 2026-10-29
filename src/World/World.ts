@@ -13,7 +13,11 @@ import {
     createBall,
 } from './components/ball';
 
-import { GameLogic } from './gameLogic';
+import { 
+    GameLogic,
+    PLAYER1_START_Z,
+    PLAYER2_START_Z,
+ } from './gameLogic';
 import type { Score } from './scoreSystem';
 import type { PlayerInput } from '../Controllers/playerInput';
 
@@ -96,7 +100,7 @@ export class World {
         this.scene.add(createNet());
         this.scene.add(createCourt());
 
-        this.player1 = createPlayer(0, 0.25, 10, 0x3b82f6, {
+        this.player1 = createPlayer(0, 0.25, PLAYER1_START_Z, 0x3b82f6, {
             minX: COURT_MIN_X,
             maxX: COURT_MAX_X,
             minZ: 1,
@@ -104,7 +108,7 @@ export class World {
         });
         this.scene.add(this.player1.group);
 
-        this.player2 = createPlayer(0, 0.25, -10, 0xef4444, {
+        this.player2 = createPlayer(0, 0.25, PLAYER2_START_Z, 0xef4444, {
             minX: COURT_MIN_X,
             maxX: COURT_MAX_X,
             minZ: -11.5,
@@ -168,6 +172,10 @@ export class World {
 
     public startRound(): void {
         this.gameLogic.startRound();
+    }
+
+    public resetRound(): void {
+        this.gameLogic.resetRound();
     }
 
     public start(): void {
