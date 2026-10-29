@@ -294,8 +294,8 @@ function startMotion() {
 window.addEventListener('message', event => {
   if (!embedded || event.source !== window.parent || event.origin !== location.origin) return;
   const data = event.data;
-  if (data?.type === 'wee:game-hit' && !bowling && data.kind === 'tennis' && data.player === player) {
-    if (gameActive && connected && !lobbyPaused && !settingsOpen) phoneFeedback.hit(performance.now());
+  if (data?.type === 'wee:game-hit' && data.kind === (bowling ? 'bowling' : 'tennis') && data.player === player) {
+    if (gameActive && connected && !lobbyPaused && !settingsOpen) phoneFeedback.hit(performance.now(), data.kind);
     return;
   }
   if (data?.type === 'wee:setup-ack') {

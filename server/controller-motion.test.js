@@ -45,6 +45,33 @@ const tick = (ms = 20, rate = { alpha: 0.1, beta: -.1, gamma: .2 }, sensors = {}
   if (rate) emit('devicemotion', { rotationRate: rate, ...sensors });
   vi.advanceTimersByTime(ms);
 };
+
+test.each(['tennis', 'bowling'])('%s contact vibrates only its active phone from the trusted game bridge', async sport => {
+  const vibrate = vi.fn(() => true);
+  vi.stubGlobal('navigator', { vibrate, userActivation: { hasBeenActive: true } });
+  location.search += `&sport=${sport}`;
+  await import('../src/controller/main.js');
+  state({ paused: false });
+  elements.get('use-buttons').onclick();
+  const hit = (data = {}, envelope = {}) => emit('message', { source: parent, origin: location.origin,
+    data: { type: 'wee:game-hit', player: 1, kind: sport, ...data }, ...envelope });
+  hit();
+  expect(vibrate).not.toHaveBeenCalled();
+  state({ playing: true, paused: false });
+  hit({ player: 2 });
+  hit({ kind: sport === 'bowling' ? 'tennis' : 'bowling' });
+  hit({}, { source: {} });
+  hit({}, { origin: 'https://another-game.test' });
+  expect(vibrate).not.toHaveBeenCalled();
+  now = 1000;
+  hit();
+  expect(vibrate).toHaveBeenCalledExactlyOnceWith(sport === 'bowling' ? [35, 35, 55] : 40);
+  state({ playing: true, paused: true });
+  vibrate.mockClear();
+  now += 1000;
+  hit();
+  expect(vibrate).not.toHaveBeenCalled();
+});
 async function calibrate() {
   await elements.get('calibrate').onclick();
   for (let i = 0; i < 110; i++) tick();
@@ -345,12 +372,12 @@ test('phone stays awake from calibrated lobby into play and haptics only accept 
   emit('message', { source: parent, origin: location.origin, data: { ...hit, player: 2 } });
   expect(vibrate).not.toHaveBeenCalled();
   emit('message', { source: parent, origin: location.origin, data: hit });
-  expect(vibrate).toHaveBeenCalledWith(28);
+  expect(vibrate).toHaveBeenCalledWith(40);
   state({ playing: true, paused: true });
   expect(locks[0].release).toHaveBeenCalledTimes(1);
   tick(100);
   emit('message', { source: parent, origin: location.origin, data: hit });
-  expect(vibrate.mock.calls.filter(([duration]) => duration > 0)).toEqual([[28]]);
+  expect(vibrate.mock.calls.filter(([duration]) => duration > 0)).toEqual([[40]]);
   state({ playing: true, paused: false });
   await Promise.resolve();
   expect(request).toHaveBeenCalledTimes(2);

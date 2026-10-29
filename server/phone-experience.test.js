@@ -113,7 +113,15 @@ test('tennis swing and delivery feedback do not vibrate; confirmed contact does 
   expect(navigator.vibrate).not.toHaveBeenCalled();
   feedback.hit(100);
   feedback.hit(110);
-  expect(navigator.vibrate).toHaveBeenCalledExactlyOnceWith(28);
+  expect(navigator.vibrate).toHaveBeenCalledExactlyOnceWith(40);
+});
+
+test('bowling pin contact gives one distinct double pulse after the release pulse', () => {
+  const { feedback, navigator } = experience();
+  feedback.delivered('roll');
+  feedback.hit(2000, 'bowling');
+  feedback.hit(2010, 'bowling');
+  expect(navigator.vibrate.mock.calls).toEqual([[18], [[35, 35, 55]]]);
 });
 
 test('accepted bowling delivery animates toward the TV and pause cancels feedback', () => {

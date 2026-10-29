@@ -116,9 +116,15 @@ export function isRoll(event) {
 }
 
 export function isTennisHit(event) {
-  return typeof event?.id === 'string' && event.id.length > 0 && event.id.length <= 100 &&
+  return isGameHit(event, 'tennis');
+}
+
+export function isGameHit(event, sport) {
+  return ['tennis', 'bowling'].includes(sport) &&
+    (event?.kind === undefined || event.kind === sport) &&
+    typeof event?.id === 'string' && event.id.length > 0 && event.id.length <= 100 &&
     typeof event.gameId === 'string' && event.gameId.length > 0 && event.gameId.length <= 100 &&
-    Number.isInteger(event.player) && event.player >= 1 && event.player <= 2;
+    Number.isInteger(event.player) && event.player >= 1 && event.player <= (sport === 'tennis' ? 2 : 4);
 }
 
 export const ERRORS = {

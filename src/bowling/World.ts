@@ -8,6 +8,7 @@ export interface BowlingRoll extends RollControls {player: number}
 /** A TV-owned scene. Phones only request deliveries; all pinfall is simulated here. */
 export class BowlingWorld {
   onState: ((state: BowlingState) => void) | null = null;
+  onPinHit: ((player: number) => void) | null = null;
   private match: BowlingMatch;
   private players: BowlingPlayer[];
   private physics = new BowlingPhysics();
@@ -35,6 +36,10 @@ export class BowlingWorld {
   constructor(private container: HTMLElement, players: BowlingPlayer[]) {
     this.players = players.map(player => ({...player}));
     this.match = new BowlingMatch(players);
+    this.physics.onPinHit = () => {
+      const player = this.match.getState().currentPlayer;
+      if (this.running && this.rolling && player !== null) this.onPinHit?.(player);
+    };
     this.renderer = new THREE.WebGLRenderer({antialias: true, alpha: false});
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
@@ -163,6 +168,8 @@ export class BowlingWorld {
     this.renderer.dispose();
     this.renderer.domElement.remove();
     this.onState = null;
+    this.onPinHit = null;
+    this.physics.onPinHit = null;
   }
 
   private resize = (): void => {

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { io } from 'socket.io-client';
-import { EVENTS, PROTOCOL_VERSION, isTennisHit } from '@wee/shared/protocol.js';
+import { EVENTS, PROTOCOL_VERSION, isTennisHit, isGameHit } from '@wee/shared/protocol.js';
 import { RoomStore } from './RoomStore.js';
 import { createGameServer } from './app.js';
 
@@ -70,7 +70,26 @@ test('hit feedback rejects replay, bursts, pauses and the replaced host socket',
   assert.equal(store.hitTarget('replacement-tv', { ...hit, id: 'missing-setup' }).error, 'paused');
 });
 
-test('real socket feedback goes only to the one phone and never queues across reconnect', async t => {
+test('bowling contact feedback is restricted to the current rolling seat and match', () => {
+  const { store, host, hit, advance } = game('bowling');
+  const state = phase => store.setGameState('tv', { gameId: hit.gameId, phase, frame: 1, currentPlayer: 1 });
+  state('ready');
+  assert.equal(store.hitTarget('tv', hit).error, 'not-playing');
+  state('rolling');
+  assert.equal(store.hitTarget('tv', { ...hit, kind: 'tennis' }).error, 'bad-hit');
+  assert.equal(store.hitTarget('tv', { ...hit, player: 2 }).error, 'not-playing');
+  assert.equal(store.hitTarget('tv', { ...hit, gameId: 'old-match' }).error, 'not-playing');
+  assert.deepEqual(store.hitTarget('tv', hit), { ok: true, phoneSocketId: 'phone', event: { ...hit, kind: 'bowling' } });
+  advance(200);
+  assert.equal(store.hitTarget('tv', hit).error, 'duplicate-hit');
+  state('ready');
+  assert.equal(store.hitTarget('tv', { ...hit, id: 'after-roll' }).error, 'not-playing');
+  assert.equal(isGameHit({ ...hit, player: 4 }, 'bowling'), true);
+  assert.equal(isGameHit({ ...hit, player: 5 }, 'bowling'), false);
+  assert.equal(store.lobby(host.code).gameState.phase, 'ready');
+});
+
+for (const sport of ['tennis', 'bowling']) test(`${sport}: real socket feedback goes only to the one phone and never queues across reconnect`, async t => {
   let now = 0;
   const store = new RoomStore({ now: () => now });
   const app = createGameServer({ store, tickMs: 100000 });
@@ -86,7 +105,7 @@ test('real socket feedback goes only to the one phone and never queues across re
     return socket;
   }
   const host = await client(), phone = await client(), intruderHost = await client();
-  const room = await send(host, EVENTS.HOST_CREATE, { v, sport: 'tennis' });
+  const room = await send(host, EVENTS.HOST_CREATE, { v, sport });
   await send(intruderHost, EVENTS.HOST_CREATE, { v, sport: 'tennis' });
   const seat = await send(phone, EVENTS.PLAYER_JOIN, { v, code: room.code, name: 'Player' });
   await send(phone, EVENTS.PLAYER_SETUP, { setup: 'motion' });
@@ -94,13 +113,15 @@ test('real socket feedback goes only to the one phone and never queues across re
   await send(host, EVENTS.HOST_START);
   now = 5000; store.finishCountdown(room.code);
   const hit = { id: 'actual-contact', gameId: store.lobby(room.code).gameId, player: 1 };
+  if (sport === 'bowling') await send(host, EVENTS.HOST_GAME_STATE,
+    { gameId: hit.gameId, phase: 'rolling', frame: 1, currentPlayer: 1 });
   const phoneHits = [], leakedHits = [];
   phone.on(EVENTS.GAME_HIT, event => phoneHits.push(event));
   host.on(EVENTS.GAME_HIT, event => leakedHits.push(event));
   intruderHost.on(EVENTS.GAME_HIT, event => leakedHits.push(event));
   const first = once(phone, EVENTS.GAME_HIT, { signal: AbortSignal.timeout(2000) });
   assert.deepEqual(await send(host, EVENTS.HOST_GAME_HIT, { ...hit, token: 'private', code: 'ZZZZ' }), { ok: true });
-  assert.deepEqual((await first)[0], { ...hit, kind: 'tennis' });
+  assert.deepEqual((await first)[0], { ...hit, kind: sport });
   assert.equal((await send(intruderHost, EVENTS.HOST_GAME_HIT, hit)).ok, false);
   assert.equal((await send(phone, EVENTS.HOST_GAME_HIT, hit)).error, 'not-host');
   assert.equal((await send(host, EVENTS.HOST_GAME_HIT, hit)).error, 'duplicate-hit');

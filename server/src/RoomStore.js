@@ -33,7 +33,7 @@ import {
   isRoomCode,
   isSwing,
   isRoll,
-  isTennisHit,
+  isGameHit,
   isController,
   playerCapacity,
 } from '@wee/shared/protocol.js';
@@ -220,11 +220,14 @@ export class RoomStore {
     const member = this.#members.get(this.#sockets.get(socketId));
     const room = member && this.#rooms.get(member.code);
     if (member?.role !== 'host' || room?.hostId !== member.id) return { ok: false, error: ERRORS.NOT_HOST };
-    if (!isTennisHit(event)) return { ok: false, error: 'bad-hit' };
-    if (room.sport !== 'tennis' || room.phase !== PHASES.TUTORIAL || event.gameId !== room.gameId) {
+    if (!isGameHit(event, room.sport)) return { ok: false, error: 'bad-hit' };
+    if (room.phase !== PHASES.TUTORIAL || event.gameId !== room.gameId) {
       return { ok: false, error: 'not-playing' };
     }
     if (room.pausedAt !== null) return { ok: false, error: ERRORS.PAUSED };
+    if (room.sport === 'bowling' && (room.gameState?.phase !== 'rolling' || room.gameState.currentPlayer !== event.player)) {
+      return { ok: false, error: 'not-playing' };
+    }
     const seat = [...room.players.entries()].find(([, player]) => player.slot + 1 === event.player);
     const target = seat && this.#members.get(seat[0]);
     if (!target?.socketId || !seat[1].setup) return { ok: false, error: 'not-controller' };
@@ -235,7 +238,7 @@ export class RoomStore {
     room.seenHits.add(event.id);
     if (room.seenHits.size > 256) room.seenHits.delete(room.seenHits.values().next().value);
     return { ok: true, phoneSocketId: target.socketId,
-      event: { id: event.id, gameId: room.gameId, kind: 'tennis', player: event.player } };
+      event: { id: event.id, gameId: room.gameId, kind: room.sport, player: event.player } };
   }
 
   /** The TV owns bowling simulation; only its authenticated session can publish turns. */

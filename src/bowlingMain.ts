@@ -44,6 +44,9 @@ function render(state: BowlingState): void {
 function create(players: Array<{player: number; name: string}>): void {
   world = new BowlingWorld(el('lane'), players);
   world.onState = render;
+  world.onPinHit = player => {
+    if (!paused && connected && gameId) post({type: 'wee:game-hit', player, gameId});
+  };
   if (!paused) world.start();
   render(world.getState());
 }

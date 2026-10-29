@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { EVENTS, isRoll, isSwing, isTennisHit } from '@wee/shared/protocol.js';
+import { EVENTS, isRoll, isSwing, isGameHit } from '@wee/shared/protocol.js';
 import { request, socket, useConnection } from '../lib/socket.js';
 import { createInputId } from '../../../src/network/inputId.js';
 
@@ -49,10 +49,10 @@ export function PrototypeFrame({ code, controller = false, player = 1, players =
         post({ type: 'wee:roll-ack', result });
       } else if (!controller && data?.type === 'wee:bowling-state' && data.gameId === gameId) {
         await request(EVENTS.HOST_GAME_STATE, { gameId, phase: data.phase, frame: data.frame, currentPlayer: data.currentPlayer });
-      } else if (!controller && data?.type === 'wee:game-hit' && sport === 'tennis' &&
+      } else if (!controller && data?.type === 'wee:game-hit' &&
           ready.current && playing && !paused && connection === 'online' && socket.connected && data.gameId === gameId) {
-        const hit = { id: createInputId(), gameId, player: data.player };
-        if (isTennisHit(hit)) socket.volatile.emit(EVENTS.HOST_GAME_HIT, hit);
+        const hit = { id: createInputId(), gameId, player: data.player, kind: sport };
+        if (isGameHit(hit, sport)) socket.volatile.emit(EVENTS.HOST_GAME_HIT, hit);
       } else if (!controller && data?.type === 'wee:roll-result') {
         const delivery = pending.current.get(data.id);
         if (delivery) { clearTimeout(delivery.timer); pending.current.delete(data.id); delivery.ack(data.result); }
@@ -77,10 +77,10 @@ export function PrototypeFrame({ code, controller = false, player = 1, players =
       post({ type: 'wee:game-roll', event });
     };
     const hit = event => {
-      if (controller && sport === 'tennis' && ready.current && playing && !paused &&
-          connection === 'online' && socket.connected && isTennisHit(event) &&
-          event.kind === 'tennis' && event.gameId === gameId && event.player === player) {
-        post({ type: 'wee:game-hit', kind: 'tennis', player });
+      if (controller && ready.current && playing && !paused &&
+          connection === 'online' && socket.connected && isGameHit(event, sport) &&
+          event.kind === sport && event.gameId === gameId && event.player === player) {
+        post({ type: 'wee:game-hit', kind: sport, player });
       }
     };
     window.addEventListener('message', receive);

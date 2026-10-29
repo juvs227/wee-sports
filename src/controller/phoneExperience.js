@@ -121,11 +121,11 @@ export function createPhoneFeedback({ visual, object, navigator, document, reduc
       ], 850);
       pulse(18);
     },
-    hit(now) {
+    hit(now, kind = 'tennis') {
       if (now - lastHit < 80) return;
       lastHit = now;
       glow();
-      pulse(28);
+      pulse(kind === 'bowling' ? [35, 35, 55] : 40);
     },
     dispose() { active = false; reset(); reducedMotion?.removeEventListener?.('change', preferenceChanged); },
   };

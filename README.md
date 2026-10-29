@@ -89,7 +89,10 @@ animation; it does not claim one-to-one tracking of the phone's 3D position.
 
 The phone shows a reacting racket or a ball that travels toward the TV marker
 when a roll is accepted. A tennis contact sends brief vibration to the phone
-whose racket hit the ball, on browsers that support vibration. No sound is played.
+whose racket hit the ball, on browsers that support vibration. Bowling gives a
+light pulse on release and a distinct double pulse when the ball first contacts
+a pin. Gutter rolls do not trigger pin-impact feedback, and multiple colliding
+pins cannot repeatedly buzz the phone. No sound is played.
 The controller requests a screen wake lock after setup while connected and
 visible, including the lobby wait. Browser and battery settings can still deny
 or release it; controller help shows the current status. Vibration is not

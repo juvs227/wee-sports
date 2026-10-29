@@ -26,6 +26,7 @@ export function validRoll(controls: RollControls): boolean {
 
 /** The same simulation runs without WebGL in the physics regression tests. */
 export class BowlingPhysics {
+  onPinHit: (() => void) | null = null;
   readonly world: World;
   readonly pins: PinBody[] = [];
   readonly ball: Body;
@@ -35,6 +36,7 @@ export class BowlingPhysics {
   private quiet = 0;
   private gutter = false;
   private pastDeck = false;
+  private hitReported = false;
   private pinMaterial = new Material('pin');
   private ballLaneContact: ContactMaterial;
 
@@ -72,6 +74,13 @@ export class BowlingPhysics {
     this.ball = new Body({mass: 6.35, material: ballMaterial, shape: new Sphere(BALL_RADIUS),
       linearDamping: 0.008, angularDamping: 0.008, allowSleep: true});
     this.world.addBody(this.ball);
+    this.ball.addEventListener('collide', ({body}: {body: Body}) => {
+      if (!this.active || this.hitReported || this.gutter || this.pastDeck ||
+          !this.pins.some(pin => pin.body === body)) return;
+      // One feedback event for the first real ball/pin contact in a delivery.
+      this.hitReported = true;
+      this.onPinHit?.();
+    });
     this.resetRack();
   }
 
@@ -119,6 +128,7 @@ export class BowlingPhysics {
 
   private prepareBall(): void {
     this.active = false;
+    this.hitReported = false;
     this.accumulator = 0;
     this.ball.position.set(0, BALL_RADIUS + 0.002, 0.25);
     this.ball.quaternion.set(0, 0, 0, 1);
