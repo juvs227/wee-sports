@@ -5,7 +5,7 @@
  *
  * Nobody touches the TV once the lobby is open. Phones press Ready; when all
  * four are ready the Play slot counts down by itself, then the tutorial vote
- * takes over.
+ * takes over, then the tutorial (if anyone voted Yes), then the game.
  */
 
 import { useEffect, useState } from 'react';
@@ -14,17 +14,21 @@ import { EVENTS, PHASES } from '@wee/shared/protocol.js';
 import { QrCode } from '../components/QrCode.jsx';
 import { StubBanner } from '../components/StubBanner.jsx';
 import { TvCountdown } from '../components/TvCountdown.jsx';
+import { TvGame } from '../components/TvGame.jsx';
 import { TvReady } from '../components/TvReady.jsx';
+import { TvTutorial } from '../components/TvTutorial.jsx';
 import { TvVote } from '../components/TvVote.jsx';
 import { canReachFromPhones, joinUrl } from '../lib/joinUrl.js';
 import { cancelLeave, leaveSoon, request, socket } from '../lib/socket.js';
 import { sportName } from '../lib/sports.js';
+import { useRevealHold } from '../lib/useRevealHold.js';
 
 export default function HostStub() {
   const { code } = useParams();
   const navigate = useNavigate();
   const [lobby, setLobby] = useState(null);
   const [closed, setClosed] = useState(false);
+  const revealing = useRevealHold(lobby?.phase);
 
   useEffect(() => {
     cancelLeave(EVENTS.HOST_CLOSE);
@@ -80,11 +84,12 @@ export default function HostStub() {
     );
   }
 
-  // From the vote on, the vote screen owns the TV. The tutorial and game
-  // screens don't exist yet, so its reveal is also the end state for both.
-  if (lobby.phase !== PHASES.LOBBY && lobby.phase !== PHASES.COUNTDOWN) {
+  // The vote, then its reveal for a few seconds, then the tutorial or game.
+  if (lobby.phase === PHASES.VOTE || (revealing && lobby.vote)) {
     return <TvVote lobby={lobby} />;
   }
+  if (lobby.phase === PHASES.TUTORIAL) return <TvTutorial lobby={lobby} />;
+  if (lobby.phase === PHASES.GAME) return <TvGame lobby={lobby} />;
 
   const url = joinUrl(code);
 

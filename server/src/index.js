@@ -158,6 +158,13 @@ io.on('connection', (socket) => {
     broadcastLobby(result.code);
   });
 
+  socket.on(EVENTS.TUTORIAL_MOVE, (payload, ack) => {
+    const result = store.tutorialMove(socket.id, payload);
+    reply(ack, result.ok ? { ok: true } : result);
+    // Everyone sees each check mark, not only when a step advances.
+    if (result.ok) broadcastLobby(result.code);
+  });
+
   socket.on(EVENTS.PLAYER_LEAVE, drop);
   socket.on(EVENTS.HOST_CLOSE, drop);
   socket.on('disconnect', drop);

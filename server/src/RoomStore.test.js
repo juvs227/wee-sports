@@ -8,6 +8,7 @@ import {
   PHASES,
   PLAYERS_TO_START,
   PROTOCOL_VERSION,
+  TUTORIAL_MOVES,
   VOTE_SECONDS,
   isRoomCode,
 } from '@wee/shared/protocol.js';
@@ -453,7 +454,7 @@ test('a player leaving cancels the vote; the lobby must ready up again for a fre
 test('leaving after the vote resolved keeps the result and the reveal', () => {
   const { store, code } = openVote();
   everyoneVotes(store, (i) => i === 2);
-  assert.deepEqual(store.remove('p2'), { code, closed: false });
+  assert.deepEqual(store.remove('p0'), { code, closed: false });
   const lobby = store.lobby(code);
   assert.equal(lobby.phase, PHASES.TUTORIAL);
   assert.equal(lobby.vote.picks.length, PLAYERS_TO_START);
@@ -475,4 +476,120 @@ test('the host leaving during the vote still closes the room', () => {
   assert.equal(store.lobby(code), null);
   assert.equal(store.expireVote(code), null);
   assert.deepEqual(store.vote('p1', { watch: true }), { ok: false, error: ERRORS.NOT_PLAYER });
+});
+
+// Tutorial -----------------------------------------------------------------
+
+const MOVES = TUTORIAL_MOVES.tennis;
+
+/** A tutorial whose learners are the players watch(i) picks. */
+function openTutorial(watch = (i) => i === 1 || i === 3) {
+  const room = openVote();
+  everyoneVotes(room.store, watch);
+  return room;
+}
+
+/** Every learner in ids does the current step's move. */
+function allDo(store, code, ids) {
+  const { step } = store.lobby(code).tutorial;
+  for (const id of ids) store.tutorialMove(id, { step });
+}
+
+test('the tutorial starts at step 0 with the Yes voters as learners', () => {
+  const { store, code } = openTutorial();
+  assert.deepEqual(store.lobby(code).tutorial, { step: 0, moves: MOVES, learners: [1, 3], done: [] });
+});
+
+test('there is no tutorial outside the tutorial phase', () => {
+  const { store, code } = fullLobby();
+  assert.equal(store.lobby(code).tutorial, null);
+  assert.deepEqual(store.tutorialMove('p0', { step: 0 }), { ok: false, error: ERRORS.NO_TUTORIAL });
+
+  const skipped = openVote();
+  everyoneVotes(skipped.store);
+  assert.equal(skipped.store.lobby(skipped.code).phase, PHASES.GAME);
+  assert.equal(skipped.store.lobby(skipped.code).tutorial, null);
+});
+
+test('a step waits for every learner, then the next one starts', () => {
+  const { store, code } = openTutorial();
+  assert.deepEqual(store.tutorialMove('p1', { step: 0 }), { ok: true, code, advanced: false });
+  assert.deepEqual(store.lobby(code).tutorial.done, [1]);
+  assert.deepEqual(store.tutorialMove('p3', { step: 0 }), { ok: true, code, advanced: true });
+  assert.deepEqual(store.lobby(code).tutorial, { step: 1, moves: MOVES, learners: [1, 3], done: [] });
+});
+
+test('after the last step the game starts', () => {
+  const { store, code } = openTutorial();
+  for (let step = 0; step < MOVES.length; step += 1) {
+    assert.equal(store.lobby(code).phase, PHASES.TUTORIAL);
+    allDo(store, code, ['p1', 'p3']);
+  }
+  const lobby = store.lobby(code);
+  assert.equal(lobby.phase, PHASES.GAME);
+  assert.equal(lobby.tutorial, null);
+  // The reveal is still there for anyone who wants it.
+  assert.equal(lobby.vote.picks.length, PLAYERS_TO_START);
+});
+
+test('a repeat or a step that already ended changes nothing', () => {
+  const { store, code } = openTutorial();
+  store.tutorialMove('p1', { step: 0 });
+  assert.deepEqual(store.tutorialMove('p1', { step: 0 }), { ok: true, code, advanced: false });
+  assert.deepEqual(store.lobby(code).tutorial.done, [1]);
+  store.tutorialMove('p3', { step: 0 });
+  // p1's phone is a beat behind and sends step 0 again during step 1.
+  assert.deepEqual(store.tutorialMove('p1', { step: 0 }), { ok: true, code, advanced: false });
+  assert.deepEqual(store.tutorialMove('p1', { step: 2 }), { ok: true, code, advanced: false });
+  assert.deepEqual(store.lobby(code).tutorial, { step: 1, moves: MOVES, learners: [1, 3], done: [] });
+});
+
+test('only learners can do the moves; watchers and strangers cannot', () => {
+  const { store, code } = openTutorial();
+  assert.deepEqual(store.tutorialMove('p0', { step: 0 }), { ok: false, error: ERRORS.NOT_LEARNER });
+  assert.deepEqual(store.tutorialMove('stranger', { step: 0 }), { ok: false, error: ERRORS.NOT_PLAYER });
+  assert.deepEqual(store.tutorialMove('tv', { step: 0 }), { ok: false, error: ERRORS.NOT_PLAYER });
+  assert.deepEqual(store.lobby(code).tutorial.done, []);
+});
+
+test('a bad move payload is rejected and does not count', () => {
+  const { store, code } = openTutorial();
+  for (const payload of [undefined, null, {}, { step: '0' }, { step: 0.5 }, { step: -1 }, 0]) {
+    assert.deepEqual(store.tutorialMove('p1', payload), { ok: false, error: ERRORS.BAD_MOVE });
+  }
+  assert.deepEqual(store.lobby(code).tutorial.done, []);
+});
+
+test('a watcher leaving changes nothing in the tutorial', () => {
+  const { store, code } = openTutorial();
+  store.tutorialMove('p1', { step: 0 });
+  assert.deepEqual(store.remove('p0'), { code, closed: false });
+  assert.deepEqual(store.lobby(code).tutorial, { step: 0, moves: MOVES, learners: [1, 3], done: [1] });
+});
+
+test('a learner leaving no longer holds up the step', () => {
+  const { store, code } = openTutorial();
+  store.tutorialMove('p1', { step: 0 });
+  assert.deepEqual(store.remove('p3'), { code, closed: false, tutorialAdvanced: true });
+  assert.deepEqual(store.lobby(code).tutorial, { step: 1, moves: MOVES, learners: [1], done: [] });
+});
+
+test('a learner leaving before anyone moved just shrinks the step', () => {
+  const { store, code } = openTutorial();
+  assert.deepEqual(store.remove('p3'), { code, closed: false });
+  assert.deepEqual(store.lobby(code).tutorial, { step: 0, moves: MOVES, learners: [1], done: [] });
+});
+
+test('the last learner leaving starts the game', () => {
+  const { store, code } = openTutorial((i) => i === 2);
+  assert.deepEqual(store.remove('p2'), { code, closed: false, tutorialAdvanced: true });
+  assert.equal(store.lobby(code).phase, PHASES.GAME);
+  assert.equal(store.lobby(code).tutorial, null);
+});
+
+test('the host leaving during the tutorial closes the room', () => {
+  const { store, code } = openTutorial();
+  assert.equal(store.remove('tv').closed, true);
+  assert.equal(store.lobby(code), null);
+  assert.deepEqual(store.tutorialMove('p1', { step: 0 }), { ok: false, error: ERRORS.NOT_PLAYER });
 });

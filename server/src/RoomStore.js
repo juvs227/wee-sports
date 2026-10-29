@@ -26,6 +26,7 @@ import {
   PICKS,
   PLAYERS_TO_START,
   PROTOCOL_VERSION,
+  TUTORIAL_MOVES,
   VOTE_SECONDS,
   cleanName,
   isRoomCode,
@@ -48,12 +49,14 @@ export function randomCode(random = Math.random) {
 
 export class RoomStore {
   /**
-   * code -> { code, sport, hostId, phase, players: Map<id, { slot, name, ready }>, countdownEnds, vote }
+   * code -> { code, sport, hostId, phase, players: Map<id, { slot, name, ready }>, countdownEnds, vote, tutorial }
    *
    * countdownEnds is when the countdown finishes, or null when none is running.
    * vote is null until it opens, { deadline, picks: Map<id, boolean> } while
    * open, and { picks: [{ slot, pick }] } once resolved, frozen so a later
    * leaver doesn't erase what they picked.
+   * tutorial is null outside 'tutorial', and { step, learners: Set<id>,
+   * done: Set<id> } in it. learners are the Yes voters still in the room.
    */
   #rooms = new Map();
   /** id -> { code, role: 'host' | 'player' } */
@@ -95,6 +98,7 @@ export class RoomStore {
       players: new Map(),
       countdownEnds: null,
       vote: null,
+      tutorial: null,
     });
     this.#members.set(hostId, { code, role: 'host' });
     return { ok: true, ...this.lobby(code) };
@@ -192,6 +196,30 @@ export class RoomStore {
     return { code };
   }
 
+  /**
+   * A learner did the move for a tutorial step. Once every learner has done
+   * it, the next step starts, and after the last step the game does. The
+   * result says whether the step advanced.
+   *
+   * A step that has already ended (a phone a beat behind) and a repeat are
+   * both accepted and change nothing, so a twitchy motion detector can't
+   * error or skip a step.
+   */
+  tutorialMove(playerId, payload) {
+    const member = this.#members.get(playerId);
+    if (member?.role !== 'player') return { ok: false, error: ERRORS.NOT_PLAYER };
+    const room = this.#rooms.get(member.code);
+    if (room?.phase !== PHASES.TUTORIAL) return { ok: false, error: ERRORS.NO_TUTORIAL };
+    const step = payload?.step;
+    if (!Number.isInteger(step) || step < 0) return { ok: false, error: ERRORS.BAD_MOVE };
+    const { tutorial } = room;
+    if (!tutorial.learners.has(playerId)) return { ok: false, error: ERRORS.NOT_LEARNER };
+    if (step !== tutorial.step) return { ok: true, code: room.code, advanced: false };
+
+    tutorial.done.add(playerId);
+    return { ok: true, code: room.code, advanced: this.#advanceTutorial(room) };
+  }
+
   /** What the TV and phones render. Null when the room doesn't exist. */
   lobby(code) {
     const room = this.#rooms.get(code);
@@ -208,6 +236,7 @@ export class RoomStore {
       players,
       countdown,
       vote: this.#voteView(room),
+      tutorial: this.#tutorialView(room),
     };
   }
 
@@ -222,7 +251,8 @@ export class RoomStore {
    *
    * Returns null if it wasn't in one. A host leaving closes the room, and the
    * result lists the players to tell. A player leaving frees their seat, and
-   * cancels a countdown or an open vote, which both need a full lobby.
+   * cancels a countdown or an open vote, which both need a full lobby. A
+   * learner leaving the tutorial no longer holds up its steps.
    */
   remove(id) {
     const member = this.#members.get(id);
@@ -252,6 +282,11 @@ export class RoomStore {
       room.vote = null;
       return { code: room.code, closed: false, voteCancelled: true };
     }
+    if (room.phase === PHASES.TUTORIAL && room.tutorial.learners.delete(id)) {
+      room.tutorial.done.delete(id);
+      // The step may have been waiting only on them.
+      if (this.#advanceTutorial(room)) return { code: room.code, closed: false, tutorialAdvanced: true };
+    }
     return { code: room.code, closed: false };
   }
 
@@ -279,8 +314,43 @@ export class RoomStore {
         return { slot, pick: picks.get(id) ? PICKS.YES : PICKS.NO };
       })
       .sort((a, b) => a.slot - b.slot);
-    room.phase = frozen.some(({ pick }) => pick === PICKS.YES) ? PHASES.TUTORIAL : PHASES.GAME;
+    const learners = new Set([...picks.keys()].filter((id) => picks.get(id)));
     room.vote = { picks: frozen };
+    if (learners.size === 0) {
+      room.phase = PHASES.GAME;
+      return;
+    }
+    room.phase = PHASES.TUTORIAL;
+    room.tutorial = { step: 0, learners, done: new Set() };
+  }
+
+  /**
+   * Starts the next step once every learner has done this one, and the game
+   * after the last step or once no learners are left. Returns whether
+   * anything moved.
+   */
+  #advanceTutorial(room) {
+    const { tutorial } = room;
+    const waiting = [...tutorial.learners].some((id) => !tutorial.done.has(id));
+    if (waiting && tutorial.learners.size > 0) return false;
+    tutorial.step += 1;
+    tutorial.done.clear();
+    if (tutorial.learners.size === 0 || tutorial.step >= TUTORIAL_MOVES[room.sport].length) {
+      room.phase = PHASES.GAME;
+      room.tutorial = null;
+    }
+    return true;
+  }
+
+  #tutorialView(room) {
+    if (!room.tutorial) return null;
+    const slots = (ids) => [...ids].map((id) => room.players.get(id).slot).sort((a, b) => a - b);
+    return {
+      step: room.tutorial.step,
+      moves: [...TUTORIAL_MOVES[room.sport]],
+      learners: slots(room.tutorial.learners),
+      done: slots(room.tutorial.done),
+    };
   }
 
   /** While the vote is open, only who has voted. Never what they picked. */

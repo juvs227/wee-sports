@@ -17,11 +17,13 @@ import {
   normalizeCode,
 } from '@wee/shared/protocol.js';
 import { PhoneReady } from '../components/PhoneReady.jsx';
+import { PhoneTutorial } from '../components/PhoneTutorial.jsx';
 import { PhoneVote } from '../components/PhoneVote.jsx';
 import { StubBanner } from '../components/StubBanner.jsx';
 import { errorText } from '../lib/errors.js';
 import { cancelLeave, leaveSoon, request, socket } from '../lib/socket.js';
 import { sportName } from '../lib/sports.js';
+import { useRevealHold } from '../lib/useRevealHold.js';
 
 const NAME_KEY = 'wee:name';
 
@@ -42,6 +44,18 @@ function saveName(name) {
   }
 }
 
+/** The part of the phone screen that changes with the lobby's phase. */
+function PhonePhase({ lobby, phase, slot, revealing }) {
+  if (phase === PHASES.LOBBY || phase === PHASES.COUNTDOWN) return <PhoneReady lobby={lobby} slot={slot} />;
+  // The vote, then its result for as long as the TV shows the reveal.
+  if (phase === PHASES.VOTE || (revealing && lobby.vote)) return <PhoneVote lobby={lobby} slot={slot} />;
+  if (phase === PHASES.TUTORIAL) {
+    // Keyed by step, so each move starts with a fresh button.
+    return <PhoneTutorial key={lobby.tutorial.step} lobby={lobby} slot={slot} />;
+  }
+  return <p className="stub__status">Game on! Look at the TV.</p>;
+}
+
 export default function JoinStub() {
   const [params] = useSearchParams();
   const [code, setCode] = useState(() => normalizeCode(params.get('code')));
@@ -52,6 +66,7 @@ export default function JoinStub() {
   const [error, setError] = useState(null);
   const [joining, setJoining] = useState(false);
   const seated = useRef(false);
+  const revealing = useRevealHold(lobby?.phase);
 
   useEffect(() => {
     cancelLeave(EVENTS.PLAYER_LEAVE);
@@ -126,11 +141,7 @@ export default function JoinStub() {
             </p>
           </div>
         </div>
-        {phase === PHASES.LOBBY || phase === PHASES.COUNTDOWN ? (
-          <PhoneReady lobby={lobby} slot={seat.slot} />
-        ) : (
-          <PhoneVote lobby={lobby} slot={seat.slot} />
-        )}
+        <PhonePhase lobby={lobby} phase={phase} slot={seat.slot} revealing={revealing} />
 
         <h2>In this lobby</h2>
         <ul className="seats" aria-live="polite">

@@ -31,12 +31,23 @@ export const VOTE_SECONDS = 20;
 export const OPEN_SPORTS = ['tennis'];
 
 /**
+ * The moves each sport's tutorial teaches, in order, one step per move. A step
+ * ends when every player who voted Yes has done its move. Art and copy live in
+ * client/src/lib/tutorials.js.
+ */
+export const TUTORIAL_MOVES = {
+  tennis: ['forehand', 'backhand', 'serve'],
+};
+
+/**
  * Where a lobby is:
  *
  *   'lobby' -> (everyone ready) -> 'countdown' -> 'vote' -> 'tutorial' | 'game'
+ *   'tutorial' -> (every Yes voter did every move) -> 'game'
  *
- * Nobody touches the TV: phones press Ready and vote. Un-readying or leaving
- * during the countdown, or leaving during the vote, sends it back to 'lobby'.
+ * Nobody touches the TV: phones press Ready, vote, and do the tutorial moves.
+ * Un-readying or leaving during the countdown, or leaving during the vote,
+ * sends it back to 'lobby'.
  */
 export const PHASES = {
   LOBBY: 'lobby',
@@ -49,7 +60,7 @@ export const PHASES = {
 /**
  * Every lobby snapshot below has this shape:
  *
- *   { code, sport, phase, players: [{ slot, name, ready }], countdown, vote }
+ *   { code, sport, phase, players: [{ slot, name, ready }], countdown, vote, tutorial }
  *
  * ready can only be true in 'lobby' and 'countdown'.
  *
@@ -58,6 +69,11 @@ export const PHASES = {
  * vote is null until the vote opens. While it is open it says who has voted
  * but not what they picked: { msLeft, voted: [slot] }. Once resolved, it
  * reveals every pick: { picks: [{ slot, pick: 'yes' | 'no' | 'none' }] }.
+ *
+ * tutorial is null except in 'tutorial', where it is
+ * { step, moves, learners: [slot], done: [slot] }. moves is the sport's
+ * TUTORIAL_MOVES and step indexes it. learners are the players who voted Yes;
+ * done is which of them have done the current step's move.
  *
  * msLeft is time remaining, not a timestamp, so clock skew between devices
  * doesn't matter.
@@ -77,6 +93,12 @@ export const EVENTS = {
   PLAYER_READY: 'player:ready',
   /** Phone -> server: { watch: boolean }. One final vote per player. Ack: { ok }. */
   TUTORIAL_VOTE: 'tutorial:vote',
+  /**
+   * Phone -> server: { step }. This learner did the move for that step. Sent
+   * by the motion controls once they recognize the move. Repeats and a step
+   * that has already ended are harmless. Ack: { ok }.
+   */
+  TUTORIAL_MOVE: 'tutorial:move',
   /** Server -> everyone in a lobby: the snapshot. */
   LOBBY_UPDATE: 'lobby:update',
   /** Server -> phones: the TV left, so there is nothing left to control. */
@@ -97,6 +119,9 @@ export const ERRORS = {
   NO_VOTE: 'no-vote',
   BAD_VOTE: 'bad-vote',
   ALREADY_VOTED: 'already-voted',
+  NO_TUTORIAL: 'no-tutorial',
+  NOT_LEARNER: 'not-learner',
+  BAD_MOVE: 'bad-move',
 };
 
 /** What a resolved vote shows for each player. */
