@@ -6,6 +6,9 @@ export interface SwingEvent {
     id: string;
     label: SwingLabel;
     hand: SwingHand;
+    aimX?: number;
+    aimDepth?: number;
+    power?: number;
 }
 
 export interface SwingConnectionOptions {
@@ -17,7 +20,7 @@ export interface SwingConnectionOptions {
 }
 
 export interface SwingConnection {
-    sendSwing(label: SwingLabel, hand: SwingHand): boolean;
+    sendSwing(label: SwingLabel, hand: SwingHand, aimX?: number, aimDepth?: number, power?: number): boolean;
     close(): void;
 }
 

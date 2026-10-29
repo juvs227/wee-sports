@@ -98,7 +98,8 @@ the same timed racket contact as you. It has no guaranteed-hit or teleport mecha
 It does not automatically serve or implement full tennis strategy.
 
 For a quick test, press **N** to feed a forehand ball to the bot or **Shift+N** for
-a backhand feed. The bot should swing and attempt to return it toward you. B and
+a backhand feed. Each feed bounces once before reaching the sampled strike
+pose, so the bot can swing after the bounce and attempt a return. B and
 Shift+B still feed your player. Disable Player 2 bot to stop automatic swings and
 use player-2 inputs through the game API. An animation already underway finishes
 normally when the checkbox is disabled.
@@ -185,7 +186,8 @@ not implement regulation service boxes. Practice feeds retain their own setup.
 
 A yellow ring shows the intended landing point, and Hit feedback reports its X/Z.
 H toggles the ring alongside the other debug markers. Test with B/Shift+B, your
-phone, and the bot. Targets and power are deliberately repeatable while tuning.
+phone, and the bot. Keyboard and bot targets remain repeatable; calibrated phone
+tilt can vary horizontal placement as described below.
 A later opponent contact changes the ball's trajectory, so its original target
 only applies if that shot is allowed to land. No collision with the net mesh was
 added: the planner checks clearance proactively. Impossible/invalid contact
@@ -222,3 +224,84 @@ Refresh the phone controller to load `gyro-handed-sensitive-v7`, choose the
 correct playing hand, recalibrate, and test gentler strokes. These defaults may
 admit more accidental motions; keep Suppress return motions enabled initially.
 This changes phone recognition only, not racket hitbox size or collision timing.
+
+## Phone-angle shot aiming
+
+Refresh both game and controller. Enable motion and allow orientation access,
+then complete gyro calibration with the phone still. Pick it up in your normal
+portrait ready grip, expand **Phone-angle aiming**, and tap **Set neutral aim**
+before recording. This separately calibrates your grip's sideways tilt. Use
+**Invert left/right** if aiming feels reversed, and reset neutral after changing
+grip or screen orientation. The neutral pose must be set again after reload.
+
+The phone samples sideways tilt near the detected swing peak. A 3° dead zone
+keeps center steady; ±65° maps to full left/right aim. The game maps this to
+horizontal landing targets up to ±2.5 world units, with random spread of ±0.25.
+Existing trajectory checks still require court placement and net clearance;
+an unsafe preferred target can fall back to a centered shot. Forward/back tilt relative to neutral controls depth: ±45° spans landing
+distances of 5–9.5 world units from the net, with neutral at 7.25. Positive beta
+change aims deeper; negative aims shorter. Flight remains assisted; measured swing power now adjusts speed and depth (see below). The yellow ring shows the planned landing point.
+
+Missing calibration, denied orientation access, or a sample older than 250 ms
+uses standard placement. This adds no extra wait for classification. The optional
+`aimX` and `aimDepth` message fields are validated in [-1, 1] by the phone connection and relay.
+
+This is relative tilt aiming, not full 3D racket tracking: the racket animation
+does not yet follow phone orientation. Full racket alignment would need a
+neutral orientation quaternion, a phone-to-racket mounting offset, and continuous
+orientation updates applied relative to the player's ready pose. Keep animation
+in charge of the arm while applying that relative rotation to the racket, and
+limit tilt initially so contact remains playable. Absolute phone position is
+not measured by this calibration. Physical iPhone aiming still needs playtesting.
+
+## Swing power and out shots
+
+Detected swings send optional normalized `power` (0–1), derived from peak gyro
+rotation magnitude: 280°/s is low power and 1,400°/s reaches full power. This is
+an angular-speed proxy, not measured racket-head velocity. Early detection uses
+only the peak observed when it fires; completion mode sees the full stroke.
+Manual test buttons, keyboard input and the bot keep the legacy assisted shots.
+
+Power adds -1 to +4 world units to the tilt-selected landing depth and requests
+a shorter flight for harder shots. Net-clearance validation can lengthen the
+flight. Powered shots may land beyond the baseline; they are not redirected to
+the centered fallback merely to keep them in bounds. Existing scoring still
+handles faults. The phone's last-swing status shows power and peak rotation rate.
+
+Automatic player movement and bot strokes stop for a predicted first landing
+outside the real court bounds (half-width 4.115, half-length 11.885). In-bounds
+shots retain tracking even if they later bounce beyond the baseline. Predictions
+are recomputed after trajectory changes; actual first-bounce status takes over
+once the ball lands. Manual movement remains available. Tune power after phone
+playtesting; ready-pose calibration affects aim, not this gyro power mapping.
+
+## Tracking short shots
+
+Assisted positioning now moves in both court directions. It searches incoming flight and the flight after the first bounce for a
+strike-height target, rather than waiting for
+every ball to reach the player's current baseline depth. It prefers reachable targets near racket height that require little movement,
+with at least 150 ms to prepare (and 150 ms after a predicted bounce for bounced targets). The selected stance stays fixed until a
+new hit or reset, avoiding movement caused by a constantly changing intercept. Practice feeds preserve the stance used to calculate their arrival.
+Players may start moving before the bounce, and the bot may volley before the first bounce or return after one bounce. It returns to the ready position on outgoing shots. Predicted out shots still stop assisted movement and bot
+strokes. This improves pursuit of short legal shots, but does not guarantee a
+return: movement speed, stroke timing, and racket contact still limit reach.
+
+Sideline tracking clamps the player's feet to the movement area while allowing
+up to 0.45 units of lateral racket-center error, matching bot stroke selection.
+It also uses the bot's 0.5-unit strike-height tolerance. A reachable ball is no
+longer rejected merely because exact racket-center alignment would place the
+player beyond a sideline. Targets allow volleys or one-bounce returns and stop before a second bounce.
+
+Opening serves (the racket contact releasing a prepared serve) retain safe
+court placement even at maximum phone power. Aim still selects the target, but
+power's extra depth and faster flight apply only to rally returns. This prevents
+an opening fault from immediately stopping the bot's chase. This remains arcade
+serve assistance, not regulation service-box placement.
+
+## Volleys
+
+Incoming balls can be hit before their first bounce. Assisted tracking considers
+both airborne volleys and one-bounce returns, and the bot can swing with zero or
+one bounce. Ordinary racket contact is still required. Predicted out shots remain
+excluded from assisted pursuit; second-bounce balls are not bot return targets.
+Practice feeds retain their one-bounce setup and fixed player stance.

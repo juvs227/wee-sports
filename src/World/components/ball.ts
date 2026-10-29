@@ -1,7 +1,7 @@
 // components/ball.ts
 import * as THREE from 'three';
 export const BALL_RADIUS = 0.1; // Define the radius of the ball for collision detection
-const COURT_BOUNDS = { width: 4.115, length: 11.885 };
+export const COURT_BOUNDS = { width: 4.115, length: 11.885 };
 // Define an interface for the custom physics properties stored in userData
 export interface BallUserData {
     velocity: THREE.Vector3;

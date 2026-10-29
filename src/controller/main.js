@@ -1,3 +1,4 @@
+import { aimAtTime, AIM_MAX_AGE_MS } from './phoneAim.js';
 import { createSwingStream } from './swingStream.js';
 import { connectSwings } from '../network/swingConnection.js';
 
@@ -10,8 +11,14 @@ const connection = connectSwings({ room, role: 'phone',
   onAck: event => { element('delivery').textContent = event.receivers
     ? 'Delivered to game.' : 'No game connected in this room. Open the game first.'; },
 });
-function send(label) {
-  const sent = connection.sendSwing(label, element('hand').value);
+function send(label, peakTimeMs, peakRotation) {
+  const time = peakTimeMs === undefined ? performance.now() : started + peakTimeMs;
+  const aim = element('angle-aim').checked ? aimAtTime(orientationHistory, neutralAim, time, element('invert-aim').checked) : null;
+  const sent = connection.sendSwing(label, element('hand').value, aim?.aimX, aim?.aimDepth, Number.isFinite(peakRotation) ? Math.max(0, Math.min(1, (peakRotation - 280) / 1120)) : undefined);
+  element('shot-aim').textContent = aim
+    ? `Last swing: ${aim.tiltDegrees.toFixed(1)}° tilt · aim ${Math.round(aim.aimX * 100)}% · depth ${Math.round((aim.aimDepth ?? 0) * 100)}% (left − / right +)`
+    : 'Last swing: standard placement (angle aiming off or no fresh calibrated angle).';
+  if (Number.isFinite(peakRotation)) element('shot-aim').textContent += ` · power ${Math.round(Math.max(0, Math.min(1, (peakRotation - 280) / 1120)) * 100)}% (${Math.round(peakRotation)}°/s)`;
   element('delivery').textContent = sent ? 'Sent; waiting for relay…' : 'Disconnected: swing was not sent. Try again after reconnecting.';
 }
 element('forehand').onclick = () => send('Forehand');
@@ -26,6 +33,33 @@ let recording = false;
 let started = 0;
 let lastReading = 0;
 let calibrationStarted = 0;
+let neutralAim = null;
+const orientationHistory = [];
+let orientationStatus = 'Enable motion to request orientation access.';
+
+function orientation(event) {
+  if (!Number.isFinite(event.gamma)) return;
+  const timeMs = performance.now();
+  orientationHistory.push({ gamma: event.gamma, beta: event.beta, timeMs,
+    screenAngle: window.screen?.orientation?.angle ?? window.orientation ?? 0 });
+  while (orientationHistory.length > 400 || orientationHistory[0].timeMs < timeMs - 3000) orientationHistory.shift();
+}
+function updateAimView() {
+  const now = performance.now();
+  const latest = orientationHistory.at(-1);
+  element('neutral-aim').disabled = recording || !latest || now - latest.timeMs > AIM_MAX_AGE_MS;
+  const aim = aimAtTime(orientationHistory, neutralAim, now, element('invert-aim').checked);
+  element('aim-status').textContent = !element('angle-aim').checked ? 'Angle aiming off.'
+    : aim ? `Live aim: ${Math.round(aim.aimX * 100)}% · relative tilt ${aim.tiltDegrees.toFixed(1)}°`
+    : neutralAim ? 'Angle is stale or screen orientation changed. Standard placement will be used; reset ready pose if needed.'
+    : `${orientationStatus} Hold the phone in your ready pose, then tap Set neutral aim.`;
+}
+element('neutral-aim').onclick = () => {
+  const latest = orientationHistory.at(-1);
+  if (!latest || performance.now() - latest.timeMs > AIM_MAX_AGE_MS) return;
+  neutralAim = { ...latest };
+  updateAimView();
+};
 
 
 function controls() {
@@ -36,6 +70,9 @@ function controls() {
   element('hand').disabled = recording || calibrating;
   element('response').disabled = recording;
   element('suppress-returns').disabled = recording;
+  element('angle-aim').disabled = recording;
+  element('invert-aim').disabled = recording;
+  updateAimView();
 }
 function analyze(final = false) {
   for (const swing of stream?.analyze(final) ?? []) {
@@ -43,7 +80,7 @@ function analyze(final = false) {
     element('timing').textContent = swing.early
       ? `Prediction ${Math.round(swing.detectionDelayMs)} ms after motion threshold; excludes network and rendering.`
       : 'Stroke classified after completion.';
-    if ((swing.complete || swing.early) && swing.label !== 'Unknown') send(swing.label);
+    if ((swing.complete || swing.early) && swing.label !== 'Unknown') send(swing.label, swing.peakTimeMs, swing.peakRotation);
   }
   element('detector-state').textContent = !recording ? 'Detector idle' : stream?.phase === 'recovering'
     ? 'Recovering · return to rest before the next stroke' : 'Ready for a swing';
@@ -70,9 +107,17 @@ function motion(event) {
 element('enable').onclick = async () => {
   try {
     if (!window.isSecureContext || !window.DeviceMotionEvent) throw new Error('Use the HTTPS tunnel on your phone.');
-    const permission = typeof DeviceMotionEvent.requestPermission === 'function'
-      ? await DeviceMotionEvent.requestPermission() : 'granted';
-    if (permission !== 'granted') throw new Error('Motion access denied.');
+    // Start both requests synchronously inside the tap for iOS user activation.
+    const motionPermission = typeof DeviceMotionEvent.requestPermission === 'function'
+      ? DeviceMotionEvent.requestPermission() : Promise.resolve('granted');
+    const orientationPermission = !window.DeviceOrientationEvent ? Promise.resolve('unavailable')
+      : typeof DeviceOrientationEvent.requestPermission === 'function'
+        ? DeviceOrientationEvent.requestPermission() : Promise.resolve('granted');
+    const [motionResult, angleResult] = await Promise.allSettled([motionPermission, orientationPermission]);
+    if (motionResult.status !== 'fulfilled' || motionResult.value !== 'granted') throw new Error('Motion access denied.');
+    orientationStatus = angleResult.status === 'fulfilled' && angleResult.value === 'granted'
+      ? 'Orientation enabled; waiting for a fresh reading.' : 'Orientation unavailable/denied. Standard placement still works.';
+    window.addEventListener('deviceorientation', orientation);
     window.addEventListener('devicemotion', motion);
     enabled = true;
     element('motion').textContent = 'Motion enabled. Set phone down, then calibrate.';
@@ -104,6 +149,7 @@ element('record').onclick = () => {
 };
 element('stop').onclick = () => stop();
 setInterval(() => {
+  updateAimView();
   if (calibrating && performance.now() - calibrationStarted >= 2000) {
     calibrating = false;
     const axes = ['alpha', 'beta', 'gamma'];

@@ -1,3 +1,4 @@
+import { validAimX, validPower } from '../src/network/swingProtocol.js';
 import { WebSocket, WebSocketServer } from 'ws';
 
 export function attachRelay(server) {
@@ -23,13 +24,16 @@ export function attachRelay(server) {
     client.on('message', (data, binary) => {
       try {
         const event = JSON.parse(data.toString());
-        if (binary || client.role !== 'phone' || event.type !== 'swing' ||
+        if (!validPower(event?.power) || !validAimX(event?.aimX) || !validAimX(event?.aimDepth) || binary || client.role !== 'phone' || event.type !== 'swing' ||
             !['Forehand', 'Backhand'].includes(event.label) ||
             !['Right', 'Left'].includes(event.hand) ||
             typeof event.id !== 'string' || event.id.length > 100) {
           throw new Error('Invalid swing message');
         }
-        const message = JSON.stringify({ type: 'swing', id: event.id, label: event.label, hand: event.hand });
+        const message = JSON.stringify({ type: 'swing', id: event.id, label: event.label, hand: event.hand,
+          ...(event.aimX === undefined ? {} : { aimX: event.aimX }),
+          ...(event.aimDepth === undefined ? {} : { aimDepth: event.aimDepth }),
+          ...(event.power === undefined ? {} : { power: event.power }) });
         let receivers = 0;
         for (const peer of relay.clients) {
           if (peer.role === 'game' && peer.room === client.room && peer.readyState === WebSocket.OPEN) {

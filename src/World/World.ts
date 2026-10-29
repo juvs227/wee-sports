@@ -1,3 +1,4 @@
+import { planPracticeFeed } from './practiceFeed';
 // components/world.ts
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -15,6 +16,7 @@ import {
     serveBall,
     hitBall,
     BALL_RADIUS,
+    COURT_BOUNDS,
     type BallUserData,
     type BallPlayer,
 } from './components/ball';
@@ -25,7 +27,7 @@ import {
 } from '../Controllers/playerInput';
 import { planCourtShot } from './shotTrajectory';
 import { chooseBotStroke, type BotStroke } from './botPlayer';
-import { predictBaselineIntercept, lateralSteering } from './autoPosition';
+import { chooseTrackingTarget, lateralSteering, predictFirstLanding } from './autoPosition';
 import { sweptRacketContact } from './components/racketContact';
 
 export class World {
@@ -43,7 +45,8 @@ export class World {
     public autoPositionEnabled = true;
     public botEnabled = true;
     private botAttempted = false;
-    private autoTargets: [number, number] = [0, 0];
+    private autoTargets = [{ x: 0, z: 10 }, { x: 0, z: -10 }];
+    private trackingPlans: ({ x: number; z: number } | undefined)[] = [undefined, undefined];
     private readonly targetMarkers: THREE.Mesh[] = [];
     private readonly shotTargetMarker: THREE.Mesh;
     private hasShotTarget = false;
@@ -156,8 +159,8 @@ export class World {
         if (player.isSwinging) return;
         const assisted = this.autoPositionEnabled || (number === 2 && this.botEnabled);
         const moveX = assisted
-            ? lateralSteering(player.group.position.x, this.autoTargets[number - 1]) : input.moveX;
-        const moveZ = assisted ? 0 : input.moveZ;
+            ? lateralSteering(player.group.position.x, this.autoTargets[number - 1].x) : input.moveX;
+        const moveZ = assisted ? lateralSteering(player.group.position.z, this.autoTargets[number - 1].z) : input.moveZ;
         if (!swing) player.move(moveX, moveZ, delta);
         const moving = !swing && Math.abs(moveX) + Math.abs(moveZ) > 0.01;
 
@@ -170,31 +173,38 @@ export class World {
         }
     }
 
+    private shotIsOut(): boolean {
+        const data = this.ball.userData as BallUserData;
+        if (data.isWaitingForServe || data.waitingForRacketHit) return false;
+        if (data.bounceCount > 0) return !data.firstBounceInBounds;
+        const landing = predictFirstLanding({ position: this.ball.position,
+            velocity: data.velocity, gravity: data.gravity });
+        return landing !== null && (Math.abs(landing.x) > COURT_BOUNDS.width ||
+            Math.abs(landing.z) > COURT_BOUNDS.length);
+    }
+
     private updateAutoTargets(): void {
         const data = this.ball.userData as BallUserData;
+        const out = this.shotIsOut() || data.bounceCount >= 2;
+        if (data.isWaitingForServe || data.waitingForRacketHit) this.trackingPlans = [undefined, undefined];
         for (const [player, number] of [[this.player1, 1], [this.player2, 2]] as const) {
-            let target = player.group.position.x;
-            if (!data.isWaitingForServe && !data.waitingForRacketHit && !player.isSwinging) {
+            let target = { x: player.group.position.x, z: player.group.position.z };
+            if (!out && !data.isWaitingForServe && !data.waitingForRacketHit && !player.isSwinging) {
                 const approaching = number === 1 ? data.velocity.z > 0 : data.velocity.z < 0;
                 if (approaching && data.lastHitBy !== this.toBallPlayer(number)) {
-                    const offsets = Object.values(player.strikeOffsets);
-                    let bestDistance = Infinity;
-                    for (const offset of offsets) {
-                        const intercept = predictBaselineIntercept({ position: this.ball.position,
-                            velocity: data.velocity, gravity: data.gravity }, player.group.position.z + offset.z);
-                        if (!intercept) continue;
-                        const candidate = THREE.MathUtils.clamp(intercept.x - offset.x, this.courtMinX, this.courtMaxX);
-                        const distance = Math.abs(candidate - player.group.position.x);
-                        if (distance < bestDistance) { bestDistance = distance; target = candidate; }
-                    }
+                    target = this.trackingPlans[number - 1] ?? chooseTrackingTarget({ position: this.ball.position,
+                        velocity: data.velocity, gravity: data.gravity }, player.group.position,
+                        Object.values(player.strikeOffsets), number, data.bounceCount > 0) ?? target;
+                    if (target.x !== player.group.position.x || target.z !== player.group.position.z)
+                        this.trackingPlans[number - 1] = target;
                 } else {
-                    target = 0; // Recover toward center while the ball travels away.
+                    target = { x: 0, z: number === 1 ? 10 : -10 }; // Recover to ready position.
                 }
             }
             this.autoTargets[number - 1] = target;
             const marker = this.targetMarkers[number - 1];
-            marker.visible = (this.autoPositionEnabled || (number === 2 && this.botEnabled)) && this.showHitboxes && !data.isWaitingForServe;
-            marker.position.set(target, 0.075, player.group.position.z);
+            marker.visible = (this.autoPositionEnabled || (number === 2 && this.botEnabled)) && this.showHitboxes && !data.isWaitingForServe && !out;
+            marker.position.set(target.x, 0.075, target.z);
         }
         this.shotTargetMarker.visible = this.hasShotTarget && this.showHitboxes && !data.isWaitingForServe;
     }
@@ -205,14 +215,14 @@ export class World {
             this.botAttempted = false;
             return;
         }
-        if (!this.botEnabled || this.botAttempted || this.player2.isSwinging || !this.player2.hitbox) return;
+        if (this.shotIsOut() || !this.botEnabled || this.botAttempted || this.player2.isSwinging || !this.player2.hitbox) return;
         const strokes: BotStroke[] = [];
         for (const [name, backhand] of [['SwingRight', false], ['SwingLeft', true]] as const) {
             const action = this.player2.actions[name];
             const offset = this.player2.strikeOffsets[name];
             if (action && offset) strokes.push({ backhand, offset, duration: action.getClip().duration });
         }
-        const stroke = chooseBotStroke({ position: this.ball.position, velocity: data.velocity, gravity: data.gravity },
+        const stroke = chooseBotStroke({ position: this.ball.position, velocity: data.velocity, gravity: data.gravity, bounceCount: data.bounceCount },
             this.player2.group.position, strokes);
         if (!stroke) return;
         this.performSwing(stroke.backhand, 2);
@@ -232,7 +242,7 @@ export class World {
         }
     };
 
-    private performSwing(isBackhand: boolean, number: 1 | 2 = 1, hand: 'Left' | 'Right' = 'Right'): void {
+    private performSwing(isBackhand: boolean, number: 1 | 2 = 1, hand: 'Left' | 'Right' = 'Right', aimX?: number, aimDepth?: number, power?: number): void {
         const player = number === 1 ? this.player1 : this.player2;
         if (player.isSwinging) return;
         const leftAnimation = isBackhand !== (hand === 'Left');
@@ -242,6 +252,9 @@ export class World {
             return;
         }
         player.swingBackhand = isBackhand;
+        player.swingAimX = aimX;
+        player.swingAimDepth = aimDepth;
+        player.swingPower = power;
         player.playAnimation(animation);
         this.onSwingFeedback(`Player ${number}: ${isBackhand ? 'Backhand' : 'Forehand'} · swinging`);
     }
@@ -249,9 +262,12 @@ export class World {
     public swing(event: {
         label: 'Forehand' | 'Backhand';
         hand: 'Left' | 'Right';
+        aimX?: number;
+        aimDepth?: number;
+        power?: number;
         player?: 1 | 2;
     }): void {
-        this.performSwing(event.label === 'Backhand', event.player ?? 1, event.hand);
+        this.performSwing(event.label === 'Backhand', event.player ?? 1, event.hand, event.aimX, event.aimDepth, event.power);
     }
 
     // B launches a predictable incoming ball toward player 1's current racket
@@ -266,6 +282,9 @@ export class World {
         // idle. Aim the practice feed at the strike pose, not the resting racket.
         const animation = backhand ? 'SwingLeft' : 'SwingRight';
         player.swingBackhand = backhand;
+        player.swingAimX = undefined;
+        player.swingAimDepth = undefined;
+        player.swingPower = undefined;
         player.playAnimation(animation);
         const action = player.actions[animation];
         if (!action) { this.onSwingFeedback('Swing animation is unavailable'); return; }
@@ -276,15 +295,16 @@ export class World {
         const target = hitbox.bounds.getCenter(new THREE.Vector3()).applyMatrix4(hitbox.pose());
         player.stopAnimation();
         player.update(0);
-        const origin = target.clone().add(new THREE.Vector3(0, 1, number === 1 ? -4 : 4));
-        const ticks = 45;
-        const velocity = target.clone().sub(origin).divideScalar(ticks);
         const data = this.ball.userData as BallUserData;
-        velocity.y += data.gravity * (ticks + 1) / 2;
-        this.ball.position.copy(origin);
-        hitBall(this.ball, velocity, number === 1 ? 'player2' : 'player1');
+        const feed = planPracticeFeed(target, number, data.gravity);
+        if (!feed) { this.onSwingFeedback('Cannot plan a bounced practice feed'); return; }
+        this.ball.position.copy(feed.origin);
+        hitBall(this.ball, feed.velocity, number === 1 ? 'player2' : 'player1');
+        this.trackingPlans = [undefined, undefined];
+        // The feed was solved for this exact stance; do not move away from it.
+        this.trackingPlans[number - 1] = { x: player.group.position.x, z: player.group.position.z };
         this.botAttempted = false;
-        this.onSwingFeedback(`Player ${number} practice ${backhand ? 'backhand' : 'forehand'} feed · swing as the ball reaches your racket`);
+        this.onSwingFeedback(`Player ${number} practice ${backhand ? 'backhand' : 'forehand'} feed · one bounce before racket contact`);
     }
 
     private checkRacketContact(player: PlayerController, number: 1 | 2,
@@ -298,7 +318,7 @@ export class World {
         if (data.waitingForRacketHit && data.lastHitBy && data.lastHitBy !== id) return;
         if (!sweptRacketContact(hitbox.bounds, previousPose, hitbox.pose(),
             previousBall, this.ball.position, BALL_RADIUS)) return;
-        const plan = planCourtShot(this.ball.position, number, player.swingBackhand, data.gravity);
+        const plan = planCourtShot(this.ball.position, number, player.swingBackhand, data.gravity, { aimX: player.swingAimX, aimDepth: player.swingAimDepth, power: player.swingPower, serve: data.waitingForRacketHit });
         if (!plan) {
             player.hitConsumed = true;
             player.contactActive = false;
@@ -306,6 +326,7 @@ export class World {
             return;
         }
         hitBall(this.ball, plan.velocity, id);
+        this.trackingPlans = [undefined, undefined];
         this.hasShotTarget = true;
         this.shotTargetMarker.position.set(plan.target.x, 0.08, plan.target.z);
         this.shotTargetMarker.visible = this.showHitboxes;

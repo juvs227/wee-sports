@@ -33,6 +33,17 @@ test('phone events reach only games in the same room; invalid events are rejecte
     phone.send(JSON.stringify(expected));
     assert.deepEqual(await received, expected);
     assert.equal((await ack).receivers, 1);
+    const aimed = { ...expected, id: 'aimed-1', aimX: 0.65, aimDepth: -0.4, power: 0.8 };
+    const aimedReceived = next(game);
+    const aimedAck = next(phone);
+    phone.send(JSON.stringify(aimed));
+    assert.deepEqual(await aimedReceived, aimed);
+    assert.equal((await aimedAck).receivers, 1);
+    for (const aimX of [null, '0.5', 2, -2]) {
+      const rejected = next(phone);
+      phone.send(JSON.stringify({ ...expected, power: aimX }));
+      assert.equal((await rejected).type, 'error');
+    }
     const invalid = next(phone);
     phone.send(JSON.stringify({ ...expected, label: 'Unknown' }));
     assert.equal((await invalid).type, 'error');

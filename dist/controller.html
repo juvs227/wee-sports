@@ -12,8 +12,8 @@
     button { cursor: pointer; } button:disabled { opacity: .45; } .primary { background: #23664f; color: white; }
     small { display: block; color: #53675d; } .buttons { display: flex; flex-wrap: wrap; gap: 8px; }
   </style>
-  <script type="module" crossorigin src="/assets/controller-C6U-QxZj.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/swingConnection-CIpSl-X0.js">
+  <script type="module" crossorigin src="/assets/controller-CvHQQhvh.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/swingConnection-CsbiXpss.js">
 </head>
 <body><main>
   <h1>Phone controller</h1>
@@ -23,6 +23,14 @@
     <label>Response <select id="response"><option value="early">Early · experimental</option><option value="complete">Wait for completion</option></select></label>
     <p><label><input id="suppress-returns" type="checkbox" checked> Suppress return motions</label>
       <small>Waits at least 400 ms and requires 250 ms of low rotation after a stroke. Very fast consecutive strokes may be skipped.</small></p>
+    <details><summary>Phone-angle aiming</summary>
+      <p><label><input id="angle-aim" type="checkbox" checked> Aim with phone tilt</label></p>
+      <button id="neutral-aim" disabled>Set neutral aim</button>
+      <p><label><input id="invert-aim" type="checkbox"> Invert left/right</label></p>
+      <small>After gyro calibration, hold the phone in portrait in your ready grip and set neutral aim. Tilt sideways: ±65° gives full aim; a 3° dead zone keeps center steady. Forward/back tilt sets depth (±45°): positive means deeper, negative means shorter. A small random spread varies each aimed shot. Faster swings add speed and depth and can land long; players stop chasing predicted out shots.</small>
+      <p id="aim-status" role="status">Waiting for orientation permission.</p>
+      <small id="shot-aim"></small>
+    </details>
     <div id="latest" role="status">Ready?</div>
     <p id="motion" role="status">Enable motion, hold still to calibrate, then record.</p>
     <div class="buttons"><button id="enable">Enable motion</button><button id="calibrate" disabled>Calibrate</button><button id="record" class="primary" disabled>Start swings</button><button id="stop" disabled>Stop</button></div>

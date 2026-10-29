@@ -10,7 +10,7 @@ export interface BotStroke {
 // strike pose. It must still make ordinary racket contact; no guaranteed hit.
 export function chooseBotStroke(ball: BallForecast,
     position: { x: number; y: number; z: number }, strokes: BotStroke[]): BotStroke | null {
-    if (ball.velocity.z >= -0.001) return null;
+    if ((ball.bounceCount ?? 0) >= 2 || ball.velocity.z >= -0.001) return null;
     let selected: BotStroke | null = null;
     let bestError = Infinity;
     for (const stroke of strokes) {

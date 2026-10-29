@@ -16,6 +16,9 @@ export interface PlayerController {
     contactActive: boolean;
     hitConsumed: boolean;
     swingBackhand: boolean;
+    swingAimX?: number;
+    swingAimDepth?: number;
+    swingPower?: number;
     strikeOffsets: Record<string, THREE.Vector3>;
 
     playAnimation: (name: string) => void;
