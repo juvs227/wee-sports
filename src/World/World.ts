@@ -16,6 +16,7 @@ import {
 import { GameLogic } from './gameLogic';
 import type { Score } from './scoreSystem';
 import type { PlayerInput } from '../Controllers/playerInput';
+import { WorldCamera } from './camera';
 
 const COURT_MIN_X = -4.115;
 const COURT_MAX_X = 4.115;
@@ -35,6 +36,7 @@ export class World {
     private readonly targetMarkers: THREE.Mesh[] = [];
     private readonly shotTargetMarker: THREE.Mesh;
     private readonly gameLogic: GameLogic;
+    private readonly worldCamera: WorldCamera;
     private clock = new THREE.Clock();
     private animationFrameId: number | null = null;
 
@@ -62,15 +64,8 @@ export class World {
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color(0x202025);
 
-        this.camera = new THREE.PerspectiveCamera(
-            60,
-            window.innerWidth / window.innerHeight,
-            0.1,
-            1000
-        );
-
-        this.camera.position.set(0, 4, 15);
-        this.camera.lookAt(0, 0, 0);
+        this.worldCamera = new WorldCamera();
+        this.camera = this.worldCamera.primary;
 
         this.renderer = new THREE.WebGLRenderer({ antialias: true });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -143,10 +138,14 @@ export class World {
     }
 
     private handleResize = (): void => {
-        this.camera.aspect = window.innerWidth / window.innerHeight;
-        this.camera.updateProjectionMatrix();
+        this.worldCamera.resize(window.innerWidth, window.innerHeight);
         this.renderer.setSize(window.innerWidth, window.innerHeight);
     };
+
+    public setSplitScreen(enabled: boolean): void {
+        this.worldCamera.setSplitScreen(enabled, window.innerWidth, window.innerHeight);
+        this.controls.enabled = !enabled;
+    }
 
     public setPlayerInput(input: PlayerInput, player: 1 | 2 = 1): void {
         this.gameLogic.setPlayerInput(input, player);
@@ -192,7 +191,8 @@ export class World {
             this.gameLogic.update(delta);
 
             this.controls.update();
-            this.renderer.render(this.scene, this.camera);
+            this.worldCamera.render(this.renderer, this.scene,
+                window.innerWidth, window.innerHeight);
         };
 
         animate();

@@ -74,6 +74,8 @@ async function main(): Promise<void> {
         activeGameId = typeof event.data.gameId === 'string' ? event.data.gameId : null;
         names = [p1?.name ?? 'Player 1', p2?.name ?? 'Bot'];
         world.botEnabled = !p2;
+        // world.setSplitScreen?.(Boolean(p2));
+        world.setSplitScreen?.(true); // for testing only
         el('match-mode').textContent = p2 ? 'Tennis · head to head' : 'Tennis · solo';
         lobbyPaused = event.data.paused || !event.data.connected;
         if (lobbyPaused) {
