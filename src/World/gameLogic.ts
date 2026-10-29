@@ -46,16 +46,17 @@ export interface GameLogicOptions {
     targetMarkers: THREE.Mesh[];
     shotTargetMarker: THREE.Mesh;
     onSwingFeedback: () => (message: string) => void;
+    onHit?: (player: 1 | 2) => void;
 }
 
 export class GameLogic {
-    private readonly scene: THREE.Scene;
     private readonly player1: PlayerController;
     private readonly player2: PlayerController;
     private readonly ball: THREE.Mesh;
     private readonly targetMarkers: THREE.Mesh[];
     private readonly shotTargetMarker: THREE.Mesh;
     private readonly getSwingFeedback: () => (message: string) => void;
+    private readonly onHit: (player: 1 | 2) => void;
     private readonly scoreSystem = new ScoreSystem();
     private showHitboxes = false;
     private botAttempted = false;
@@ -75,13 +76,13 @@ export class GameLogic {
     }
 
     public constructor(options: GameLogicOptions) {
-        this.scene = options.scene;
         this.player1 = options.player1;
         this.player2 = options.player2;
         this.ball = options.ball;
         this.targetMarkers = options.targetMarkers;
         this.shotTargetMarker = options.shotTargetMarker;
         this.getSwingFeedback = options.onSwingFeedback;
+        this.onHit = options.onHit ?? (() => {});
     }
 
     public setPlayerInput(input: PlayerInput, player: 1 | 2): void {
@@ -263,7 +264,9 @@ export class GameLogic {
         const swinging2 = this.player2.isSwinging;
         this.player1.update(step);
         this.player2.update(step);
-        this.scene.updateMatrixWorld(true);
+        // RacketHitbox.pose updates the racket's ancestor chain for collision.
+        // The renderer updates the rest of the scene once per displayed frame;
+        // forcing static scenery to update at 120 Hz duplicates that work.
         const data = this.ball.userData as BallUserData;
         const wasWaiting = data.isWaitingForServe;
         updateBallMotion(this.ball, step, (winner, loser) =>
@@ -511,6 +514,7 @@ export class GameLogic {
         player.hitConsumed = true;
         player.contactActive = false;
         this.feedback(`Player ${number}: Hit! · aim (${plan.target.x.toFixed(1)}, ${plan.target.z.toFixed(1)})`);
+        this.onHit(number);
     }
 
     private toBallPlayer(playerNumber: 1 | 2): BallPlayer {

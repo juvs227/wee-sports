@@ -60,7 +60,10 @@ export function createBowlingMotionDetector() {
     // Acceleration assists the gyro estimate only when the device supplies
     // gravity-free readings; gravity itself must never charge a shot.
     const power = peak ? clamp(Math.max(gyroPower, gyroPower * .8 + accelerationPower * .2), .2, 1) : 0;
-    const spin = Math.abs(twist) <= 4 ? 0 : clamp((twist - Math.sign(twist) * 4) / 32, -1, 1);
+    // Normal grip changes should stay straight. Deliberate wrist turns ramp
+    // gently, with less than full side spin even at the end of the range.
+    const turn = clamp((Math.abs(twist) - 10) / 60, 0, 1);
+    const spin = Math.sign(twist) * Math.pow(turn, 1.5) * .55 || 0;
     return { power, spin, peakRotation: peak };
   }
   function reset() { started = null; peak = 0; rotation = 0; pitchRotation = 0; slowSince = null; direction = 0; twist = 0; accelerationPeak = 0; }
@@ -87,7 +90,8 @@ export function createBowlingMotionDetector() {
       const dt = Math.max(0, Math.min(gap, 100)) / 1000;
       rotation += speed * dt;
       pitchRotation += pitch * dt;
-      twist += sample.rotationBeta * dt;
+      // Wrist movement after the forward delivery must not add extra hook.
+      if (pitch >= Math.max(100, peak * .45)) twist += sample.rotationBeta * dt;
       const acceleration = sample.acceleration;
       if (acceleration && ['x', 'y', 'z'].every(axis => Number.isFinite(acceleration[axis]))) {
         accelerationPeak = Math.max(accelerationPeak, Math.min(30, Math.hypot(acceleration.x, acceleration.y, acceleration.z)));
@@ -114,5 +118,5 @@ export function bowlingTiltAim(gravity, rotationSpeed) {
   const magnitude = Math.hypot(gravity.x, gravity.y, gravity.z);
   if (magnitude < 7.5 || magnitude > 12 || gravity.z < 5) return null;
   const angle = -Math.atan2(gravity.x, gravity.z) * 180 / Math.PI;
-  return clamp(angle / 25, -1, 1) || 0;
+  return Math.sign(angle) * clamp((Math.abs(angle) - 4) / 31, 0, 1) || 0;
 }

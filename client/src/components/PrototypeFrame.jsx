@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { EVENTS, isRoll, isSwing } from '@wee/shared/protocol.js';
+import { EVENTS, isRoll, isSwing, isTennisHit } from '@wee/shared/protocol.js';
 import { request, socket, useConnection } from '../lib/socket.js';
+import { createInputId } from '../../../src/network/inputId.js';
 
 const NO_PLAYERS = [];
 /** Keep the game/controller alive while the outer page owns the lobby session. */
@@ -48,6 +49,10 @@ export function PrototypeFrame({ code, controller = false, player = 1, players =
         post({ type: 'wee:roll-ack', result });
       } else if (!controller && data?.type === 'wee:bowling-state' && data.gameId === gameId) {
         await request(EVENTS.HOST_GAME_STATE, { gameId, phase: data.phase, frame: data.frame, currentPlayer: data.currentPlayer });
+      } else if (!controller && data?.type === 'wee:game-hit' && sport === 'tennis' &&
+          ready.current && playing && !paused && connection === 'online' && socket.connected && data.gameId === gameId) {
+        const hit = { id: createInputId(), gameId, player: data.player };
+        if (isTennisHit(hit)) socket.volatile.emit(EVENTS.HOST_GAME_HIT, hit);
       } else if (!controller && data?.type === 'wee:roll-result') {
         const delivery = pending.current.get(data.id);
         if (delivery) { clearTimeout(delivery.timer); pending.current.delete(data.id); delivery.ack(data.result); }
@@ -71,12 +76,21 @@ export function PrototypeFrame({ code, controller = false, player = 1, players =
       pending.current.set(event.id, { ack, timer });
       post({ type: 'wee:game-roll', event });
     };
+    const hit = event => {
+      if (controller && sport === 'tennis' && ready.current && playing && !paused &&
+          connection === 'online' && socket.connected && isTennisHit(event) &&
+          event.kind === 'tennis' && event.gameId === gameId && event.player === player) {
+        post({ type: 'wee:game-hit', kind: 'tennis', player });
+      }
+    };
     window.addEventListener('message', receive);
     if (!controller) { socket.on(EVENTS.GAME_SWING, swing); socket.on(EVENTS.GAME_ROLL, roll); }
+    else socket.on(EVENTS.GAME_HIT, hit);
     publishState();
     return () => {
       window.removeEventListener('message', receive);
       socket.off(EVENTS.GAME_SWING, swing); socket.off(EVENTS.GAME_ROLL, roll);
+      socket.off(EVENTS.GAME_HIT, hit);
     };
   }, [paused, connection, src, controller, attempt, players, playing, sport, gameId, gameState, player]);
   return (
@@ -85,7 +99,7 @@ export function PrototypeFrame({ code, controller = false, player = 1, players =
         {failed ? <button type="button" className="btn btn--ghost" onClick={() => setAttempt(value => value + 1)}>Retry loading</button> : null}</p> : null}
       <iframe key={attempt} ref={frame} src={src} title={`${sport === 'bowling' ? 'Bowling' : 'Tennis'} ${controller ? 'phone controller' : 'game'}`}
         style={controller ? { height } : undefined}
-        allow="accelerometer; gyroscope" onLoad={publishState} />
+        allow={controller ? 'accelerometer; gyroscope; screen-wake-lock' : undefined} onLoad={publishState} />
       {showPause ? <div className="prototype-frame__pause" role="status">{pauseMessage || 'Match paused. Reconnect and finish controller setup to continue.'}</div> : null}
     </div>
   );

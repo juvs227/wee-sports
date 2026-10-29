@@ -71,9 +71,18 @@ test('wrist twist curves in either direction, ignores jitter and stays bounded',
   const twist = gamma => delivery(400, value => ({ ...value, rotationBeta: gamma }))[0];
   expect(twist(0).spin).toBe(0);
   expect(twist(5).spin).toBe(0);
-  expect(twist(70).spin).toBeGreaterThan(.3);
+  expect(twist(20).spin).toBe(0);
+  expect(twist(70).spin).toBeGreaterThan(0);
+  expect(twist(70).spin).toBeLessThan(.15);
   expect(twist(-70).spin).toBeCloseTo(-twist(70).spin);
-  expect(twist(150).spin).toBeLessThanOrEqual(1);
+  expect(twist(150).spin).toBeLessThanOrEqual(.55);
+  expect(twist(150).spin).toBeGreaterThan(twist(70).spin);
+});
+
+test('wrist movement after the forward swing does not add curve', () => {
+  const lateTurn = delivery(400, value => ({ ...value, rotationBeta: value.timeMs > 340 ? 100 : 0 }));
+  expect(lateTurn).toHaveLength(1);
+  expect(lateTurn[0].spin).toBe(0);
 });
 
 test('power can use linear acceleration but works without it and never uses gravity', () => {
@@ -104,8 +113,9 @@ test('wrist curve and power remain close at common sensor sampling rates', () =>
 
 test('tilt aims only from a still screen-up grip and clamps to the lane', () => {
   expect(bowlingTiltAim({ x: 0, y: 0, z: 9.8 }, 0)).toBe(0);
-  expect(bowlingTiltAim({ x: -3, y: 0, z: 9.3 }, 10)).toBeGreaterThan(.5);
-  expect(bowlingTiltAim({ x: 3, y: 0, z: 9.3 }, 10)).toBeLessThan(-.5);
+  expect(bowlingTiltAim({ x: -3, y: 0, z: 9.3 }, 10)).toBeGreaterThan(.3);
+  expect(bowlingTiltAim({ x: 3, y: 0, z: 9.3 }, 10)).toBeLessThan(-.3);
+  expect(bowlingTiltAim({ x: -.5, y: 0, z: 9.79 }, 10)).toBe(0);
   expect(bowlingTiltAim({ x: -7, y: 0, z: 7 }, 10)).toBe(1);
   for (const gravity of [null, { x: null, y: 0, z: 9.8 }, { x: 0, y: 9.8, z: 0 }, { x: 0, y: 0, z: 30 }]) {
     expect(bowlingTiltAim(gravity, 0)).toBeNull();

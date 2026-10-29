@@ -33,6 +33,7 @@ import {
   isRoomCode,
   isSwing,
   isRoll,
+  isTennisHit,
   isController,
   playerCapacity,
 } from '@wee/shared/protocol.js';
@@ -105,7 +106,8 @@ export class RoomStore {
     if (!code) return { ok: false, error: ERRORS.SERVER_BUSY };
 
     this.#rooms.set(code, { code, sport, hostId, phase: PHASES.LOBBY, players: new Map(), deadline: null, pausedAt: null,
-      gameId: null, gameState: null, pendingRoll: null, seenRolls: new Set() });
+      gameId: null, gameState: null, pendingRoll: null, seenRolls: new Set(),
+      seenHits: new Set(), lastHitAt: new Map() });
     const memberId = this.#addSession(hostId, code, 'host');
     this.#rooms.get(code).hostId = memberId;
     return this.#sessionView(memberId);
@@ -211,6 +213,29 @@ export class RoomStore {
     if (room.phase !== PHASES.TUTORIAL) return { ok: false, error: 'not-playing' };
     return { ok: true, hostSocketId: this.#members.get(room.hostId)?.socketId,
       event: { type: 'swing', id: event.id, label: event.label, hand: event.hand, player: player.slot + 1 } };
+  }
+
+  /** Only the current TV can report contact, and only to that match's live seat. */
+  hitTarget(socketId, event) {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    const room = member && this.#rooms.get(member.code);
+    if (member?.role !== 'host' || room?.hostId !== member.id) return { ok: false, error: ERRORS.NOT_HOST };
+    if (!isTennisHit(event)) return { ok: false, error: 'bad-hit' };
+    if (room.sport !== 'tennis' || room.phase !== PHASES.TUTORIAL || event.gameId !== room.gameId) {
+      return { ok: false, error: 'not-playing' };
+    }
+    if (room.pausedAt !== null) return { ok: false, error: ERRORS.PAUSED };
+    const seat = [...room.players.entries()].find(([, player]) => player.slot + 1 === event.player);
+    const target = seat && this.#members.get(seat[0]);
+    if (!target?.socketId || !seat[1].setup) return { ok: false, error: 'not-controller' };
+    if (room.seenHits.has(event.id)) return { ok: false, error: 'duplicate-hit' };
+    const now = this.#now();
+    if (now - (room.lastHitAt.get(event.player) ?? -Infinity) < 150) return { ok: false, error: 'hit-rate-limited' };
+    room.lastHitAt.set(event.player, now);
+    room.seenHits.add(event.id);
+    if (room.seenHits.size > 256) room.seenHits.delete(room.seenHits.values().next().value);
+    return { ok: true, phoneSocketId: target.socketId,
+      event: { id: event.id, gameId: room.gameId, kind: 'tennis', player: event.player } };
   }
 
   /** The TV owns bowling simulation; only its authenticated session can publish turns. */
@@ -435,6 +460,7 @@ export class RoomStore {
   #resetReady(room) {
     this.#clearReady(room);
     room.gameId = null; room.gameState = null; room.pendingRoll = null; room.seenRolls.clear();
+    room.seenHits.clear(); room.lastHitAt.clear();
     room.phase = room.players.size >= READY_AT_PLAYERS &&
       (room.sport === 'bowling' || [...room.players.values()].some(player => player.slot === 0)) ? PHASES.READY : PHASES.LOBBY;
   }

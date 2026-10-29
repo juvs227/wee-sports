@@ -74,7 +74,10 @@ the TV. Tilt left/right to aim; arming locks the aim so the swing cannot move it
 A sustained X-axis underhand pitch (`rotationRate.alpha`) followed by deceleration
 releases once. Power comes from peak pitch speed, assisted by gravity-free linear
 acceleration when available. Integrated Y-axis wrist rotation (`rotationRate.beta`)
-sets left/right curve with a small dead zone. The phone shows the measured power
+sets left/right curve with a 10-degree dead zone, a progressive response and a
+55% cap on motion curve. Only the active forward swing contributes wrist turn;
+late follow-through does not add a surprise hook. Aim has a 4-degree center dead
+zone. The phone shows the measured power
 and curve while armed and briefly after release. Motion rates use a different
 axis order from DeviceOrientation angles; this follows the deployed
 [Chromium implementation](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/modules/device_orientation/device_motion_event_pump.cc).

@@ -6,12 +6,12 @@ export function phoneBuildEnvironment(env) {
 }
 
 /** Print a ready URL only after the actual combined server answers health checks. */
-export async function waitForGameServer(url, { signal, fetcher = fetch, timeoutMs = 15000, intervalMs = 250 } = {}) {
+export async function waitForGameServer(url, { signal, fetcher = fetch, timeoutMs = 15000, intervalMs = 250, requestTimeoutMs = 1000 } = {}) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     signal?.throwIfAborted();
     const remaining = deadline - Date.now();
-    const timeout = AbortSignal.timeout(Math.max(1, Math.min(1000, remaining)));
+    const timeout = AbortSignal.timeout(Math.max(1, Math.min(requestTimeoutMs, remaining)));
     try {
       const response = await fetcher(url, { signal: signal ? AbortSignal.any([signal, timeout]) : timeout, cache: 'no-store' });
       if (response.ok && (await response.text()) === 'ok') return;

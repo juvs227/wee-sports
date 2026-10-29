@@ -66,6 +66,15 @@ export function createGameServer({ store = new RoomStore(), origins = [], tickMs
       reply(ack, result);
       if (result.ok) broadcast(result.code);
     });
+    socket.on(EVENTS.HOST_GAME_HIT, (event, ack) => {
+      const result = store.hitTarget(socket.id, event);
+      if (!result.ok) return reply(ack, result);
+      const phone = io.sockets.sockets.get(result.phoneSocketId);
+      if (!phone?.connected) return reply(ack, { ok: false, error: 'disconnected' });
+      // A missed tactile cue is preferable to replaying an old hit on reconnect.
+      phone.volatile.emit(EVENTS.GAME_HIT, result.event);
+      reply(ack, { ok: true });
+    });
     socket.on(EVENTS.PLAYER_ROLL, (event, ack) => {
       const result = store.rollTarget(socket.id, event);
       if (!result.ok) return reply(ack, result);

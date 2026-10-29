@@ -278,7 +278,7 @@ test('bowling tilt aims before arming, locks during delivery and sends measured 
     data: { type: 'wee:bowling-state', canRoll: true, currentPlayer: 1, phase: 'ready' } });
   for (let i = 0; i < 35; i++) tick(20, undefined, { accelerationIncludingGravity: { x: -3, y: 0, z: 9.3 } });
   const aim = Number(elements.get('aim').value);
-  expect(aim).toBeGreaterThan(.5);
+  expect(aim).toBeGreaterThan(.3);
   expect(elements.get('aim').hidden).toBe(true);
   expect(elements.get('curve-buttons').hidden).toBe(true);
   elements.get('spin').value = '-1'; // A stale button preference must not override the wrist.
@@ -289,7 +289,7 @@ test('bowling tilt aims before arming, locks during delivery and sends measured 
   const rolls = messages.filter(message => message.type === 'wee:player-roll');
   expect(rolls).toHaveLength(1);
   expect(rolls[0].event.aim).toBe(aim);
-  expect(rolls[0].event.spin).toBeGreaterThan(.3);
+  expect(rolls[0].event.spin).toBeGreaterThan(0);
   expect(rolls[0].event.power).toBeGreaterThan(.5);
   expect(Number(elements.get('motion-power').value)).toBe(rolls[0].event.power);
   expect(elements.get('motion-curve').textContent).toMatch(/^Right/);
@@ -317,6 +317,61 @@ const teamRecordings = [
   ['left-four-forehands', 'Left', Array(4).fill('Forehand')],
   ['left-mixed', 'Left', ['Forehand', 'Backhand', 'Forehand', 'Backhand']],
 ];
+
+test('phone stays awake from calibrated lobby into play and haptics only accept this player’s live parent hit', async () => {
+  const locks = [];
+  const request = vi.fn(async () => {
+    const lock = { release: vi.fn(async () => {}), addEventListener: vi.fn() };
+    locks.push(lock);
+    return lock;
+  });
+  const vibrate = vi.fn(() => true);
+  vi.stubGlobal('navigator', { wakeLock: { request }, vibrate, userActivation: { hasBeenActive: true } });
+  await import('../src/controller/main.js');
+  state({});
+  expect(request).not.toHaveBeenCalled();
+  await calibrate();
+  expect(elements.get('play-title').textContent).toBe('You’re ready');
+  expect(request).toHaveBeenCalledExactlyOnceWith('screen');
+  expect(locks[0].release).not.toHaveBeenCalled();
+  const hit = { type: 'wee:game-hit', kind: 'tennis', player: 1 };
+  emit('message', { source: parent, origin: location.origin, data: hit });
+  expect(vibrate).not.toHaveBeenCalled();
+  state({ playing: true, paused: false });
+  await Promise.resolve();
+  expect(request).toHaveBeenCalledExactlyOnceWith('screen');
+  emit('message', { source: {}, origin: location.origin, data: hit });
+  emit('message', { source: parent, origin: 'https://other.test', data: hit });
+  emit('message', { source: parent, origin: location.origin, data: { ...hit, player: 2 } });
+  expect(vibrate).not.toHaveBeenCalled();
+  emit('message', { source: parent, origin: location.origin, data: hit });
+  expect(vibrate).toHaveBeenCalledWith(28);
+  state({ playing: true, paused: true });
+  expect(locks[0].release).toHaveBeenCalledTimes(1);
+  tick(100);
+  emit('message', { source: parent, origin: location.origin, data: hit });
+  expect(vibrate.mock.calls.filter(([duration]) => duration > 0)).toEqual([[28]]);
+  state({ playing: true, paused: false });
+  await Promise.resolve();
+  expect(request).toHaveBeenCalledTimes(2);
+  elements.get('toggle-settings').onclick();
+  expect(locks[1].release).toHaveBeenCalledTimes(1);
+  elements.get('toggle-settings').onclick();
+  await Promise.resolve();
+  expect(request).toHaveBeenCalledTimes(3);
+  document.hidden = true;
+  documentListeners.get('visibilitychange')();
+  expect(locks[2].release).toHaveBeenCalledTimes(1);
+  document.hidden = false;
+  documentListeners.get('visibilitychange')();
+  await Promise.resolve();
+  expect(request).toHaveBeenCalledTimes(4);
+  emit('pagehide');
+  expect(locks[3].release).toHaveBeenCalledTimes(1);
+  for (let i = 0; i < 20; i++) tick();
+  expect(request).toHaveBeenCalledTimes(4);
+});
+
 for (const [name, hand, expected] of teamRecordings) {
   test(`team's recorded sensor swings reach gameplay after calibration: ${name}`, async () => {
     const recording = JSON.parse(readFileSync(new URL(`./fixtures/team-motion/${name}.json`, import.meta.url), 'utf8'));

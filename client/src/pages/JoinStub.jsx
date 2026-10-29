@@ -49,9 +49,9 @@ export default function JoinStub() {
   const [params, setParams] = useSearchParams();
   const [code, setCode] = useState(() => normalizeCode(params.get('code')));
   const [name, setName] = useState(loadName);
-  const { url: secureUrl, loading: phoneLinkLoading } = usePhoneLink(code);
+  const { url: secureUrl, loading: phoneLinkLoading, status: phoneLinkStatus } = usePhoneLink(code);
   const needsSecurePage = window.location.protocol === 'http:';
-  const openingSecurePage = needsSecurePage && (phoneLinkLoading || Boolean(secureUrl));
+  const openingSecurePage = needsSecurePage && (phoneLinkLoading || Boolean(secureUrl) || ['connecting', 'reconnecting'].includes(phoneLinkStatus));
   useEffect(() => {
     // React Router can arrive here without an HTTP request, so server redirects
     // alone cannot recover a phone that joined from an old LAN homepage.

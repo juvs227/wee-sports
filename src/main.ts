@@ -12,6 +12,7 @@ async function main(): Promise<void> {
     const world = new World(container as HTMLElement);
     const embedded = window.parent !== window;
     let lobbyPaused = embedded;
+    let activeGameId: string | null = null;
     let names = ['Player 1', 'Bot'];
     if (!embedded) world.start();
     new InputController(input => world.setPlayerInput(lobbyPaused ? { moveX: 0, moveZ: 0 } : input, 1));
@@ -49,6 +50,11 @@ async function main(): Promise<void> {
     link.href = controllerUrl.href;
     link.hidden = embedded;
     world.onSwingFeedback = message => { el('feedback').textContent = message; };
+    world.onBallHit = player => {
+        if (embedded && activeGameId && !lobbyPaused) {
+            window.parent.postMessage({ type: 'wee:game-hit', player, gameId: activeGameId }, location.origin);
+        }
+    };
     const updateScore = (): void => {
         const score = world.getScore();
         el('name-1').textContent = `P1 · ${names[0]}`;
@@ -65,6 +71,7 @@ async function main(): Promise<void> {
         const players = Array.isArray(event.data.players) ? event.data.players : [];
         const p1 = players.find((player: {slot: number}) => player.slot === 0);
         const p2 = players.find((player: {slot: number}) => player.slot === 1);
+        activeGameId = typeof event.data.gameId === 'string' ? event.data.gameId : null;
         names = [p1?.name ?? 'Player 1', p2?.name ?? 'Bot'];
         world.botEnabled = !p2;
         el('match-mode').textContent = p2 ? 'Tennis · head to head' : 'Tennis · solo';
@@ -91,7 +98,12 @@ async function main(): Promise<void> {
         world.dispose();
     });
     window.addEventListener('pageshow', event => {
-        if (event.persisted && !embedded) world.start();
+        if (!event.persisted) return;
+        if (embedded) {
+            // Restoring from browser history does not reload the iframe. Ask
+            // the parent for current pause/connection state before resuming.
+            window.parent.postMessage({ type: 'wee:bridge-ready' }, location.origin);
+        } else world.start();
     });
 }
 

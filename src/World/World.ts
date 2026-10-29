@@ -31,6 +31,7 @@ export class World {
     public ball: THREE.Mesh;
 
     public onSwingFeedback: (message: string) => void = () => { };
+    public onBallHit: (player: 1 | 2) => void = () => { };
     private readonly targetMarkers: THREE.Mesh[] = [];
     private readonly shotTargetMarker: THREE.Mesh;
     private readonly gameLogic: GameLogic;
@@ -136,6 +137,7 @@ export class World {
             targetMarkers: this.targetMarkers,
             shotTargetMarker: this.shotTargetMarker,
             onSwingFeedback: () => this.onSwingFeedback,
+            onHit: player => this.onBallHit(player),
         });
         window.addEventListener('resize', this.handleResize);
     }
@@ -176,6 +178,9 @@ export class World {
         }
 
         this.clock.start();
+        // A paused or restored iframe may have changed size without a resize
+        // listener. Refresh its camera and canvas before the first resumed frame.
+        this.handleResize();
         window.addEventListener('resize', this.handleResize);
         window.addEventListener('keydown', this.gameLogic.handleKeyDown);
 

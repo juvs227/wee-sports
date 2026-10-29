@@ -3,6 +3,7 @@ import { createSimpleSwingStream, createBowlingMotionDetector, bowlingTiltAim } 
 import { connectSwings } from '../network/swingConnection.js';
 import { createInputId } from '../network/inputId.js';
 import { createCalibrationSession } from './calibration.js';
+import { createPhoneFeedback, createScreenAwake } from './phoneExperience.js';
 import '../../client/src/styles/tokens.css';
 import '../play.css';
 import './controller.css';
@@ -61,6 +62,17 @@ let feedbackUntil = 0;
 let lastTiltReading = null;
 let liveAim = 0;
 let bowlingReadout = null;
+let pageActive = true;
+element('motion-visual').dataset.sport = bowling ? 'bowling' : 'tennis';
+const phoneFeedback = createPhoneFeedback({ visual: element('motion-visual'), object: element('motion-object'),
+  navigator: globalThis.navigator, document, reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)') });
+const screenAwake = createScreenAwake({ navigator: globalThis.navigator, document,
+  onState: state => {
+    element('wake-status').textContent = state === 'awake' ? 'Screen stays awake while your controller is ready.'
+      : state === 'unavailable' || state === 'released' ? 'Your browser could not keep the screen awake. Keep this page visible and check your phone’s screen-lock setting.'
+      : 'The screen stays awake during play when your browser allows it.';
+  },
+});
 
 function recentReadings() { return lastReading !== null && performance.now() - lastReading < 1500; }
 function publishSetup() {
@@ -147,6 +159,10 @@ function renderPlayState() {
   element('bowling-buttons').hidden = !buttonMode;
   element('manual-controls').hidden = bowling || !buttonMode || state !== 'playing';
   element('latest').hidden = !gameActive || state === 'paused' || performance.now() >= feedbackUntil;
+  const activeController = setup && gameActive && connected && !lobbyPaused && !settingsOpen && pageActive && !document.hidden && (state === 'playing' || state === 'waiting');
+  const readyInLobby = !gameActive && Boolean(bias) && !buttonMode && connected && !settingsOpen && pageActive && !document.hidden && state === 'ready';
+  screenAwake.setActive(activeController || readyInLobby);
+  phoneFeedback.setActive(activeController);
 }
 function controls() {
   element('setup-next').textContent = settingsOpen ? 'Return to the controller when you’re ready.' : gameActive
@@ -172,6 +188,7 @@ function deliveryResult(event, kind = 'swing') {
       : `The ${kind} was not accepted. Wait for the game to reconnect, then try again.`
     : event.receivers ? 'Delivered to game.' : 'No game connected. Check the TV.';
   playNotice = event.ok === false || !event.receivers ? element('delivery').textContent : '';
+  if (event.ok !== false && event.receivers > 0) phoneFeedback.delivered(kind);
   renderPlayState();
 }
 const connection = connectSwings({ room, role: 'phone',
@@ -188,6 +205,7 @@ const connection = connectSwings({ room, role: 'phone',
 function send(label) {
   if (bowling || lobbyPaused || !gameActive || !connected || document.hidden) return;
   const sent = connection.sendSwing(label, element('hand').value);
+  if (sent) phoneFeedback.swing(label);
   element('delivery').textContent = sent ? 'Sending stroke…' : 'Disconnected: the stroke was not sent.';
   playNotice = sent ? '' : element('delivery').textContent;
   renderPlayState();
@@ -276,6 +294,10 @@ function startMotion() {
 window.addEventListener('message', event => {
   if (!embedded || event.source !== window.parent || event.origin !== location.origin) return;
   const data = event.data;
+  if (data?.type === 'wee:game-hit' && !bowling && data.kind === 'tennis' && data.player === player) {
+    if (gameActive && connected && !lobbyPaused && !settingsOpen) phoneFeedback.hit(performance.now());
+    return;
+  }
   if (data?.type === 'wee:setup-ack') {
     setupError = data.result?.ok ? '' : 'Setup could not be saved. Reconnect or select your controls again.';
     if (setupError) element('setup-status').textContent = setupError;
@@ -319,6 +341,7 @@ function motion(event) {
   const sample = { timeMs: now - started, rotationAlpha: rate.alpha - bias.alpha,
     rotationBeta: rate.beta - bias.beta, rotationGamma: rate.gamma - bias.gamma,
     acceleration: event.acceleration };
+  phoneFeedback.motion(sample, now);
   if (bowling) {
     if (!bowlingDetector && turnReady()) {
       const tilt = bowlingTiltAim(event.accelerationIncludingGravity, Math.hypot(sample.rotationAlpha, sample.rotationBeta, sample.rotationGamma));
@@ -452,7 +475,7 @@ setInterval(() => {
   analyze();
 }, 30);
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) { startMotion(); return; }
+  if (!document.hidden) { startMotion(); controls(); screenAwake.retry(); return; }
   stop('Motion paused while the page is hidden. Return to this page to continue.');
   if (calibration) {
     calibration = null; bias = null;
@@ -461,5 +484,8 @@ document.addEventListener('visibilitychange', () => {
     controls();
   }
 });
+document.addEventListener('pointerdown', () => screenAwake.retry());
+window.addEventListener('pagehide', () => { pageActive = false; screenAwake.setActive(false); phoneFeedback.setActive(false); });
+window.addEventListener('pageshow', () => { pageActive = true; controls(); screenAwake.retry(); });
 controls();
 sensorStatus(performance.now() + 250);

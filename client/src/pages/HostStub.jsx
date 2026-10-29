@@ -23,7 +23,7 @@ import '../styles/game-shell.css';
 export default function HostStub() {
   const { code } = useParams();
   const navigate = useNavigate();
-  const { url, loading: phoneLinkLoading } = usePhoneLink(code);
+  const { url, loading: phoneLinkLoading, status: phoneLinkStatus } = usePhoneLink(code);
   const { snapshot: lobby, reconnecting, ended, storageWarning, leave } = useReconnect('host', code);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState(null);
@@ -155,8 +155,8 @@ export default function HostStub() {
       </> : <div className="stub__row">
         <div>
           <p className="stub__code" data-testid="lobby-code">{code}</p>
-          <p className="stub__muted" role="status">{phoneLinkLoading ? 'Preparing phone connection…' : 'Secure phone link is not running. Start a phone session on the laptop, then reload.'}</p>
-          {!phoneLinkLoading ? <details><summary>Start a phone session</summary><p>On the laptop, run <code>npm run dev:phone</code> in the project, then reload this page.</p></details> : null}
+          <p className="stub__muted" role="status">{phoneLinkLoading || phoneLinkStatus === 'connecting' ? 'Preparing phone connection…' : phoneLinkStatus === 'reconnecting' ? 'Phone connection is reconnecting. Your QR code will return here automatically.' : 'Secure phone link is not running. Start a phone session on the laptop, then reload.'}</p>
+          {!phoneLinkLoading && ['local', 'unavailable'].includes(phoneLinkStatus) ? <details><summary>Start a phone session</summary><p>On the laptop, run <code>npm run dev:phone</code> in the project, then reload this page.</p></details> : null}
         </div>
       </div>}
 

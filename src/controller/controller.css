@@ -26,10 +26,17 @@
 .controller-page .motion-readout meter { width: 100%; height: 18px; accent-color: var(--accent-bottom); }
 .controller-page #tilt-help { font-size: .8rem; }
 .controller-page .play-state[data-state="paused"] .play-pill { background: var(--warn-soft); color: var(--warn-ink); }
-.controller-page .controller-symbol { position: relative; width: 52px; height: 88px; margin: 24px auto; border: 3px solid var(--accent-bottom); border-radius: 16px; background: linear-gradient(135deg, white, var(--accent-soft)); transform: rotate(-12deg); }
-.controller-page .controller-symbol span { position: absolute; top: 16px; left: 13px; width: 20px; height: 20px; border-radius: 50%; background: var(--accent-bottom); }
-.controller-page .controller-symbol i { position: absolute; bottom: 12px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent-bottom); }
-.controller-page .controller-symbol i:first-of-type { left: 16px; }
-.controller-page .controller-symbol i:last-of-type { right: 16px; }
-.controller-page .play-state[data-state="paused"] .controller-symbol,
-.controller-page .play-state[data-state="waiting"] .controller-symbol { transform: none; opacity: .55; }
+.controller-page .motion-visual { position: relative; width: 200px; max-width: 100%; height: 150px; margin: 20px auto 12px; border-radius: var(--radius-lg); }
+.controller-page .motion-object { position: absolute; bottom: 0; left: calc(50% - 57.5px); width: 115px; height: 148px; transform-origin: 50% 80%; transform: translateX(var(--motion-shift, 0px)) rotate(var(--motion-angle, 0deg)); transition: transform 55ms linear; }
+.controller-page .motion-ball, .controller-page .motion-tv { display: none; }
+.controller-page .motion-visual[data-sport="bowling"] { height: 184px; }
+.controller-page .motion-visual[data-sport="bowling"] .motion-racket { display: none; }
+.controller-page .motion-visual[data-sport="bowling"] .motion-ball { display: block; }
+.controller-page .motion-visual[data-sport="bowling"] .motion-tv { display: block; }
+.controller-page .motion-tv { position: absolute; top: 0; left: calc(50% - 24px); width: 48px; height: 31px; border: 3px solid var(--border-strong); border-radius: 5px; background: var(--surface); }
+.controller-page .motion-tv span { position: absolute; inset: 4px; border-radius: 2px; background: var(--accent-soft); }
+.controller-page .motion-tv i { position: absolute; width: 22px; height: 3px; bottom: -9px; left: 10px; background: var(--border-strong); border-radius: 2px; }
+.controller-page .play-state[data-state="paused"] .motion-visual { opacity: .5; }
+@media (prefers-reduced-motion: reduce) {
+  .controller-page .motion-object { transition: none; transform: none; }
+}

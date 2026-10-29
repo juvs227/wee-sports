@@ -93,6 +93,9 @@ export const EVENTS = {
   PLAYER_ROLL: 'player:roll',
   GAME_ROLL: 'game:roll',
   HOST_GAME_STATE: 'host:game-state',
+  /** TV -> server -> the contacted player's phone. Transient collision feedback. */
+  HOST_GAME_HIT: 'host:game-hit',
+  GAME_HIT: 'game:hit',
   /** Server -> everyone in a lobby: the snapshot. */
   LOBBY_UPDATE: 'lobby:update',
   /** Server -> phones: the TV closed the lobby or its reconnect window expired. */
@@ -110,6 +113,12 @@ export function isRoll(event) {
     event.id.length <= 100 && Number.isFinite(event.power) && event.power >= 0 && event.power <= 1 &&
     Number.isFinite(event.spin) && Math.abs(event.spin) <= 1 &&
     Number.isFinite(event.aim) && Math.abs(event.aim) <= 1;
+}
+
+export function isTennisHit(event) {
+  return typeof event?.id === 'string' && event.id.length > 0 && event.id.length <= 100 &&
+    typeof event.gameId === 'string' && event.gameId.length > 0 && event.gameId.length <= 100 &&
+    Number.isInteger(event.player) && event.player >= 1 && event.player <= 2;
 }
 
 export const ERRORS = {

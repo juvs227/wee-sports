@@ -8,13 +8,16 @@ export function securePhoneOrigin(value) {
 }
 
 export function phoneLinkHandler(origin, next) {
-  const publicOrigin = securePhoneOrigin(origin);
   return (request, response) => {
+    const link = typeof origin === 'function' ? origin() : { origin };
+    const configuredOrigin = securePhoneOrigin(link.origin);
+    const status = link.status ?? (configuredOrigin ? 'ready' : 'local');
+    const publicOrigin = status === 'ready' ? configuredOrigin : null;
     const path = request.url?.split('?')[0];
-    response.setHeader('Permissions-Policy', 'accelerometer=(self), gyroscope=(self), fullscreen=(self)');
+    response.setHeader('Permissions-Policy', 'accelerometer=(self), gyroscope=(self), fullscreen=(self), screen-wake-lock=(self)');
     if (path === '/api/phone-link') {
       response.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
-      response.end(JSON.stringify({ origin: publicOrigin }));
+      response.end(JSON.stringify({ origin: publicOrigin, status }));
       return;
     }
     // Old LAN QR links can recover too. Redirect the phone's whole join page

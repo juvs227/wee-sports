@@ -1,27 +1,32 @@
 import { useEffect, useState } from 'react';
 import { joinOrigin, joinUrl } from './joinUrl.js';
-
-const secure = value => {
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' && !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
-      && !url.username && !url.password ? url.origin : null;
-  } catch { return null; }
-};
+import { resolvePhoneLink, securePhoneOrigin } from './phoneLinkState.js';
 
 /** Runtime tunnel discovery also works with a TV opened on localhost. */
 export function usePhoneLink(code) {
-  const [origin, setOrigin] = useState(() => secure(joinOrigin()));
+  const [link, setLink] = useState(() => ({ origin: securePhoneOrigin(joinOrigin()), status: 'connecting' }));
   const [loading, setLoading] = useState(true);
   useEffect(() => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 4000);
-    fetch('/api/phone-link', { signal: controller.signal, cache: 'no-store' })
-      .then(response => response.ok ? response.json() : null)
-      .then(data => { if (secure(data?.origin)) setOrigin(secure(data.origin)); })
-      .catch(() => {})
-      .finally(() => { clearTimeout(timer); setLoading(false); });
-    return () => { clearTimeout(timer); controller.abort(); };
+    let disposed = false;
+    let retry;
+    let controller;
+    async function readLink() {
+      controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 4000);
+      try {
+        const response = await fetch('/api/phone-link', { signal: controller.signal, cache: 'no-store' });
+        const data = response.ok ? await response.json() : null;
+        if (!disposed) setLink(current => resolvePhoneLink(current, data, window.location.origin));
+      } catch {
+        if (!disposed) setLink(current => resolvePhoneLink(current, null, window.location.origin));
+      }
+      finally {
+        clearTimeout(timer);
+        if (!disposed) { setLoading(false); retry = setTimeout(readLink, 10000); }
+      }
+    }
+    void readLink();
+    return () => { disposed = true; clearTimeout(retry); controller?.abort(); };
   }, []);
-  return { url: origin ? joinUrl(code, origin) : null, loading };
+  return { url: link.origin ? joinUrl(code, link.origin) : null, loading, status: link.status };
 }

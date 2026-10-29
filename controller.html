@@ -21,7 +21,23 @@
   </section>
   <section class="play-card play-state" id="play-panel" hidden aria-labelledby="play-title">
     <div class="play-state__status"><span id="play-status" class="play-pill" role="status">Getting ready</span></div>
-    <div class="controller-symbol" aria-hidden="true"><span></span><i></i><i></i></div>
+    <div id="motion-visual" class="motion-visual" data-sport="tennis" aria-hidden="true">
+      <div class="motion-tv"><span></span><i></i></div>
+      <svg id="motion-object" class="motion-object" viewBox="0 0 140 180" fill="none">
+        <g class="motion-racket">
+          <path d="M62 108h16l5 59a7 7 0 0 1-7 8H64a7 7 0 0 1-7-8l5-59Z" fill="var(--accent-bottom)"/>
+          <path d="m62 116-8-25m24 25 8-25" stroke="var(--accent-bottom)" stroke-width="7"/>
+          <ellipse cx="70" cy="54" rx="40" ry="48" fill="var(--surface)" stroke="var(--accent-bottom)" stroke-width="7"/>
+          <path d="M47 20v68m15-79v90m16-90v90m15-79v68M33 36h74M30 52h80M33 68h74M42 84h56" stroke="var(--accent-bottom)" stroke-opacity=".35" stroke-width="2"/>
+          <path d="m61 139 18 5m-19 6 20 5m-21 6 22 5" stroke="white" stroke-opacity=".6" stroke-width="3"/>
+        </g>
+        <g class="motion-ball">
+          <circle cx="70" cy="105" r="57" fill="var(--accent-bottom)"/>
+          <path d="M30 85c12-25 42-29 57-18" stroke="white" stroke-opacity=".28" stroke-width="9" stroke-linecap="round"/>
+          <circle cx="78" cy="82" r="7" fill="var(--accent-ink)"/><circle cx="96" cy="88" r="7" fill="var(--accent-ink)"/><circle cx="84" cy="106" r="9" fill="var(--accent-ink)"/>
+        </g>
+      </svg>
+    </div>
     <h2 id="play-title" aria-live="polite" aria-atomic="true">You’re ready</h2>
     <p id="play-help" class="play-muted">Press Ready above, then watch the TV.</p>
     <p id="latest" class="swing-feedback" role="status"></p>
@@ -77,6 +93,8 @@
     <p id="delivery"></p>
     <small id="detector-state">Detector idle</small>
     <small id="sensor-detail">No sensor readings yet.</small>
+    <small id="wake-status">The screen stays awake during play when your browser allows it.</small>
+    <small>Hit vibration works on supported phones. No sound is played.</small>
   </details>
   </div>
 </main><script type="module" src="/src/controller/main.js"></script></body>

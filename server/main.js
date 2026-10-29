@@ -16,14 +16,19 @@ const vite = builtPreview ? await preview({ preview: { port: 0 } }) : await crea
 if (builtPreview) await new Promise(resolve => vite.httpServer.close(resolve));
 const origins = (process.env.CLIENT_ORIGIN ?? '').split(',').map(value => value.trim()).filter(Boolean);
 const publicOrigin = securePhoneOrigin(process.env.PUBLIC_GAME_URL || process.env.VITE_PUBLIC_URL || (process.env.NGROK_HOST ? `https://${process.env.NGROK_HOST}` : ''));
-const app = createGameServer({ origins, requestHandler: phoneLinkHandler(publicOrigin, vite.middlewares) });
+const phoneLink = { origin: publicOrigin, status: process.env.PHONE_LINK_MANAGED === '1' ? 'connecting' : publicOrigin ? 'ready' : 'local' };
+// Only the parent launcher can update tunnel health over this private IPC pipe.
+if (process.env.PHONE_LINK_MANAGED === '1') process.on('message', message => {
+  if (message?.type === 'phone-link-status' && ['ready', 'connecting', 'reconnecting', 'unavailable'].includes(message.status)) phoneLink.status = message.status;
+});
+const app = createGameServer({ origins, requestHandler: phoneLinkHandler(() => phoneLink, vite.middlewares) });
 const relay = attachRelay(app.http);
 app.http.listen(port, '0.0.0.0', () => {
   const listeningPort = app.http.address().port;
   console.log(`Game: http://localhost:${listeningPort}`);
   console.log(`Homepage and lobby: http://localhost:${listeningPort}`);
   console.log(`Standalone tennis: http://localhost:${listeningPort}/game.html`);
-  console.log(publicOrigin ? `Phone motion link: ${publicOrigin}` : 'For phone motion, start the secure session with npm run dev:phone.');
+  console.log(phoneLink.status === 'connecting' ? 'Checking the secure phone connection…' : publicOrigin ? `Phone motion link: ${publicOrigin}` : 'For phone motion, start the secure session with npm run dev:phone.');
 });
 
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, async () => {

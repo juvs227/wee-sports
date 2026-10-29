@@ -32,6 +32,13 @@ session. This uses a [Cloudflare Quick Tunnel](https://developers.cloudflare.com
 intended for development and device testing; anyone with the temporary URL can
 open the app. No Cloudflare account or domain is required.
 
+Teammates can run these same commands on their own computers; each running
+session gets its own link and lobbies. Sharing a running session's link connects
+everyone to that session, so its host computer must stay on. The launcher checks
+the public connection before showing the QR and monitors it during play. A
+temporary interruption hides the QR until the link recovers; if the tunnel stops,
+restart the session and scan its new QR. This is not a permanent team deployment.
+
 For local editing with Vite, use `npm run dev:local`. This does not create a secure
 phone connection. The TV can use local HTTP, but real phone sensors need the
 secure phone page. Do not bypass browser certificate warnings or disable browser
@@ -53,8 +60,10 @@ HTTPS origin to the server; its QR is discovered at runtime.
 4. In tennis, P1 swings to serve, then each player swings as the ball approaches
    their side. If a grip does not work with the team’s automatic classifier,
    controller settings offer an explicit forehand/backhand mapping.
-5. In bowling, use the phone to aim, make an underhand swing for power, and twist
-   through the release to add curve. The controller shows the measured release.
+5. In bowling, use the phone to aim, make an underhand swing for power, and
+   deliberately turn your wrist during the forward swing to add curve. Small
+   wrist movements stay straight; motion curve is capped for gentler control.
+   The controller shows the measured release.
    Keep a firm grip; never let go of the phone. Only the current player can roll.
    Watch the lane for pinfall, the scorecard, final rankings and **Play again**
    after the tenth frame. Sliders and the Roll button remain a fallback.
@@ -77,6 +86,16 @@ Calibration and motion are the main phone flow. Buttons are tucked under a
 fallback disclosure for connection testing or devices without sensors. Tennis
 still uses the team's recognized forehand/backhand gestures to drive the racket
 animation; it does not claim one-to-one tracking of the phone's 3D position.
+
+The phone shows a reacting racket or a ball that travels toward the TV marker
+when a roll is accepted. A tennis contact sends brief vibration to the phone
+whose racket hit the ball, on browsers that support vibration. No sound is played.
+The controller requests a screen wake lock after setup while connected and
+visible, including the lobby wait. Browser and battery settings can still deny
+or release it; controller help shows the current status. Vibration is not
+available in every browser, including Safari on iPhone. See the browser support
+for [screen wake locks](https://developer.mozilla.org/en-US/docs/Web/API/WakeLock/request)
+and [vibration](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/vibrate).
 
 The browser still asks for motion permission after the secure page opens; the
 app cannot grant that permission on the player’s behalf. Tap **Calibrate** directly
@@ -179,6 +198,12 @@ can hit only once, and a player cannot hit their own outgoing shot again. Return
 use the team's court-targeted trajectory calculation and stroke-side variation;
 physical spin, exact racket impact response, and net collisions remain outside
 this tennis prototype.
+
+Physics steps now refresh only the racket pose needed for contact checks, rather
+than forcing the whole scene graph to update at 120 Hz. Normal rendering still
+updates the scene. A solo serve-and-bot test checks contacts with the shipped
+models and verifies that static scene objects receive no redundant physics-step
+updates. This reduces local work; it does not remove internet connection delay.
 
 A first bounce outside the opponent's court, or the second bounce after a valid
 landing, ends the point immediately and awards it once. The ball then waits for

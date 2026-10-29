@@ -16,7 +16,7 @@ function request(url, origin, forwarded = false) {
 }
 test('the local TV discovers the secure QR origin at runtime and old phone URLs redirect intact', () => {
   const origin = 'https://demo.trycloudflare.com';
-  expect(JSON.parse(request('/api/phone-link', origin).body)).toEqual({ origin });
+  expect(JSON.parse(request('/api/phone-link', origin).body)).toEqual({ origin, status: 'ready' });
   const redirect = request('/join?code=ABCD', origin);
   expect(redirect.status).toBe(307);
   expect(redirect.headers.location).toBe(`${origin}/join?code=ABCD`);
@@ -34,9 +34,22 @@ test('controller redirects preserve room parameters and allow motion only within
   expect(redirected.headers.location).toBe(`${origin}${path}`);
   const tunneled = request(path, origin, true);
   expect(tunneled.passed).toBe(true);
-  expect(tunneled.headers['Permissions-Policy']).toBe('accelerometer=(self), gyroscope=(self), fullscreen=(self)');
+  expect(tunneled.headers['Permissions-Policy']).toBe('accelerometer=(self), gyroscope=(self), fullscreen=(self), screen-wake-lock=(self)');
   expect(request('/socket.io/?EIO=4&transport=polling', origin).passed).toBe(true);
   expect(request('/assets/controller.js', origin).passed).toBe(true);
+});
+
+test('a managed phone link is advertised only while healthy and recovers without restarting the TV', () => {
+  const link = { origin: 'https://demo.trycloudflare.com', status: 'connecting' };
+  const current = () => link;
+  for (const status of ['connecting', 'reconnecting', 'unavailable']) {
+    link.status = status;
+    expect(JSON.parse(request('/api/phone-link', current).body)).toEqual({ origin: null, status });
+    expect(request('/join?code=ABCD', current).passed).toBe(true);
+  }
+  link.status = 'ready';
+  expect(JSON.parse(request('/api/phone-link', current).body)).toEqual(link);
+  expect(request('/join?code=ABCD', current).headers.location).toBe(`${link.origin}/join?code=ABCD`);
 });
 
 test('a remote HTTP caller cannot skip the secure redirect with a forwarded header', () => {

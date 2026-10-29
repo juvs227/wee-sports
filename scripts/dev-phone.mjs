@@ -11,6 +11,7 @@ const children = new Set();
 const shutdown = new AbortController();
 let stopping = false;
 let forceStop;
+let healthTimer;
 function launch(command, args, options = {}) {
   const child = spawn(command, args, { stdio: 'inherit', ...options });
   children.add(child);
@@ -21,6 +22,7 @@ function stop(code = 0) {
   if (stopping) return;
   stopping = true;
   shutdown.abort();
+  clearTimeout(healthTimer);
   for (const child of children) child.kill('SIGTERM');
   forceStop = setTimeout(() => { for (const child of children) child.kill('SIGKILL'); }, 3000);
   forceStop.unref();
@@ -58,13 +60,42 @@ try {
     tunnel.once('exit', () => { clearTimeout(timer); reject(new Error('The secure connection stopped before it was ready.')); });
   });
   if (stopping) process.exit(0);
-  const server = launch(process.execPath, ['server/main.js', '--preview'], { env: { ...phoneBuildEnvironment(process.env), PORT: String(port), PUBLIC_GAME_URL: origin } });
+  const server = launch(process.execPath, ['server/main.js', '--preview'], {
+    stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
+    env: { ...phoneBuildEnvironment(process.env), PORT: String(port), PUBLIC_GAME_URL: origin, PHONE_LINK_MANAGED: '1' },
+  });
   server.once('error', error => { console.error(error.message); stop(1); });
   server.once('exit', code => { if (!stopping) stop(code || 1); });
-  tunnel.once('exit', () => { if (!stopping) { console.error('The secure phone connection ended. Restart this session to get a fresh QR code.'); stop(1); } });
+  let tunnelRunning = true;
+  let linkStatus = 'connecting';
+  function setLinkStatus(status) {
+    if (stopping || status === linkStatus) return;
+    linkStatus = status;
+    if (server.connected) server.send({ type: 'phone-link-status', status }, () => {});
+    if (status === 'ready') console.log(`Phone link ready: ${origin}\nScan the current lobby QR. This temporary link is not tied to a Cloudflare account.\nKeep this session open while playing. Restarting creates a new phone link.\n`);
+    else if (status === 'reconnecting') console.log('The phone link is reconnecting. The TV game stays open; its QR will return when the link is reachable.');
+  }
+  tunnel.once('exit', () => {
+    tunnelRunning = false;
+    clearTimeout(healthTimer);
+    if (!stopping) {
+      setLinkStatus('unavailable');
+      console.error('The phone link stopped. Restart this session for a fresh QR code. The local game is still running.');
+    }
+  });
   await waitForGameServer(`http://127.0.0.1:${port}/health`, { signal: shutdown.signal });
   if (stopping) process.exit(0);
-  console.log(`\nOpen the TV here: http://localhost:${port}\nThe lobby QR now uses ${origin}\nKeep this terminal open while playing. The temporary public link stops when you stop this session.\n`);
+  console.log(`\nOpen the TV here: http://localhost:${port}\nChecking that the phone link works from the internet…\n`);
+  async function checkPhoneLink(first = false) {
+    try {
+      await waitForGameServer(`${origin}/health`, { signal: shutdown.signal, timeoutMs: first ? 45000 : 10000, requestTimeoutMs: 5000, intervalMs: 1000 });
+      if (tunnelRunning) setLinkStatus('ready');
+    } catch {
+      if (tunnelRunning) setLinkStatus('reconnecting');
+    }
+    if (!stopping && tunnelRunning) healthTimer = setTimeout(() => { void checkPhoneLink(); }, 15000);
+  }
+  await checkPhoneLink(true);
 } catch (error) {
   if (!stopping) { console.error(error.message); stop(1); }
 }
