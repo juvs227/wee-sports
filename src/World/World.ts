@@ -62,7 +62,7 @@ export class World {
 
     constructor(container: HTMLElement) {
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x202025);
+        this.scene.background = new THREE.Color(0x87ceeb);
 
         this.worldCamera = new WorldCamera();
         this.camera = this.worldCamera.primary;
@@ -145,6 +145,10 @@ export class World {
     public setSplitScreen(enabled: boolean): void {
         this.worldCamera.setSplitScreen(enabled, window.innerWidth, window.innerHeight);
         this.controls.enabled = !enabled;
+    }
+
+    public get isSplitScreen(): boolean {
+        return this.worldCamera.isSplitScreen;
     }
 
     public setPlayerInput(input: PlayerInput, player: 1 | 2 = 1): void {

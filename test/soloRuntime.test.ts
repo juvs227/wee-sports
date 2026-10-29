@@ -24,6 +24,7 @@ test('solo phone serve and bot contact report actual hits without updating stati
     scene.add(courtDecoration);
     const updateScenery = vi.spyOn(courtDecoration, 'updateMatrixWorld');
     const ball = createBall(0, .3, 10);
+    ball.userData.serveDelayRemaining = 0;
     scene.add(ball);
     const hits: number[] = [];
     const feedback: string[] = [];

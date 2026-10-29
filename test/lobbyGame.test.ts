@@ -23,6 +23,7 @@ async function court() {
     scene.add(player1.group, player2.group);
     await vi.waitFor(() => { expect(player1.hitbox).toBeTruthy(); expect(player2.hitbox).toBeTruthy(); });
     const ball = createBall(0, .3, 10);
+    (ball.userData as BallUserData).serveDelayRemaining = 0;
     scene.add(ball);
     const feedback: string[] = [];
     const game = new GameLogic({ scene, player1, player2, ball,

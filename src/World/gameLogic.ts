@@ -139,6 +139,10 @@ export class GameLogic {
         // existing animation's strike pose, then let normal contact release it.
         const data = this.ball.userData as BallUserData;
         if (data.isWaitingForServe || data.waitingForRacketHit) {
+            if (data.serveDelayRemaining > 0) {
+                this.feedback(`Wait ${Math.ceil(data.serveDelayRemaining)} seconds before serving`);
+                return;
+            }
             const servingPlayer = data.servingPlayer === 'player1' ? 1 : 2;
             if ((event.player ?? 1) !== servingPlayer) {
                 this.feedback(`Player ${servingPlayer} serves next`);
@@ -225,6 +229,10 @@ export class GameLogic {
 
     public playerServe(playerNumber: 1 | 2 = 1): void {
         const data = this.ball.userData as BallUserData;
+        if (data.serveDelayRemaining > 0) {
+            this.feedback(`Wait ${Math.ceil(data.serveDelayRemaining)} seconds before serving`);
+            return;
+        }
         const servingPlayer = data.servingPlayer === 'player1' ? 1 : 2;
         if (playerNumber !== servingPlayer) {
             this.feedback(`Player ${servingPlayer} serves next`);
@@ -250,6 +258,7 @@ export class GameLogic {
         data.firstBounceInBounds = false;
         data.lastHitBy = undefined;
         data.slideTimer = 0;
+        data.serveDelayRemaining = 3;
         data.servingPlayer = 'player1';
         data.servePosition.z = 10;
         this.ball.position.copy(data.servePosition);
@@ -277,12 +286,20 @@ export class GameLogic {
         // The renderer updates the rest of the scene once per displayed frame;
         // forcing static scenery to update at 120 Hz duplicates that work.
         const data = this.ball.userData as BallUserData;
+        if (data.isWaitingForServe) {
+            data.serveDelayRemaining = Math.max(0, data.serveDelayRemaining - step);
+        }
         const wasWaiting = data.isWaitingForServe;
         updateBallMotion(this.ball, step, (winner, loser) =>
             this.scoreSystem.awardPoint(winner, loser));
         const resetDuringStep = !wasWaiting && data.isWaitingForServe;
         if (resetDuringStep) this.pendingSwings = [null, null];
-        if (resetDuringStep && this.botEnabled && data.servingPlayer === 'player2') {
+        if (resetDuringStep && this.botEnabled && data.servingPlayer === 'player2' &&
+            data.serveDelayRemaining <= 0) {
+            this.swing({ label: 'Forehand', hand: 'Right', player: 2 });
+        }
+        if (data.isWaitingForServe && this.botEnabled && data.servingPlayer === 'player2' &&
+            data.serveDelayRemaining <= 0 && !this.player2.isSwinging) {
             this.swing({ label: 'Forehand', hand: 'Right', player: 2 });
         }
         if (!resetDuringStep) {

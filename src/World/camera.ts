@@ -5,6 +5,10 @@ export class WorldCamera {
     public readonly secondary: THREE.PerspectiveCamera;
     private splitScreen = false;
 
+    public get isSplitScreen(): boolean {
+        return this.splitScreen;
+    }
+
     public constructor() {
         this.primary = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
         this.primary.position.set(0, 4, 15);

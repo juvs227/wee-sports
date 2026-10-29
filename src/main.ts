@@ -39,6 +39,10 @@ async function main(): Promise<void> {
       <p>J/K: swing · B: practice feed · N: feed P2 · H: hitboxes. Turn off automatic movement for WASD.</p>
       <a id="phone-link">Open phone controller</a></details>`;
     document.body.append(panel);
+    const serveCountdown = document.createElement('div');
+    serveCountdown.className = 'serve-countdown';
+    serveCountdown.setAttribute('aria-live', 'polite');
+    document.body.append(serveCountdown);
     const el = (id: string): HTMLElement => document.getElementById(id)!;
     const auto = el('auto') as HTMLInputElement;
     const bot = el('bot') as HTMLInputElement;
@@ -66,8 +70,20 @@ async function main(): Promise<void> {
         el('games-2').textContent = `G ${score.roundsPlayer2}`;
         const ballData = world.ball.userData as BallUserData;
         const servingPlayer = ballData.servingPlayer === 'player1' ? 'P1' : 'P2';
-        el('serve-status').textContent = lobbyPaused ? 'Match paused' :
-            ballData.isWaitingForServe ? `${servingPlayer} · swing to serve` : 'Rally in play';
+        const serveStatus = el('serve-status');
+        const statusClass = lobbyPaused ? 'paused' :
+            ballData.isWaitingForServe
+                ? servingPlayer === 'P1' ? 'serving-p1' : 'serving-p2'
+                : 'rally';
+        serveStatus.className = statusClass;
+        serveStatus.textContent = lobbyPaused || !ballData.isWaitingForServe
+            ? '' : `${servingPlayer} serving`;
+        const countdown = ballData.isWaitingForServe
+            ? Math.ceil(ballData.serveDelayRemaining) : 0;
+        serveCountdown.textContent = countdown > 0 ? String(countdown) : '';
+        serveCountdown.classList?.toggle('visible', countdown > 0 && !lobbyPaused);
+        serveCountdown.classList?.toggle('player-1', servingPlayer === 'P1' && world.isSplitScreen);
+        serveCountdown.classList?.toggle('player-2', servingPlayer === 'P2' && world.isSplitScreen);
     };
     const receiveState = (event: MessageEvent): void => {
         if (event.source !== window.parent || event.origin !== location.origin ||
