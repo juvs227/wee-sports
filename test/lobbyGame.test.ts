@@ -85,10 +85,8 @@ test.each(['Right', 'Left'] as const)('P2 %s-hand phone returns a real serve wit
     expect(feedback.some(message => message.startsWith('Player 2: Hit!')), feedback.join('; ')).toBe(true);
     expect(game.getScore().player2).toBe(15);
     expect((ball.userData as BallUserData).isWaitingForServe).toBe(true);
-    feedback.length = 0;
-    game.swing({ label: 'Backhand', hand: 'Right', player: 1 });
-    for (let i = 0; i < 120; i++) game.update(1 / 120);
-    expect(feedback.some(message => message.startsWith('Player 1: Hit!'))).toBe(true);
+    expect((ball.userData as BallUserData).servingPlayer).toBe('player2');
+    expect(ball.position.z).toBe(-10);
 });
 
 test('team scoring handles deuce, advantage reversal, and a completed game', () => {

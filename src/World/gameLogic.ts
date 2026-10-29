@@ -139,11 +139,12 @@ export class GameLogic {
         // existing animation's strike pose, then let normal contact release it.
         const data = this.ball.userData as BallUserData;
         if (data.isWaitingForServe || data.waitingForRacketHit) {
-            if ((event.player ?? 1) !== 1) {
-                this.feedback('Player 1 serves next');
+            const servingPlayer = data.servingPlayer === 'player1' ? 1 : 2;
+            if ((event.player ?? 1) !== servingPlayer) {
+                this.feedback(`Player ${servingPlayer} serves next`);
                 return;
             }
-            const player = this.player1;
+            const player = servingPlayer === 1 ? this.player1 : this.player2;
             const backhand = event.label === 'Backhand';
             const animation = backhand !== (event.hand === 'Left') ? 'SwingLeft' : 'SwingRight';
             const action = player.actions[animation];
@@ -163,7 +164,7 @@ export class GameLogic {
                 .applyMatrix4(player.hitbox.pose()));
             player.stopAnimation();
             player.update(0);
-            serveBall(this.ball, new THREE.Vector3(), 'player1');
+            serveBall(this.ball, new THREE.Vector3(), data.servingPlayer);
         }
         const number = event.player ?? 1;
         const player = number === 1 ? this.player1 : this.player2;
@@ -223,6 +224,12 @@ export class GameLogic {
     }
 
     public playerServe(playerNumber: 1 | 2 = 1): void {
+        const data = this.ball.userData as BallUserData;
+        const servingPlayer = data.servingPlayer === 'player1' ? 1 : 2;
+        if (playerNumber !== servingPlayer) {
+            this.feedback(`Player ${servingPlayer} serves next`);
+            return;
+        }
         const targetPlayer = playerNumber === 1 ? this.player1 : this.player2;
         if (targetPlayer.group.position.distanceTo(this.ball.position) > 1.5) {
             console.log('Too far from the ball to serve!');
@@ -243,6 +250,8 @@ export class GameLogic {
         data.firstBounceInBounds = false;
         data.lastHitBy = undefined;
         data.slideTimer = 0;
+        data.servingPlayer = 'player1';
+        data.servePosition.z = 10;
         this.ball.position.copy(data.servePosition);
         this.botAttempted = false;
         this.hasShotTarget = false;
@@ -273,6 +282,9 @@ export class GameLogic {
             this.scoreSystem.awardPoint(winner, loser));
         const resetDuringStep = !wasWaiting && data.isWaitingForServe;
         if (resetDuringStep) this.pendingSwings = [null, null];
+        if (resetDuringStep && this.botEnabled && data.servingPlayer === 'player2') {
+            this.swing({ label: 'Forehand', hand: 'Right', player: 2 });
+        }
         if (!resetDuringStep) {
             this.checkRacketContact(this.player1, 1, pose1, previousBall);
             this.checkRacketContact(this.player2, 2, pose2, previousBall);

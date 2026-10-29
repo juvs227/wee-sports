@@ -22,13 +22,17 @@ button:disabled { cursor: default; opacity: .45; }
 .controller-page .hand-label { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 0 24px; }
 .controller-page details { margin-top: 16px; }
 summary { cursor: pointer; font-weight: 800; padding: 8px 0; }
-.game-panel { position: fixed; z-index: 1; top: 14px; left: 14px; width: min(330px, calc(100vw - 28px)); background: #ffffffed; padding: 16px 20px; border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); font-size: 14px; }
+.game-panel { position: fixed; z-index: 1; top: 10px; left: 50%; transform: translateX(-50%); width: min(720px, calc(100vw - 20px)); background: #ffffffed; padding: 7px 14px; border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); font-size: 12px; }
 .game-panel h2 { font-size: 18px; }
-.game-panel p { margin: 8px 0; }
-.game-panel .score-row { display: grid; grid-template-columns: 1fr auto; align-items: center; padding: 6px 0; gap: 12px; }
-.game-panel .score-row strong { font-size: 26px; }
+.game-panel p { margin: 3px 0; }
+.game-panel .play-eyebrow { display: inline-block; margin-right: 14px; }
+.game-panel .scoreboard { display: inline-flex; gap: 14px; vertical-align: middle; }
+.game-panel .score-row { display: grid; grid-template-columns: minmax(100px, auto) auto auto; align-items: center; padding: 2px 8px; gap: 7px; }
+.game-panel .score-row strong { font-size: 20px; line-height: 1; }
+.game-panel .score-row small { color: var(--text-muted); white-space: nowrap; }
 .game-panel .score-row[data-player="1"] { border-left: 4px solid var(--p1); padding-left: 10px; }
 .game-panel .score-row[data-player="2"] { border-left: 4px solid var(--p2); padding-left: 10px; }
-.game-panel label { display: block; margin: 8px 0; }
+.game-panel label { display: block; margin: 6px 0; }
 .game-panel details { font-size: 12px; }
-.game-panel #feedback { min-height: 40px; }
+.game-panel #feedback { display: inline-block; margin-left: 10px; color: var(--text-muted); }
+.game-panel #serve-status { display: inline-block; }

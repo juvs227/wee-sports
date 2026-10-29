@@ -28,10 +28,11 @@ async function main(): Promise<void> {
     panel.className = 'game-panel';
     panel.setAttribute('aria-label', 'Tennis scoreboard');
     panel.innerHTML = `<p class="play-eyebrow" id="match-mode">Tennis · solo</p>
-      <div class="score-row" data-player="1"><span id="name-1"></span><strong id="points-1">0</strong></div>
-      <div class="score-row" data-player="2"><span id="name-2"></span><strong id="points-2">0</strong></div>
-      <p id="games" class="play-muted"></p><p id="serve-status"></p>
-      <p id="feedback" role="status">Swing as the ball approaches your side.</p>
+      <div class="scoreboard">
+        <div class="score-row" data-player="1"><span id="name-1"></span><strong id="points-1">0</strong><small id="games-1">G 0</small></div>
+        <div class="score-row" data-player="2"><span id="name-2"></span><strong id="points-2">0</strong><small id="games-2">G 0</small></div>
+      </div>
+      <p id="serve-status"></p><p id="feedback" role="status">Swing as the ball approaches your side.</p>
       <details><summary>Court controls</summary><p id="connection"></p>
       <label><input id="auto" type="checkbox" checked> Automatic movement</label>
       <label id="bot-label"><input id="bot" type="checkbox" checked> Player 2 bot</label>
@@ -61,9 +62,12 @@ async function main(): Promise<void> {
         el('name-2').textContent = `P2 · ${names[1]}`;
         el('points-1').textContent = String(score.player1);
         el('points-2').textContent = String(score.player2);
-        el('games').textContent = `Games ${score.roundsPlayer1} – ${score.roundsPlayer2}`;
+        el('games-1').textContent = `G ${score.roundsPlayer1}`;
+        el('games-2').textContent = `G ${score.roundsPlayer2}`;
+        const ballData = world.ball.userData as BallUserData;
+        const servingPlayer = ballData.servingPlayer === 'player1' ? 'P1' : 'P2';
         el('serve-status').textContent = lobbyPaused ? 'Match paused' :
-            (world.ball.userData as BallUserData).isWaitingForServe ? 'P1 · swing to serve' : 'Rally in play';
+            ballData.isWaitingForServe ? `${servingPlayer} · swing to serve` : 'Rally in play';
     };
     const receiveState = (event: MessageEvent): void => {
         if (event.source !== window.parent || event.origin !== location.origin ||

@@ -9,6 +9,7 @@ export interface BallUserData {
     pendingVelocity: THREE.Vector3;
     gravity: number;
     isWaitingForServe: boolean;   // Tracks if the ball is held/waiting
+    servingPlayer: BallPlayer;
     waitingForRacketHit: boolean;
     servePosition: THREE.Vector3; // Default position to reset to
     slideTimer?: number;
@@ -37,6 +38,7 @@ export function createBall(x: number, y: number, z: number): THREE.Mesh {
         pendingVelocity: new THREE.Vector3(0, 0, 0),
         gravity: 0.006,                       // Downward pull per frame
         isWaitingForServe: true,
+        servingPlayer: 'player1',
         waitingForRacketHit: false,
         servePosition: new THREE.Vector3(x, y, z),
         bounceCount: 0,
@@ -100,6 +102,8 @@ export function resetBallForServe(
     onPointScored?.(pointWinner, pointLoser);
 
     // Reset ball state for serve
+    userData.servingPlayer = userData.servingPlayer === 'player1' ? 'player2' : 'player1';
+    userData.servePosition.z = userData.servingPlayer === 'player1' ? 10 : -10;
     userData.isWaitingForServe = true;
     userData.velocity.set(0, 0, 0);
     userData.pendingVelocity.set(0, 0, 0);
