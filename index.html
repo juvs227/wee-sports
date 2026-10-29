@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Modular Three.js Project</title>
+    <link rel="stylesheet" href="./src/Menu/css/menu.css" />
     <style>
         body { margin: 0; overflow: hidden; }
         canvas { display: block; }
@@ -11,6 +12,14 @@
 </head>
 <body>
     <div id="scene-container"></div>
+    <div id="pause-menu" hidden>
+      <div class="panel" role="dialog" aria-modal="true" aria-labelledby="pause-title">
+        <h2 id="pause-title">Paused</h2>
+        <button id="resume">Resume</button>
+        <button id="reset">Reset</button>
+        <button id="quit">Quit</button>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
