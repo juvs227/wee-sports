@@ -338,8 +338,8 @@ export class GameLogic {
             this.autoTargets[number - 1] = target;
             const marker = this.targetMarkers[number - 1];
             marker.visible = (this.autoPositionEnabled || (number === 2 && this.botEnabled)) &&
-                this.showHitboxes && !data.isWaitingForServe;
-            marker.position.set(target, 0.075, player.group.position.z);
+                this.showHitboxes;
+            marker.position.set(target, 0.12, player.group.position.z);
         }
         this.shotTargetMarker.visible = this.hasShotTarget && this.showHitboxes &&
             !(data.isWaitingForServe);
