@@ -45,24 +45,47 @@ function broadcastLobby(code) {
   io.to(code).emit(EVENTS.LOBBY_UPDATE, store.lobby(code));
 }
 
-/** code -> the timeout that ends that room's countdown. */
-const countdownTimers = new Map();
-
-function clearCountdownTimer(code) {
-  clearTimeout(countdownTimers.get(code));
-  countdownTimers.delete(code);
+/**
+ * One timeout per room, for whichever deadline is running. The store decides
+ * whether a deadline has passed; a timer only wakes it up, so a stale one is
+ * harmless.
+ */
+function roomTimers() {
+  const timers = new Map();
+  return {
+    clear(code) {
+      clearTimeout(timers.get(code));
+      timers.delete(code);
+    },
+    arm(code, msLeft, onFire) {
+      this.clear(code);
+      timers.set(
+        code,
+        setTimeout(() => {
+          timers.delete(code);
+          onFire();
+        }, msLeft),
+      );
+    },
+  };
 }
 
-/** The store decides whether the deadline has passed; this only wakes it up. */
-function armCountdownTimer(code, msLeft) {
-  clearCountdownTimer(code);
-  countdownTimers.set(
-    code,
-    setTimeout(() => {
-      countdownTimers.delete(code);
-      if (store.finishCountdown(code)) broadcastLobby(code);
-    }, msLeft),
-  );
+const countdownTimers = roomTimers();
+const voteTimers = roomTimers();
+
+function armVote(code, msLeft) {
+  voteTimers.arm(code, msLeft, () => {
+    if (store.expireVote(code)) broadcastLobby(code);
+  });
+}
+
+function armCountdown(code, msLeft) {
+  countdownTimers.arm(code, msLeft, () => {
+    const opened = store.finishCountdown(code);
+    if (!opened) return;
+    armVote(code, opened.msLeft);
+    broadcastLobby(code);
+  });
 }
 
 io.on('connection', (socket) => {
@@ -70,7 +93,8 @@ io.on('connection', (socket) => {
   const drop = () => {
     const result = store.remove(socket.id);
     if (!result) return;
-    if (result.closed || result.countdownCancelled) clearCountdownTimer(result.code);
+    if (result.closed || result.countdownCancelled) countdownTimers.clear(result.code);
+    if (result.closed || result.voteCancelled) voteTimers.clear(result.code);
     if (result.closed) {
       socket.to(result.code).emit(EVENTS.ROOM_CLOSED, { code: result.code });
       io.in(result.code).socketsLeave(result.code);
@@ -115,19 +139,22 @@ io.on('connection', (socket) => {
       reply(ack, result);
       return;
     }
+    if (result.countdownStarted) armCountdown(result.code, result.msLeft);
+    if (result.countdownCancelled) countdownTimers.clear(result.code);
     reply(ack, { ok: true });
-    // Everyone, the sender included, sees who is ready (or the next phase).
+    // Everyone, the sender included, sees who is ready (or the countdown).
     broadcastLobby(result.code);
   });
 
-  socket.on(EVENTS.HOST_START, (_payload, ack) => {
-    const result = store.start(socket.id);
+  socket.on(EVENTS.TUTORIAL_VOTE, (payload, ack) => {
+    const result = store.vote(socket.id, payload);
     if (!result.ok) {
       reply(ack, result);
       return;
     }
-    armCountdownTimer(result.code, result.msLeft);
+    if (result.resolved) voteTimers.clear(result.code);
     reply(ack, { ok: true });
+    // Everyone, the voter included, sees who has voted (or the reveal).
     broadcastLobby(result.code);
   });
 

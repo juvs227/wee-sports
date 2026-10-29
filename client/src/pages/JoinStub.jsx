@@ -17,6 +17,7 @@ import {
   normalizeCode,
 } from '@wee/shared/protocol.js';
 import { PhoneReady } from '../components/PhoneReady.jsx';
+import { PhoneVote } from '../components/PhoneVote.jsx';
 import { StubBanner } from '../components/StubBanner.jsx';
 import { errorText } from '../lib/errors.js';
 import { cancelLeave, leaveSoon, request, socket } from '../lib/socket.js';
@@ -46,7 +47,7 @@ export default function JoinStub() {
   const [code, setCode] = useState(() => normalizeCode(params.get('code')));
   const [name, setName] = useState(loadName);
   const [seat, setSeat] = useState(null);
-  // The latest lobby snapshot: players, phase, and who is ready.
+  // The latest lobby snapshot: players, phase, who is ready, and the tutorial vote.
   const [lobby, setLobby] = useState(null);
   const [error, setError] = useState(null);
   const [joining, setJoining] = useState(false);
@@ -93,7 +94,7 @@ export default function JoinStub() {
     seated.current = true;
     saveName(cleanName(name));
     setSeat(result);
-    // Taking the last seat can start the ready check, so keep the whole snapshot.
+    // Keep the whole snapshot: players, phase, who is ready.
     setLobby(result);
   }
 
@@ -125,10 +126,10 @@ export default function JoinStub() {
             </p>
           </div>
         </div>
-        {phase === PHASES.LOBBY ? (
-          <p className="stub__status">Waiting for the host to start…</p>
-        ) : (
+        {phase === PHASES.LOBBY || phase === PHASES.COUNTDOWN ? (
           <PhoneReady lobby={lobby} slot={seat.slot} />
+        ) : (
+          <PhoneVote lobby={lobby} slot={seat.slot} />
         )}
 
         <h2>In this lobby</h2>

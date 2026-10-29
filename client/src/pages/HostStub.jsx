@@ -2,17 +2,20 @@
  * Placeholder TV lobby. Functional only: the TV display owner restyles and
  * owns this page. It exists to prove the join works end to end — code, QR,
  * link, and seats that fill in live.
+ *
+ * Nobody touches the TV once the lobby is open. Phones press Ready; when all
+ * four are ready the Play slot counts down by itself, then the tutorial vote
+ * takes over.
  */
 
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { EVENTS, MAX_PLAYERS, PHASES } from '@wee/shared/protocol.js';
+import { EVENTS, PHASES } from '@wee/shared/protocol.js';
 import { QrCode } from '../components/QrCode.jsx';
 import { StubBanner } from '../components/StubBanner.jsx';
 import { TvCountdown } from '../components/TvCountdown.jsx';
 import { TvReady } from '../components/TvReady.jsx';
-import { TvTutorial } from '../components/TvTutorial.jsx';
-import { errorText } from '../lib/errors.js';
+import { TvVote } from '../components/TvVote.jsx';
 import { canReachFromPhones, joinUrl } from '../lib/joinUrl.js';
 import { cancelLeave, leaveSoon, request, socket } from '../lib/socket.js';
 import { sportName } from '../lib/sports.js';
@@ -22,8 +25,6 @@ export default function HostStub() {
   const navigate = useNavigate();
   const [lobby, setLobby] = useState(null);
   const [closed, setClosed] = useState(false);
-  const [starting, setStarting] = useState(false);
-  const [startError, setStartError] = useState(null);
 
   useEffect(() => {
     cancelLeave(EVENTS.HOST_CLOSE);
@@ -54,19 +55,6 @@ export default function HostStub() {
     };
   }, [code]);
 
-  // A failed Play (say, someone left first) is old news once the phase moves.
-  const phase = lobby?.phase;
-  useEffect(() => setStartError(null), [phase]);
-
-  async function play() {
-    setStarting(true);
-    setStartError(null);
-    const result = await request(EVENTS.HOST_START, {});
-    setStarting(false);
-    // On success the lobby update switches the screen to the countdown.
-    if (!result.ok) setStartError(result.error);
-  }
-
   if (closed) {
     return (
       <main className="stub">
@@ -92,15 +80,13 @@ export default function HostStub() {
     );
   }
 
-  if (lobby.phase === PHASES.COUNTDOWN) return <TvCountdown lobby={lobby} />;
-  if (lobby.phase === PHASES.TUTORIAL) return <TvTutorial lobby={lobby} />;
+  // From the vote on, the vote screen owns the TV. The tutorial and game
+  // screens don't exist yet, so its reveal is also the end state for both.
+  if (lobby.phase !== PHASES.LOBBY && lobby.phase !== PHASES.COUNTDOWN) {
+    return <TvVote lobby={lobby} />;
+  }
 
   const url = joinUrl(code);
-  const seats = Array.from(
-    { length: MAX_PLAYERS },
-    (_, slot) => lobby.players.find((player) => player.slot === slot) ?? null,
-  );
-  const canPlay = lobby.phase === PHASES.ALL_READY && !starting;
 
   return (
     <main className="stub">
@@ -125,46 +111,10 @@ export default function HostStub() {
         </p>
       )}
 
-      {/* The ready check happens right here in the lobby, in place of the seat list. */}
-      {lobby.phase === PHASES.LOBBY ? (
-        <>
-          <h2>
-            Players {lobby.players.length}/{MAX_PLAYERS}
-          </h2>
-          <ul className="seats" aria-live="polite">
-            {seats.map((player, slot) => (
-              <li key={slot} className="seat" data-empty={player === null}>
-                <span
-                  className="seat__badge"
-                  data-slot={slot}
-                  style={player ? { '--player': `var(--p${slot + 1})` } : undefined}
-                >
-                  P{slot + 1}
-                </span>
-                {player ? player.name : 'Open seat'}
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : (
-        <TvReady lobby={lobby} />
-      )}
-
-      {startError ? (
-        <p className="alert" role="alert">
-          {errorText(startError)}
-        </p>
-      ) : null}
+      <TvReady lobby={lobby} />
 
       <div className="stub__actions">
-        <button
-          type="button"
-          className="btn btn--primary btn--play"
-          disabled={!canPlay}
-          onClick={play}
-        >
-          {starting ? 'Starting…' : 'Play'}
-        </button>
+        <TvCountdown lobby={lobby} />
         <button type="button" className="btn btn--ghost" onClick={() => navigate('/')}>
           Close lobby
         </button>

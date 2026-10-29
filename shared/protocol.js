@@ -20,10 +20,12 @@ export const CODE_LENGTH = 4;
 export const MAX_PLAYERS = 4;
 export const NAME_MAX = 12;
 
-/** The ready check starts when the lobby reaches this many players. */
-export const READY_AT_PLAYERS = 4;
-/** The 5, 4, 3, 2, 1 after the TV presses Play. */
+/** The countdown starts once this many players are in and every one is ready. */
+export const PLAYERS_TO_START = 4;
+/** The 5, 4, 3, 2, 1 once everyone is ready. */
 export const COUNTDOWN_SECONDS = 5;
+/** How long the tutorial vote stays open. Anyone who hasn't voted by then counts as No. */
+export const VOTE_SECONDS = 20;
 
 /** Sports a lobby can be opened for. Art and copy live in client/src/lib/sports.js. */
 export const OPEN_SPORTS = ['tennis'];
@@ -31,26 +33,34 @@ export const OPEN_SPORTS = ['tennis'];
 /**
  * Where a lobby is:
  *
- *   'lobby' -> 'ready' -> 'all-ready' -> (TV presses Play) -> 'countdown' -> 'tutorial'
+ *   'lobby' -> (everyone ready) -> 'countdown' -> 'vote' -> 'tutorial' | 'game'
  *
- * A player leaving anywhere before 'tutorial' sends it back to 'lobby'.
+ * Nobody touches the TV: phones press Ready and vote. Un-readying or leaving
+ * during the countdown, or leaving during the vote, sends it back to 'lobby'.
  */
 export const PHASES = {
   LOBBY: 'lobby',
-  READY: 'ready',
-  ALL_READY: 'all-ready',
   COUNTDOWN: 'countdown',
+  VOTE: 'vote',
   TUTORIAL: 'tutorial',
+  GAME: 'game',
 };
 
 /**
  * Every lobby snapshot below has this shape:
  *
- *   { code, sport, phase, players: [{ slot, name, ready }], countdown }
+ *   { code, sport, phase, players: [{ slot, name, ready }], countdown, vote }
  *
- * ready is always false outside the 'ready' phase. countdown is null except
- * in 'countdown', where it is { msLeft }: time remaining, not a timestamp, so
- * clock skew between devices doesn't matter.
+ * ready can only be true in 'lobby' and 'countdown'.
+ *
+ * countdown is null except in 'countdown', where it is { msLeft }.
+ *
+ * vote is null until the vote opens. While it is open it says who has voted
+ * but not what they picked: { msLeft, voted: [slot] }. Once resolved, it
+ * reveals every pick: { picks: [{ slot, pick: 'yes' | 'no' | 'none' }] }.
+ *
+ * msLeft is time remaining, not a timestamp, so clock skew between devices
+ * doesn't matter.
  */
 export const EVENTS = {
   /** TV -> server: open a lobby. Ack: { ok, ...snapshot }. */
@@ -61,12 +71,12 @@ export const EVENTS = {
   LOBBY_GET: 'lobby:get',
   /** Phone -> server: take a seat. Ack: { ok, slot, name, ...snapshot }. */
   PLAYER_JOIN: 'player:join',
-  /** TV -> server: Play, once everyone is ready. Starts the countdown. Ack: { ok }. */
-  HOST_START: 'host:start',
   /** Phone -> server: give the seat back. */
   PLAYER_LEAVE: 'player:leave',
-  /** Phone -> server: { ready: boolean }. Can be toggled until everyone is ready. Ack: { ok }. */
+  /** Phone -> server: { ready: boolean }. Toggles in the lobby and during the countdown. Ack: { ok }. */
   PLAYER_READY: 'player:ready',
+  /** Phone -> server: { watch: boolean }. One final vote per player. Ack: { ok }. */
+  TUTORIAL_VOTE: 'tutorial:vote',
   /** Server -> everyone in a lobby: the snapshot. */
   LOBBY_UPDATE: 'lobby:update',
   /** Server -> phones: the TV left, so there is nothing left to control. */
@@ -82,10 +92,18 @@ export const ERRORS = {
   SERVER_BUSY: 'server-busy',
   IN_PROGRESS: 'in-progress',
   NOT_PLAYER: 'not-player',
-  NO_READY_CHECK: 'no-ready-check',
+  READY_LOCKED: 'ready-locked',
   BAD_READY: 'bad-ready',
-  NOT_HOST: 'not-host',
-  NOT_ALL_READY: 'not-all-ready',
+  NO_VOTE: 'no-vote',
+  BAD_VOTE: 'bad-vote',
+  ALREADY_VOTED: 'already-voted',
+};
+
+/** What a resolved vote shows for each player. */
+export const PICKS = {
+  YES: 'yes',
+  NO: 'no',
+  NONE: 'none',
 };
 
 export function isRoomCode(value) {

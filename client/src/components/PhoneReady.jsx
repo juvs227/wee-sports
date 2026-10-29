@@ -1,11 +1,12 @@
 /**
- * The phone's side of the ready check: one big toggle and the count, then the
- * wait for Play, the countdown, and the tutorial. Kept out of JoinStub so the
- * phone display owner can restyle it on its own.
+ * The phone's side of the lobby: one big Ready toggle and the count, from the
+ * moment the player joins. Once everyone is ready the countdown shows here
+ * too, and the toggle stays so a player can still back out. Kept out of
+ * JoinStub so the phone display owner can restyle it on its own.
  */
 
 import { useState } from 'react';
-import { EVENTS, PHASES, READY_AT_PLAYERS } from '@wee/shared/protocol.js';
+import { EVENTS, PHASES, PLAYERS_TO_START } from '@wee/shared/protocol.js';
 import { errorText } from '../lib/errors.js';
 import { request } from '../lib/socket.js';
 import { useCountdown } from '../lib/useCountdown.js';
@@ -14,40 +15,13 @@ import { useCountdown } from '../lib/useCountdown.js';
 export function PhoneReady({ lobby, slot }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
-  const secondsLeft = useCountdown(lobby.countdown?.msLeft ?? null);
-
-  if (lobby.phase === PHASES.ALL_READY) {
-    return (
-      <section className="phone-ready" aria-live="polite">
-        <h2 className="phone-ready__title">Everyone&rsquo;s ready!</h2>
-        <p className="stub__status">Waiting for the TV to press Play…</p>
-      </section>
-    );
-  }
-
-  if (lobby.phase === PHASES.COUNTDOWN) {
-    return (
-      <section className="phone-ready">
-        <h2 className="phone-ready__title" role="timer">
-          {secondsLeft > 0 ? `Starting in ${secondsLeft}…` : 'Go!'}
-        </h2>
-        <p className="stub__status">Look at the TV</p>
-      </section>
-    );
-  }
-
-  if (lobby.phase === PHASES.TUTORIAL) {
-    return (
-      <section className="phone-ready" aria-live="polite">
-        <h2 className="phone-ready__title">Tutorial time</h2>
-        <p className="stub__status">Watch the TV</p>
-      </section>
-    );
-  }
+  const counting = lobby.phase === PHASES.COUNTDOWN;
+  const secondsLeft = useCountdown(counting ? lobby.countdown.msLeft : null);
 
   // The snapshot is the source of truth, so the button always matches the TV.
   const ready = lobby.players.find((player) => player.slot === slot)?.ready ?? false;
   const readyCount = lobby.players.filter((player) => player.ready).length;
+  const missing = PLAYERS_TO_START - lobby.players.length;
 
   async function toggle() {
     setSending(true);
@@ -59,6 +33,12 @@ export function PhoneReady({ lobby, slot }) {
 
   return (
     <section className="phone-ready">
+      {counting ? (
+        <h2 className="phone-ready__title" role="timer">
+          {secondsLeft > 0 ? `Starting in ${secondsLeft}…` : 'Go!'}
+        </h2>
+      ) : null}
+
       {error ? (
         <p className="alert" role="alert">
           {errorText(error)}
@@ -75,7 +55,8 @@ export function PhoneReady({ lobby, slot }) {
         {ready ? 'Ready ✓ (tap to undo)' : 'Ready'}
       </button>
       <p className="phone-ready__count" aria-live="polite">
-        {readyCount}/{READY_AT_PLAYERS} ready
+        {readyCount}/{PLAYERS_TO_START} ready
+        {missing > 0 ? ` · waiting for ${missing} more ${missing === 1 ? 'player' : 'players'}` : ''}
       </p>
     </section>
   );

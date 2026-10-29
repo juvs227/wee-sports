@@ -9,9 +9,9 @@
  *
  * Ids are opaque strings (socket ids in production).
  *
- * There are no timers in here either. The countdown deadline is read from an
- * injectable clock, and index.js owns the setTimeout that calls
- * finishCountdown().
+ * There are no timers in here either. Deadlines are read from an injectable
+ * clock, and index.js owns the setTimeouts that call finishCountdown() and
+ * expireVote().
  */
 
 import {
@@ -23,25 +23,20 @@ import {
   NAME_MAX,
   OPEN_SPORTS,
   PHASES,
+  PICKS,
+  PLAYERS_TO_START,
   PROTOCOL_VERSION,
-  READY_AT_PLAYERS,
+  VOTE_SECONDS,
   cleanName,
   isRoomCode,
 } from '@wee/shared/protocol.js';
 
 const MAX_CODE_ATTEMPTS = 50;
+const COUNTDOWN_MS = COUNTDOWN_SECONDS * 1000;
+const VOTE_MS = VOTE_SECONDS * 1000;
 
-/**
- * Where a lobby goes once every player is ready. The one place to change if
- * something (the tutorial vote, say) should come between the ready check and
- * the TV's Play button.
- */
-function nextPhaseAfterReady() {
-  return PHASES.ALL_READY;
-}
-
-/** Phases where a full lobby is part of the deal, so a leaver sends everyone back to 'lobby'. */
-const NEEDS_FULL_LOBBY = new Set([PHASES.READY, PHASES.ALL_READY, PHASES.COUNTDOWN]);
+/** Ready can be changed while waiting and during the countdown, which it can cancel. */
+const READY_PHASES = new Set([PHASES.LOBBY, PHASES.COUNTDOWN]);
 
 export function randomCode(random = Math.random) {
   let code = '';
@@ -53,9 +48,12 @@ export function randomCode(random = Math.random) {
 
 export class RoomStore {
   /**
-   * code -> { code, sport, hostId, phase, players: Map<id, { slot, name, ready }>, deadline }
+   * code -> { code, sport, hostId, phase, players: Map<id, { slot, name, ready }>, countdownEnds, vote }
    *
-   * deadline is when the countdown ends, or null when none is running.
+   * countdownEnds is when the countdown finishes, or null when none is running.
+   * vote is null until it opens, { deadline, picks: Map<id, boolean> } while
+   * open, and { picks: [{ slot, pick }] } once resolved, frozen so a later
+   * leaver doesn't erase what they picked.
    */
   #rooms = new Map();
   /** id -> { code, role: 'host' | 'player' } */
@@ -89,7 +87,15 @@ export class RoomStore {
     }
     if (!code) return { ok: false, error: ERRORS.SERVER_BUSY };
 
-    this.#rooms.set(code, { code, sport, hostId, phase: PHASES.LOBBY, players: new Map(), deadline: null });
+    this.#rooms.set(code, {
+      code,
+      sport,
+      hostId,
+      phase: PHASES.LOBBY,
+      players: new Map(),
+      countdownEnds: null,
+      vote: null,
+    });
     this.#members.set(hostId, { code, role: 'host' });
     return { ok: true, ...this.lobby(code) };
   }
@@ -104,60 +110,85 @@ export class RoomStore {
 
     const slot = this.#freeSlot(room);
     if (slot === null) return { ok: false, error: ERRORS.ROOM_FULL };
-    // Seats only change in the lobby. A newcomer can't drop into a ready check
-    // or a game that has started.
+    // Seats only change in the lobby. A newcomer can't drop into a countdown,
+    // a vote, or a game that has started.
     if (room.phase !== PHASES.LOBBY) return { ok: false, error: ERRORS.IN_PROGRESS };
 
     const unique = this.#uniqueName(room, cleaned);
     room.players.set(playerId, { slot, name: unique, ready: false });
     this.#members.set(playerId, { code, role: 'player' });
-    if (room.players.size >= READY_AT_PLAYERS) room.phase = PHASES.READY;
     return { ok: true, slot, name: unique, ...this.lobby(code) };
   }
 
   /**
-   * Ready or not ready. Players can change their mind until everyone is
-   * ready; then the lobby moves on and the result says so.
+   * Ready or not ready, from the moment a player joins. When the lobby is full
+   * and everyone is ready, the countdown starts; anyone un-readying during it
+   * cancels it. The result says which happened, so index.js can run the timer.
    */
   setReady(playerId, payload) {
     const member = this.#members.get(playerId);
     if (member?.role !== 'player') return { ok: false, error: ERRORS.NOT_PLAYER };
     const room = this.#rooms.get(member.code);
-    if (room?.phase !== PHASES.READY) return { ok: false, error: ERRORS.NO_READY_CHECK };
+    if (!READY_PHASES.has(room?.phase)) return { ok: false, error: ERRORS.READY_LOCKED };
     const ready = payload?.ready;
     if (typeof ready !== 'boolean') return { ok: false, error: ERRORS.BAD_READY };
 
     room.players.get(playerId).ready = ready;
-    const advanced = [...room.players.values()].every((player) => player.ready);
-    if (advanced) {
-      this.#clearReady(room);
-      room.phase = nextPhaseAfterReady();
+
+    if (room.phase === PHASES.LOBBY && this.#everyoneReady(room)) {
+      room.phase = PHASES.COUNTDOWN;
+      room.countdownEnds = this.#now() + COUNTDOWN_MS;
+      return { ok: true, code: room.code, countdownStarted: true, msLeft: COUNTDOWN_MS };
     }
-    return { ok: true, code: room.code, advanced };
-  }
-
-  /** The TV's Play button. Only the room's TV, and only once everyone is ready. */
-  start(hostId) {
-    const member = this.#members.get(hostId);
-    if (member?.role !== 'host') return { ok: false, error: ERRORS.NOT_HOST };
-    const room = this.#rooms.get(member.code);
-    if (room?.phase !== PHASES.ALL_READY) return { ok: false, error: ERRORS.NOT_ALL_READY };
-
-    room.phase = PHASES.COUNTDOWN;
-    room.deadline = this.#now() + COUNTDOWN_SECONDS * 1000;
-    return { ok: true, code: room.code, msLeft: COUNTDOWN_SECONDS * 1000 };
+    if (room.phase === PHASES.COUNTDOWN && !ready) {
+      this.#cancelCountdown(room);
+      return { ok: true, code: room.code, countdownCancelled: true };
+    }
+    return { ok: true, code: room.code };
   }
 
   /**
-   * Moves on to the tutorial once the countdown's deadline has passed.
-   * Returns null and changes nothing otherwise, so a stale or early timer is
-   * harmless.
+   * Opens the tutorial vote once the countdown's deadline has passed. Returns
+   * null and changes nothing otherwise, so a stale or early timer is harmless.
    */
   finishCountdown(code) {
     const room = this.#rooms.get(code);
-    if (room?.phase !== PHASES.COUNTDOWN || this.#now() < room.deadline) return null;
-    room.phase = PHASES.TUTORIAL;
-    room.deadline = null;
+    if (room?.phase !== PHASES.COUNTDOWN || this.#now() < room.countdownEnds) return null;
+    room.countdownEnds = null;
+    this.#clearReady(room);
+    room.phase = PHASES.VOTE;
+    room.vote = { deadline: this.#now() + VOTE_MS, picks: new Map() };
+    return { code, msLeft: VOTE_MS };
+  }
+
+  /**
+   * One final tutorial vote. watch: true is Yes. The vote resolves as soon as
+   * every player has voted, and the result says whether it did.
+   */
+  vote(playerId, payload) {
+    const member = this.#members.get(playerId);
+    if (member?.role !== 'player') return { ok: false, error: ERRORS.NOT_PLAYER };
+    const room = this.#rooms.get(member.code);
+    if (room?.phase !== PHASES.VOTE) return { ok: false, error: ERRORS.NO_VOTE };
+    const watch = payload?.watch;
+    if (typeof watch !== 'boolean') return { ok: false, error: ERRORS.BAD_VOTE };
+    if (room.vote.picks.has(playerId)) return { ok: false, error: ERRORS.ALREADY_VOTED };
+
+    room.vote.picks.set(playerId, watch);
+    const resolved = room.vote.picks.size === room.players.size;
+    if (resolved) this.#resolveVote(room);
+    return { ok: true, code: room.code, resolved };
+  }
+
+  /**
+   * Resolves the vote once its deadline has passed; anyone who hasn't voted
+   * counts as No. Returns null and changes nothing otherwise, so a stale or
+   * early timer is harmless.
+   */
+  expireVote(code) {
+    const room = this.#rooms.get(code);
+    if (room?.phase !== PHASES.VOTE || this.#now() < room.vote.deadline) return null;
+    this.#resolveVote(room);
     return { code };
   }
 
@@ -169,8 +200,15 @@ export class RoomStore {
       .map(({ slot, name, ready }) => ({ slot, name, ready }))
       .sort((a, b) => a.slot - b.slot);
     const countdown =
-      room.phase === PHASES.COUNTDOWN ? { msLeft: Math.max(0, room.deadline - this.#now()) } : null;
-    return { code: room.code, sport: room.sport, phase: room.phase, players, countdown };
+      room.phase === PHASES.COUNTDOWN ? { msLeft: Math.max(0, room.countdownEnds - this.#now()) } : null;
+    return {
+      code: room.code,
+      sport: room.sport,
+      phase: room.phase,
+      players,
+      countdown,
+      vote: this.#voteView(room),
+    };
   }
 
   /** The code this id is hosting, or null. */
@@ -183,7 +221,8 @@ export class RoomStore {
    * Takes an id out of whatever room it is in.
    *
    * Returns null if it wasn't in one. A host leaving closes the room, and the
-   * result lists the players to tell. A player leaving frees their seat.
+   * result lists the players to tell. A player leaving frees their seat, and
+   * cancels a countdown or an open vote, which both need a full lobby.
    */
   remove(id) {
     const member = this.#members.get(id);
@@ -201,20 +240,55 @@ export class RoomStore {
     }
 
     room.players.delete(id);
-    // Everything from the ready check to the countdown needs a full lobby, so a
-    // leaver ends it. The next player to fill the lobby starts a fresh check.
-    if (NEEDS_FULL_LOBBY.has(room.phase)) {
-      const countdownCancelled = room.phase === PHASES.COUNTDOWN;
+    // Everyone else stays ready, so a new 4th player who readies up restarts
+    // the countdown straight away.
+    if (room.phase === PHASES.COUNTDOWN) {
+      this.#cancelCountdown(room);
+      return { code: room.code, closed: false, countdownCancelled: true };
+    }
+    // Everyone has to get a say, so a leaver cancels the vote.
+    if (room.phase === PHASES.VOTE) {
       room.phase = PHASES.LOBBY;
-      room.deadline = null;
-      this.#clearReady(room);
-      if (countdownCancelled) return { code: room.code, closed: false, countdownCancelled };
+      room.vote = null;
+      return { code: room.code, closed: false, voteCancelled: true };
     }
     return { code: room.code, closed: false };
   }
 
+  #everyoneReady(room) {
+    return (
+      room.players.size >= PLAYERS_TO_START && [...room.players.values()].every((player) => player.ready)
+    );
+  }
+
+  #cancelCountdown(room) {
+    room.phase = PHASES.LOBBY;
+    room.countdownEnds = null;
+  }
+
   #clearReady(room) {
     for (const player of room.players.values()) player.ready = false;
+  }
+
+  /** Any Yes means the tutorial. Picks are frozen by slot for the reveal. */
+  #resolveVote(room) {
+    const { picks } = room.vote;
+    const frozen = [...room.players.entries()]
+      .map(([id, { slot }]) => {
+        if (!picks.has(id)) return { slot, pick: PICKS.NONE };
+        return { slot, pick: picks.get(id) ? PICKS.YES : PICKS.NO };
+      })
+      .sort((a, b) => a.slot - b.slot);
+    room.phase = frozen.some(({ pick }) => pick === PICKS.YES) ? PHASES.TUTORIAL : PHASES.GAME;
+    room.vote = { picks: frozen };
+  }
+
+  /** While the vote is open, only who has voted. Never what they picked. */
+  #voteView(room) {
+    if (!room.vote) return null;
+    if (room.phase !== PHASES.VOTE) return { picks: room.vote.picks.map((entry) => ({ ...entry })) };
+    const voted = [...room.vote.picks.keys()].map((id) => room.players.get(id).slot).sort((a, b) => a - b);
+    return { msLeft: Math.max(0, room.vote.deadline - this.#now()), voted };
   }
 
   /** Lowest open seat, so a seat freed by a leaver is the next one filled. */
