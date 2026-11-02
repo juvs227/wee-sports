@@ -19,7 +19,7 @@ import { planCourtShot } from './shotTrajectory';
 import { chooseBotStroke, type BotStroke } from './botPlayer';
 import { predictBaselineIntercept, lateralSteering } from './autoPosition';
 import { sweptRacketContact, contactWindowCrossed } from './components/racketContact';
-import { ScoreSystem, type Score } from './scoreSystem';
+import { ScoreSystem, type Score, type PointResult } from './scoreSystem';
 
 const AUTO_TRACKING_SPEED = 0.75;
 const PHYSICS_STEP = 1 / 120;
@@ -39,6 +39,11 @@ interface PendingSwing {
     power: number;
 }
 
+export interface TennisGameEvent {
+    kind: 'hit' | 'bounce' | 'point' | 'game' | 'set' | 'match' | 'serve';
+    player: 1 | 2;
+}
+
 export interface GameLogicOptions {
     scene: THREE.Scene;
     player1: PlayerController;
@@ -48,6 +53,7 @@ export interface GameLogicOptions {
     shotTargetMarker: THREE.Mesh;
     onSwingFeedback: () => (message: string) => void;
     onHit?: (player: 1 | 2) => void;
+    onGameEvent?: (event: TennisGameEvent) => void;
 }
 
 export class GameLogic {
@@ -58,6 +64,7 @@ export class GameLogic {
     private readonly shotTargetMarker: THREE.Mesh;
     private readonly getSwingFeedback: () => (message: string) => void;
     private readonly onHit: (player: 1 | 2) => void;
+    private readonly onGameEvent: (event: TennisGameEvent) => void;
     private readonly scoreSystem = new ScoreSystem();
     private showHitboxes = false;
     private botAttempted = false;
@@ -85,6 +92,7 @@ export class GameLogic {
         this.shotTargetMarker = options.shotTargetMarker;
         this.getSwingFeedback = options.onSwingFeedback;
         this.onHit = options.onHit ?? (() => {});
+        this.onGameEvent = options.onGameEvent ?? (() => {});
     }
 
     public setPlayerInput(input: PlayerInput, player: 1 | 2): void {
@@ -122,7 +130,7 @@ export class GameLogic {
     }
 
     public update(delta: number): void {
-        if (!Number.isFinite(delta) || delta <= 0) return;
+        if (!Number.isFinite(delta) || delta <= 0 || this.scoreSystem.isComplete) return;
         // Use the same integration step as the trajectory/contact forecast,
         // including on 144 Hz displays. Rendering frequency must not change a hit.
         this.accumulatedTime += Math.min(delta, .05);
@@ -139,12 +147,13 @@ export class GameLogic {
         player?: 1 | 2;
         power?: number;
     }): void {
+        if (this.scoreSystem.isComplete) return;
         // The lobby has no keyboard serve button. Place a held serve at the
         // existing animation's strike pose, then let normal contact release it.
         const data = this.ball.userData as BallUserData;
         if (data.isWaitingForServe || data.waitingForRacketHit) {
             if (data.serveDelayRemaining > 0) {
-                this.feedback(`Wait ${Math.ceil(data.serveDelayRemaining)} seconds before serving`);
+                this.feedback('Point finished · get ready to serve');
                 return;
             }
             const servingPlayer = data.servingPlayer === 'player1' ? 1 : 2;
@@ -197,6 +206,7 @@ export class GameLogic {
     }
 
     public feedPracticeBall(backhand = false, number: 1 | 2 = 1): void {
+        if (this.scoreSystem.isComplete) return;
         const player = number === 1 ? this.player1 : this.player2;
         const hitbox = player.hitbox;
         if (!hitbox) {
@@ -233,9 +243,10 @@ export class GameLogic {
     }
 
     public playerServe(playerNumber: 1 | 2 = 1): void {
+        if (this.scoreSystem.isComplete) return;
         const data = this.ball.userData as BallUserData;
         if (data.serveDelayRemaining > 0) {
-            this.feedback(`Wait ${Math.ceil(data.serveDelayRemaining)} seconds before serving`);
+            this.feedback('Point finished · get ready to serve');
             return;
         }
         const servingPlayer = data.servingPlayer === 'player1' ? 1 : 2;
@@ -254,6 +265,7 @@ export class GameLogic {
 
     public startRound(): void {
         this.clearPendingInputs();
+        this.scoreSystem.reset();
         const data = this.ball.userData as BallUserData;
         data.isWaitingForServe = true;
         data.waitingForRacketHit = false;
@@ -263,19 +275,19 @@ export class GameLogic {
         data.firstBounceInBounds = false;
         data.lastHitBy = undefined;
         data.slideTimer = 0;
-        data.serveDelayRemaining = 3;
+        data.serveDelayRemaining = 0;
         data.servingPlayer = 'player1';
         data.servePosition.z = 10;
         this.ball.position.copy(data.servePosition);
         this.botAttempted = false;
         this.hasShotTarget = false;
-        this.feedback('Round started · Player 1 serve');
-        this.playerServe();
+        this.feedback('New match · Player 1 serves when ready');
     }
 
     private hasShotTarget = false;
 
     private updateStep(step: number): void {
+        if (this.scoreSystem.isComplete) return;
         const previousBall = this.ball.position.clone();
         const pose1 = this.player1.hitbox?.pose();
         const pose2 = this.player2.hitbox?.pose();
@@ -295,13 +307,27 @@ export class GameLogic {
             data.serveDelayRemaining = Math.max(0, data.serveDelayRemaining - step);
         }
         const wasWaiting = data.isWaitingForServe;
-        updateBallMotion(this.ball, step, (winner, loser) =>
-            this.scoreSystem.awardPoint(winner, loser));
+        const results: PointResult[] = [];
+        updateBallMotion(this.ball, step, (winner, loser) => {
+            const result = this.scoreSystem.awardPoint(winner, loser);
+            const score = this.scoreSystem.getScore();
+            data.servingPlayer = score.server;
+            if (result) results.push(result);
+        }, () => this.onGameEvent({ kind: 'bounce', player: data.lastHitBy === 'player2' ? 2 : 1 }));
         const resetDuringStep = !wasWaiting && data.isWaitingForServe;
-        if (resetDuringStep) this.pendingSwings = [null, null];
-        if (resetDuringStep && this.botEnabled && data.servingPlayer === 'player2' &&
-            data.serveDelayRemaining <= 0) {
-            this.swing({ label: 'Forehand', hand: 'Right', player: 2 });
+        if (resetDuringStep) {
+            this.clearPendingInputs();
+            this.botAttempted = false;
+            this.hasShotTarget = false;
+            // Listeners see the completed score and the already-reset ball,
+            // so phone state cannot briefly report a rally after a point.
+            for (const result of results) {
+                const announcement = result.kind === 'match' ? 'Game, set and match'
+                    : result.kind[0].toUpperCase() + result.kind.slice(1);
+                this.feedback(`${announcement} · Player ${result.player}`);
+                this.onGameEvent(result);
+            }
+            return;
         }
         if (data.isWaitingForServe && this.botEnabled && data.servingPlayer === 'player2' &&
             data.serveDelayRemaining <= 0 && !this.player2.isSwinging) {
@@ -535,6 +561,8 @@ export class GameLogic {
         if (!hitbox || !previousPose || !player.contactActive || player.hitConsumed) return;
         const id = this.toBallPlayer(number);
         const data = this.ball.userData as BallUserData;
+        if ((data.isWaitingForServe || data.waitingForRacketHit) &&
+            (data.serveDelayRemaining > 0 || data.servingPlayer !== id)) return;
         if (!data.isWaitingForServe && !data.waitingForRacketHit && data.lastHitBy === id) return;
         if (data.waitingForRacketHit && data.lastHitBy && data.lastHitBy !== id) return;
         if (!sweptRacketContact(hitbox.bounds, previousPose, hitbox.pose(),
@@ -547,6 +575,7 @@ export class GameLogic {
             this.feedback(`Player ${number}: Contact, but no safe court trajectory from this position`);
             return;
         }
+        const serving = data.waitingForRacketHit || data.isWaitingForServe;
         hitBall(this.ball, plan.velocity, id);
         this.hasShotTarget = true;
         this.shotTargetMarker.position.set(plan.target.x, 0.08, plan.target.z);
@@ -555,6 +584,7 @@ export class GameLogic {
         player.contactActive = false;
         this.feedback(`Player ${number}: Hit! · aim (${plan.target.x.toFixed(1)}, ${plan.target.z.toFixed(1)})`);
         this.onHit(number);
+        this.onGameEvent({ kind: serving ? 'serve' : 'hit', player: number });
     }
 
     private toBallPlayer(playerNumber: 1 | 2): BallPlayer {

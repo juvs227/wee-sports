@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { createPlayer } from '../src/World/components/player';
 import { createBall, type BallUserData } from '../src/World/components/ball';
-import { GameLogic } from '../src/World/gameLogic';
+import { GameLogic, type TennisGameEvent } from '../src/World/gameLogic';
 import { chooseBotStroke, type BotStroke } from '../src/World/botPlayer';
 import { ScoreSystem } from '../src/World/scoreSystem';
 import { predictBaselineIntercept } from '../src/World/autoPosition';
@@ -26,11 +26,13 @@ async function court() {
     (ball.userData as BallUserData).serveDelayRemaining = 0;
     scene.add(ball);
     const feedback: string[] = [];
+    const events: TennisGameEvent[] = [];
     const game = new GameLogic({ scene, player1, player2, ball,
         targetMarkers: [new THREE.Mesh(), new THREE.Mesh()], shotTargetMarker: new THREE.Mesh(),
-        onSwingFeedback: () => message => feedback.push(message) });
+        onSwingFeedback: () => message => feedback.push(message),
+        onGameEvent: event => events.push(event) });
     game.botEnabled = false;
-    return { game, ball, player1, player2, feedback };
+    return { game, ball, player1, player2, feedback, events };
 }
 
 for (const hand of ['Right', 'Left'] as const) for (const label of ['Forehand', 'Backhand'] as const) {
@@ -109,8 +111,8 @@ test.each(['Right', 'Left'] as const)('P2 %s-hand phone returns a real serve wit
     expect(feedback.some(message => message.startsWith('Player 2: Hit!')), feedback.join('; ')).toBe(true);
     expect(game.getScore().player2).toBe(15);
     expect((ball.userData as BallUserData).isWaitingForServe).toBe(true);
-    expect((ball.userData as BallUserData).servingPlayer).toBe('player2');
-    expect(ball.position.z).toBe(-10);
+    expect((ball.userData as BallUserData).servingPlayer).toBe('player1');
+    expect(ball.position.z).toBe(10);
 });
 
 test('team scoring handles deuce, advantage reversal, and a completed game', () => {
@@ -119,7 +121,63 @@ test('team scoring handles deuce, advantage reversal, and a completed game', () 
     score.awardPoint('player1', 'player2'); expect(score.getScore().player1).toBe('Adv');
     score.awardPoint('player2', 'player1'); expect(score.getScore().player1).toBe(40);
     score.awardPoint('player2', 'player1'); score.awardPoint('player2', 'player1');
-    expect(score.getScore()).toEqual({ player1: 0, player2: 0, roundsPlayer1: 0, roundsPlayer2: 1 });
+    expect(score.getScore()).toMatchObject({ player1: 0, player2: 0, roundsPlayer1: 0, roundsPlayer2: 1, server: 'player2' });
+});
+
+test('serve, bounce and point events occur once and polling does not replay them', async () => {
+    const { game, events } = await court();
+    game.swing({ label: 'Forehand', hand: 'Right', player: 1 });
+    expect(events).toEqual([]);
+    for (let i = 0; i < 1200; i++) game.update(1 / 120);
+    expect(events.filter(event => event.kind === 'serve')).toEqual([{ kind: 'serve', player: 1 }]);
+    expect(events.filter(event => event.kind === 'hit')).toEqual([]);
+    expect(events.filter(event => event.kind === 'bounce')).toHaveLength(2);
+    expect(events.filter(event => event.kind === 'point')).toEqual([{ kind: 'point', player: 1 }]);
+    const count = events.length;
+    for (let i = 0; i < 20; i++) game.getScore();
+    expect(events).toHaveLength(count);
+});
+
+test('ball reset uses the game server and match completion stops play until a rematch', async () => {
+    const { game, ball, events } = await court();
+    const data = ball.userData as BallUserData;
+    const forceSecondBounce = () => {
+        ball.position.set(0, .11, -3);
+        data.isWaitingForServe = false;
+        data.waitingForRacketHit = false;
+        data.velocity.set(0, -.1, 0);
+        data.bounceCount = 1;
+        data.firstBounceInBounds = true;
+        data.lastHitBy = 'player1';
+        game.update(1 / 120);
+    };
+    for (let i = 0; i < 3; i++) {
+        forceSecondBounce();
+        expect(data.servingPlayer).toBe('player1');
+        expect(ball.position.z).toBe(10);
+    }
+    forceSecondBounce();
+    expect(data.servingPlayer).toBe('player2');
+    expect(ball.position.z).toBe(-10);
+    expect(events.filter(event => event.kind === 'game')).toEqual([{ kind: 'game', player: 1 }]);
+    for (let i = 4; i < 48; i++) forceSecondBounce();
+    expect(game.getScore().matchWinner).toBe('player1');
+    expect(events.filter(event => event.kind === 'match')).toEqual([{ kind: 'match', player: 1 }]);
+    const final = game.getScore();
+    const finalEvents = events.length;
+    game.swing({ label: 'Forehand', hand: 'Right', player: 1 });
+    game.playerServe();
+    game.feedPracticeBall();
+    for (let i = 0; i < 300; i++) game.update(1 / 60);
+    expect(game.getScore()).toEqual(final);
+    expect(events).toHaveLength(finalEvents);
+    expect(data.isWaitingForServe).toBe(true);
+    game.startRound();
+    expect(game.getScore()).toMatchObject({ matchWinner: null, player1: 0, setsPlayer1: 0, server: 'player1' });
+    expect(data.serveDelayRemaining).toBe(0);
+    game.swing({ label: 'Forehand', hand: 'Right', player: 1 });
+    for (let i = 0; i < 120; i++) game.update(1 / 120);
+    expect(events.slice(finalEvents).some(event => event.kind === 'serve')).toBe(true);
 });
 
 // Choose when a human input arrives, not which stroke will succeed. The public

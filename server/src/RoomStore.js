@@ -34,6 +34,7 @@ import {
   isSwing,
   isRoll,
   isGameHit,
+  isTennisState,
   isController,
   playerCapacity,
 } from '@wee/shared/protocol.js';
@@ -210,7 +211,9 @@ export class RoomStore {
     }
     if (!isSwing(event)) return { ok: false, error: 'bad-swing' };
     if (room.pausedAt !== null) return { ok: false, error: ERRORS.PAUSED };
-    if (room.phase !== PHASES.TUTORIAL) return { ok: false, error: 'not-playing' };
+    if (room.phase !== PHASES.TUTORIAL || room.gameState?.phase === 'complete') {
+      return { ok: false, error: 'not-playing' };
+    }
     return { ok: true, hostSocketId: this.#members.get(room.hostId)?.socketId,
       event: { type: 'swing', id: event.id, label: event.label, hand: event.hand,
         ...(event.power === undefined ? {} : { power: event.power }), player: player.slot + 1 } };
@@ -242,14 +245,20 @@ export class RoomStore {
       event: { id: event.id, gameId: room.gameId, kind: room.sport, player: event.player } };
   }
 
-  /** The TV owns bowling simulation; only its authenticated session can publish turns. */
+  /** The TV owns simulation; only its authenticated session can publish turns. */
   setGameState(socketId, payload) {
     const member = this.#members.get(this.#sockets.get(socketId));
     const room = member && this.#rooms.get(member.code);
     if (member?.role !== 'host') return { ok: false, error: ERRORS.NOT_HOST };
-    if (room.sport !== 'bowling' || room.phase !== PHASES.TUTORIAL || payload?.gameId !== room.gameId) {
+    if (room.phase !== PHASES.TUTORIAL || payload?.gameId !== room.gameId) {
       return { ok: false, error: 'not-playing' };
     }
+    if (room.sport === 'tennis') {
+      if (!isTennisState(payload)) return { ok: false, error: 'bad-game-state' };
+      room.gameState = { phase: payload.phase, server: payload.server, winner: payload.winner };
+      return { ok: true, code: room.code };
+    }
+    if (room.sport !== 'bowling') return { ok: false, error: 'not-playing' };
     const { phase, currentPlayer, frame } = payload ?? {};
     const validPlayer = phase === 'complete' ? currentPlayer === null :
       [...room.players.values()].some(player => player.slot + 1 === currentPlayer);

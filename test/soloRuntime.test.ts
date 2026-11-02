@@ -39,10 +39,11 @@ test('solo phone serve and bot contact report actual hits without updating stati
     expect(feedback.some(message => message.startsWith('Player 2: Hit!'))).toBe(true);
     expect(updateScenery.mock.calls.length).toBe(0);
     expect(hits.slice(0, 2)).toEqual([1, 2]);
-    expect(hits.slice(2)).toContain(2);
+    expect(hits).toEqual([1, 2]);
+    expect(game.getScore().server).toBe('player1'); // Service does not change after a point.
     game.clearPendingInputs();
     for (let frame = 0; frame < 120; frame++) game.update(1 / 60);
-    expect(hits.length).toBeGreaterThanOrEqual(3);
+    expect(hits).toEqual([1, 2]);
     phonePlayer.hitbox?.dispose();
     bot.hitbox?.dispose();
 });

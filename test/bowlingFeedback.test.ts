@@ -38,3 +38,23 @@ test('gutter balls and idle racks produce no pin-impact feedback', () => {
   expect(settle(physics).gutter).toBe(true);
   expect(hits).toBe(0);
 });
+
+test('gutter feedback occurs once on entering the gutter, never on idle or rack reset', () => {
+  const physics = new BowlingPhysics();
+  let gutters = 0;
+  physics.onGutter = () => gutters++;
+  physics.roll({power: 0.65, aim: 1, spin: 0});
+  expect(gutters).toBe(0);
+  expect(settle(physics).gutter).toBe(true);
+  expect(gutters).toBe(1);
+  for (let frame = 0; frame < 60; frame++) physics.step(1 / 60);
+  physics.resetRack();
+  expect(gutters).toBe(1);
+  physics.roll({power: 0.65, aim: -1, spin: 0});
+  expect(settle(physics).gutter).toBe(true);
+  expect(gutters).toBe(2);
+  physics.resetRack();
+  physics.roll({power: 0.7, aim: 0, spin: 0});
+  expect(settle(physics).gutter).toBe(false);
+  expect(gutters).toBe(2);
+});

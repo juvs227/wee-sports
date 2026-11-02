@@ -13,7 +13,7 @@ import {
     createBall,
 } from './components/ball';
 
-import { GameLogic } from './gameLogic';
+import { GameLogic, type TennisGameEvent } from './gameLogic';
 import type { Score } from './scoreSystem';
 import type { PlayerInput } from '../Controllers/playerInput';
 import { WorldCamera } from './camera';
@@ -33,6 +33,7 @@ export class World {
 
     public onSwingFeedback: (message: string) => void = () => { };
     public onBallHit: (player: 1 | 2) => void = () => { };
+    public onGameEvent: (event: TennisGameEvent) => void = () => { };
     private readonly targetMarkers: THREE.Mesh[] = [];
     private readonly shotTargetMarker: THREE.Mesh;
     private readonly gameLogic: GameLogic;
@@ -133,6 +134,7 @@ export class World {
             shotTargetMarker: this.shotTargetMarker,
             onSwingFeedback: () => this.onSwingFeedback,
             onHit: player => this.onBallHit(player),
+            onGameEvent: event => this.onGameEvent(event),
         });
         window.addEventListener('resize', this.handleResize);
     }

@@ -39,7 +39,7 @@ export function createBall(x: number, y: number, z: number): THREE.Mesh {
         pendingVelocity: new THREE.Vector3(0, 0, 0),
         gravity: 0.006,                       // Downward pull per frame
         isWaitingForServe: true,
-        serveDelayRemaining: 3,
+        serveDelayRemaining: 0,
         servingPlayer: 'player1',
         waitingForRacketHit: false,
         servePosition: new THREE.Vector3(x, y, z),
@@ -104,9 +104,9 @@ export function resetBallForServe(
     onPointScored?.(pointWinner, pointLoser);
 
     // Reset ball state for serve
-    userData.servingPlayer = userData.servingPlayer === 'player1' ? 'player2' : 'player1';
+    // Scoring chooses the server for the whole game, or the tie-break rotation.
     userData.servePosition.z = userData.servingPlayer === 'player1' ? 10 : -10;
-    userData.serveDelayRemaining = 3;
+    userData.serveDelayRemaining = 1.2;
     userData.isWaitingForServe = true;
     userData.velocity.set(0, 0, 0);
     userData.pendingVelocity.set(0, 0, 0);
@@ -123,6 +123,7 @@ export function updateBallMotion(
     ball: THREE.Mesh,
     delta: number,
     onPointScored?: (winner: BallPlayer, loser: BallPlayer) => void,
+    onBounce?: () => void,
 ): void {
     const userData = ball.userData as BallUserData;
 
@@ -144,6 +145,7 @@ export function updateBallMotion(
     // 3. Ground Collision, Bouncing, and Sliding
     if (ball.position.y <= BALL_RADIUS) {
         ball.position.y = BALL_RADIUS; // Snap to ground level
+        if (userData.velocity.y < -0.01) onBounce?.();
         handleGroundBounce(ball);
         // A tennis point ends on the first out bounce or the second bounce.
         // Waiting for the ball to roll to a stop allowed several illegal returns

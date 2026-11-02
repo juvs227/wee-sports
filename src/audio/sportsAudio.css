@@ -1,0 +1,33 @@
+.sports-sound-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 30;
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
+  color: #fff;
+  background: #18363a;
+  font:
+    600 12px/1.2 system-ui,
+    sans-serif;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.sports-sound-toggle[aria-pressed='true'] {
+  border-color: #81dfbb;
+  background: #214e42;
+}
+
+.sports-sound-toggle:hover {
+  filter: brightness(1.15);
+}
+
+.sports-sound-toggle:focus-visible {
+  outline: 3px solid #a6f5d5;
+  outline-offset: 3px;
+}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { EVENTS, isRoll, isSwing, isGameHit } from '@wee/shared/protocol.js';
+import { EVENTS, isRoll, isSwing, isGameHit, isTennisState } from '@wee/shared/protocol.js';
 import { request, socket, useConnection } from '../lib/socket.js';
 import { createInputId } from '../../../src/network/inputId.js';
 
@@ -21,6 +21,9 @@ export function PrototypeFrame({ code, controller = false, player = 1, players =
     post({ type: 'wee:lobby-state', paused: paused || connection !== 'online', connected: connection === 'online', players, playing, sport, gameId });
     if (controller && sport === 'bowling') post({ type: 'wee:bowling-state', ...gameState,
       canRoll: playing && !paused && connection === 'online' && gameState?.phase === 'ready' && gameState.currentPlayer === player });
+    if (controller && sport === 'tennis' && isTennisState(gameState)) {
+      post({ type: 'wee:tennis-state', ...gameState });
+    }
   }
   useEffect(() => {
     ready.current = false;
@@ -49,6 +52,9 @@ export function PrototypeFrame({ code, controller = false, player = 1, players =
         post({ type: 'wee:roll-ack', result });
       } else if (!controller && data?.type === 'wee:bowling-state' && data.gameId === gameId) {
         await request(EVENTS.HOST_GAME_STATE, { gameId, phase: data.phase, frame: data.frame, currentPlayer: data.currentPlayer });
+      } else if (!controller && sport === 'tennis' && data?.type === 'wee:tennis-state' &&
+          data.gameId === gameId && isTennisState(data)) {
+        await request(EVENTS.HOST_GAME_STATE, { gameId, phase: data.phase, server: data.server, winner: data.winner });
       } else if (!controller && data?.type === 'wee:game-hit' &&
           ready.current && playing && !paused && connection === 'online' && socket.connected && data.gameId === gameId) {
         const hit = { id: createInputId(), gameId, player: data.player, kind: sport };

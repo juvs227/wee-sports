@@ -178,7 +178,7 @@ summary {
 
 .game-panel .score-row {
     display: grid;
-    grid-template-columns: minmax(100px, auto) auto auto;
+    grid-template-columns: minmax(90px, auto) auto auto auto;
     align-items: center;
     padding: 2px 8px;
     gap: 7px;
@@ -250,32 +250,37 @@ summary {
     z-index: 3;
 }
 
-.serve-countdown {
-    display: none;
-    position: fixed;
-    z-index: 2;
-    inset: 0;
-    align-items: center;
-    justify-content: center;
-    color: #ffffff;
-    background: var(--surface);
-    font-size: clamp(72px, 12vw, 150px);
-    font-weight: 900;
-    line-height: 1;
-    text-shadow: 0 2px 6px #0003;
-    pointer-events: none;
+.game-panel .score-format {
+    display: inline-block;
+    color: var(--text-muted);
+    font-size: 11px;
 }
 
-.serve-countdown.visible {
+.game-panel .scoreboard {
     display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    margin: 4px 0;
 }
 
-.serve-countdown.player-1 {
-    right: 50%;
-    background: color-mix(in srgb, var(--p1) 50%, transparent);
+.game-panel #point-result {
+    font-weight: 800;
+    color: var(--accent-ink);
 }
 
-.serve-countdown.player-2 {
-    left: 50%;
-    background: color-mix(in srgb, var(--p2) 50%, transparent);
+.game-panel #point-result:empty,
+.game-panel #completed-sets:empty {
+    display: none;
+}
+
+.game-panel #match-result {
+    border-top: 1px solid var(--border);
+    margin-top: 8px;
+    padding: 8px 0;
+}
+
+.game-panel #match-winner {
+    font-size: 16px;
+    font-weight: 800;
+    margin-bottom: 8px;
 }

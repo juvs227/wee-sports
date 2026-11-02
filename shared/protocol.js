@@ -109,6 +109,13 @@ export function isSwing(event) {
     (event.power === undefined || (Number.isFinite(event.power) && event.power >= 0 && event.power <= 1));
 }
 
+/** TV-published tennis status; scoring/physics remain on the TV. */
+export function isTennisState(state) {
+  return ['prepare', 'serve', 'rally', 'complete'].includes(state?.phase) &&
+    [1, 2].includes(state.server) && (state.phase === 'complete'
+      ? [1, 2].includes(state.winner) : state.winner === null);
+}
+
 export function isRoll(event) {
   return event?.type === 'roll' && typeof event.id === 'string' && event.id.length > 0 &&
     event.id.length <= 100 && Number.isFinite(event.power) && event.power >= 0 && event.power <= 1 &&

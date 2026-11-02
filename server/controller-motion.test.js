@@ -77,6 +77,30 @@ async function calibrate() {
   for (let i = 0; i < 110; i++) tick();
 }
 
+test('tennis phone shows whose serve it is and stops input after a match', async () => {
+  await import('../src/controller/main.js');
+  state({ playing: true, paused: false, gameId: 'match-one' });
+  elements.get('use-buttons').onclick();
+  const tennis = (data, source = parent) => emit('message', { source, origin: location.origin,
+    data: { type: 'wee:tennis-state', phase: 'serve', server: 1, winner: null, ...data } });
+  tennis({ phase: 'prepare' });
+  expect(elements.get('play-title').textContent).toBe('You serve next');
+  tennis({});
+  expect(elements.get('play-title').textContent).toBe('Your serve');
+  tennis({ server: 2 });
+  expect(elements.get('play-title').textContent).toBe('P2 is serving');
+  tennis({ phase: 'complete', winner: 1 }, {});
+  expect(elements.get('play-title').textContent).toBe('P2 is serving');
+  tennis({ phase: 'complete', winner: 1 });
+  expect(elements.get('play-title').textContent).toBe('You won!');
+  elements.get('forehand').onclick();
+  expect(relay.sendSwing).not.toHaveBeenCalled();
+  tennis({});
+  expect(elements.get('play-title').textContent).toBe('Your serve');
+  elements.get('forehand').onclick();
+  expect(relay.sendSwing).toHaveBeenCalledTimes(1);
+});
+
 test('Calibrate itself requests permission; only real still readings unlock setup and play starts automatically', async () => {
   await import('../src/controller/main.js');
   expect(elements.get('calibrate').disabled).toBe(false);

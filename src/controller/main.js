@@ -5,6 +5,7 @@ import { connectSwings } from '../network/swingConnection.js';
 import { createInputId } from '../network/inputId.js';
 import { createCalibrationSession } from './calibration.js';
 import { createPhoneFeedback, createScreenAwake } from './phoneExperience.js';
+import { isTennisState } from '../../shared/protocol.js';
 import '../../client/src/styles/tokens.css';
 import '../play.css';
 import './controller.css';
@@ -52,6 +53,8 @@ let wasConnected = false;
 let canRoll = false;
 let currentPlayer = null;
 let bowlingPhase = 'waiting';
+let tennisState = null;
+let tennisGameId = null;
 let bowlingDetector = null;
 let armedAt = null;
 let pendingRoll = null;
@@ -115,6 +118,10 @@ function renderPlayState() {
     help = 'Open Controller settings and calibrate again, or reconnect.';
   } else if (gameActive && bowling && (bowlingPhase === 'complete' || bowlingPhase === 'finished')) {
     state = 'finished'; status = 'Match complete'; title = 'Nice bowling!'; help = 'See the final scores on the TV.';
+  } else if (gameActive && !bowling && tennisState?.phase === 'complete') {
+    state = 'finished'; status = 'Match complete';
+    title = tennisState.winner === player ? 'You won!' : 'Good match!';
+    help = 'See the set scores on the TV. The host can start another match.';
   } else if (gameActive && !buttonMode && !recentReadings()) {
     state = 'paused'; status = 'Motion interrupted'; title = 'Waiting for sensors';
     help = 'Keep this screen open. Motion resumes when readings return.';
@@ -126,6 +133,14 @@ function renderPlayState() {
     title = buttonMode ? 'Tap to swing' : 'Swing to play';
     help = 'Watch the TV.';
     if (buttonMode) help = 'Watch the TV and choose your shot.';
+    if (!bowling && tennisState?.phase === 'prepare') {
+      title = tennisState.server === player ? 'You serve next' : `P${tennisState.server} serves next`;
+      help = 'Point finished. Get ready for the next serve.';
+    } else if (!bowling && tennisState?.phase === 'serve') {
+      const serving = tennisState.server === player;
+      title = serving ? 'Your serve' : `P${tennisState.server} is serving`;
+      help = serving ? 'Swing when you’re ready to serve.' : 'Get ready to return. Watch the ball on the TV.';
+    }
     if (bowling) {
       if (pendingRoll || (currentPlayer === player && !canRoll)) {
         state = 'waiting'; title = 'Watch the lane'; help = 'Your ball is rolling. Let the pins settle.';
@@ -175,7 +190,7 @@ function controls() {
   element('calibrate').textContent = calibration ? 'Calibrating…' : bias ? 'Calibrate again' : 'Calibrate';
   element('stop').disabled = !gameActive || !motionWanted;
   for (const id of ['hand', 'response', 'stroke-mode', 'suppress-returns']) element(id).disabled = recording || Boolean(calibration);
-  for (const id of ['forehand', 'backhand']) element(id).disabled = !gameActive || lobbyPaused || !connected;
+  for (const id of ['forehand', 'backhand']) element(id).disabled = !gameActive || lobbyPaused || !connected || tennisState?.phase === 'complete';
   element('roll').disabled = !turnReady() || (!buttonMode && !bias);
   element('arm-roll').disabled = !turnReady() || !recording || Boolean(bowlingDetector);
   element('arm-roll').textContent = bowlingDetector ? 'Armed · swing forward' : 'Arm motion roll';
@@ -206,7 +221,7 @@ const connection = connectSwings({ room, role: 'phone',
   onAck: event => deliveryResult(event),
 });
 function send(label, power = 0.5) {
-  if (bowling || lobbyPaused || !gameActive || !connected || document.hidden) return;
+  if (bowling || lobbyPaused || !gameActive || !connected || document.hidden || tennisState?.phase === 'complete') return;
   const sent = connection.sendSwing(label, element('hand').value, power);
   if (sent) phoneFeedback.swing(label);
   element('delivery').textContent = sent ? 'Sending stroke…' : 'Disconnected: the stroke was not sent.';
@@ -283,6 +298,7 @@ function stop(message = 'Motion paused. Tap Resume motion when you are ready.', 
   controls();
 }
 function startMotion() {
+  if (!bowling && tennisState?.phase === 'complete') return;
   if (recording || settingsOpen || !motionWanted || !bias || buttonMode || calibration || !enabled || !gameActive || lobbyPaused || !connected || document.hidden || !recentReadings()) return;
   const mode = element('stroke-mode').value;
   stream = bowling ? null : mode === 'auto' ? createSwingStream(element('hand').value, {
@@ -315,6 +331,12 @@ window.addEventListener('message', event => {
     if (!canRoll || currentPlayer !== player) cancelArmedRoll();
     controls(); return;
   }
+  if (data?.type === 'wee:tennis-state' && !bowling && isTennisState(data)) {
+    tennisState = { phase: data.phase, server: data.server, winner: data.winner };
+    if (data.phase === 'complete') stop('Match complete. See the TV for results.');
+    else startMotion();
+    controls(); return;
+  }
   if (data?.type === 'wee:roll-ack' && bowling) {
     if (!pendingRoll || (data.result?.id && data.result.id !== pendingRoll.id)) return;
     pendingRoll = null;
@@ -322,6 +344,7 @@ window.addEventListener('message', event => {
     controls(); return;
   }
   if (data?.type !== 'wee:lobby-state' || typeof data.paused !== 'boolean') return;
+  if (data.gameId !== tennisGameId || !data.playing) { tennisState = null; tennisGameId = data.gameId; }
   if (data.connected && !wasConnected) lastSetup = undefined;
   connected = data.connected === true;
   wasConnected = connected;

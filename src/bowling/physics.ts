@@ -27,6 +27,7 @@ export function validRoll(controls: RollControls): boolean {
 /** The same simulation runs without WebGL in the physics regression tests. */
 export class BowlingPhysics {
   onPinHit: (() => void) | null = null;
+  onGutter: (() => void) | null = null;
   readonly world: World;
   readonly pins: PinBody[] = [];
   readonly ball: Body;
@@ -178,9 +179,10 @@ export class BowlingPhysics {
       this.ballLaneContact.friction = (0.004 + 0.16 * dry * dry * (3 - 2 * dry)) * FIXED_STEP;
       this.world.step(FIXED_STEP);
       this.elapsed += FIXED_STEP;
-      if (this.ball.position.z < LANE.length &&
+      if (!this.gutter && this.ball.position.z < LANE.length &&
           Math.abs(this.ball.position.x) > LANE.width / 2 + BALL_RADIUS * 0.3 && this.ball.position.y < BALL_RADIUS * 0.8) {
         this.gutter = true;
+        this.onGutter?.();
       }
       // USBC 6b: neither a gutter ball nor a ball rebounding from the rear
       // cushion may knock down additional pins. Pin-to-pin rebounds stay legal.
