@@ -8,3 +8,9 @@ dist/
 stress-results/
 build/
 .phone-build/
+/node_modules
+/node_modules/
+/dist/
+/build/
+*.tsbuildinfo
+.DS_Store
