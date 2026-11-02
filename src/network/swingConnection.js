@@ -1,5 +1,6 @@
 import { connectLobbySwings } from './lobbyConnection.js';
 import { createInputId } from './inputId.js';
+import { isSwing } from '../../shared/protocol.js';
 
 // Standalone prototypes retain their relay; embedded tennis uses its lobby.
 export function connectSwings({ room, role, onSwing = () => {}, onStatus = () => {}, onAck = () => {} }) {
@@ -10,6 +11,7 @@ export function connectSwings({ room, role, onSwing = () => {}, onStatus = () =>
   let retry;
   let stopped = false;
   const seen = new Set();
+  const sentAt = new Map();
   function connect() {
     const url = new URL('/swings', location.href);
     url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -21,9 +23,14 @@ export function connectSwings({ room, role, onSwing = () => {}, onStatus = () =>
     socket.onmessage = ({ data }) => {
       try {
         const message = JSON.parse(data);
-        if (message.type === 'ack') onAck(message);
-        if (message.type !== 'swing' || seen.has(message.id) ||
-            !['Forehand', 'Backhand'].includes(message.label) || !['Left', 'Right'].includes(message.hand)) return;
+        if (message.type === 'ack') {
+          const start = sentAt.get(message.id);
+          sentAt.delete(message.id);
+          onAck({ ...message, ...(start === undefined ? {} : {
+            roundTripMs: Math.round(performance.now() - start), timingScope: 'server',
+          }) });
+        }
+        if (!isSwing(message) || seen.has(message.id)) return;
         seen.add(message.id);
         if (seen.size > 200) seen.delete(seen.values().next().value);
         onSwing(message);
@@ -38,9 +45,12 @@ export function connectSwings({ room, role, onSwing = () => {}, onStatus = () =>
   }
   connect();
   return {
-    sendSwing(label, hand) {
-      if (!['Forehand', 'Backhand'].includes(label) || socket.readyState !== WebSocket.OPEN) return false;
-      socket.send(JSON.stringify({ type: 'swing', id: createInputId(), label, hand }));
+    sendSwing(label, hand, power = 0.5) {
+      const event = { type: 'swing', id: createInputId(), label, hand, power };
+      if (!isSwing(event) || socket.readyState !== WebSocket.OPEN) return false;
+      sentAt.set(event.id, performance.now());
+      if (sentAt.size > 40) sentAt.delete(sentAt.keys().next().value);
+      socket.send(JSON.stringify(event));
       return true;
     },
     close() { stopped = true; clearTimeout(retry); socket.close(); },

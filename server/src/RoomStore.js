@@ -212,7 +212,8 @@ export class RoomStore {
     if (room.pausedAt !== null) return { ok: false, error: ERRORS.PAUSED };
     if (room.phase !== PHASES.TUTORIAL) return { ok: false, error: 'not-playing' };
     return { ok: true, hostSocketId: this.#members.get(room.hostId)?.socketId,
-      event: { type: 'swing', id: event.id, label: event.label, hand: event.hand, player: player.slot + 1 } };
+      event: { type: 'swing', id: event.id, label: event.label, hand: event.hand,
+        ...(event.power === undefined ? {} : { power: event.power }), player: player.slot + 1 } };
   }
 
   /** Only the current TV can report contact, and only to that match's live seat. */

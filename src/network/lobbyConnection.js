@@ -6,6 +6,7 @@ export function connectLobbySwings({ role, onSwing, onStatus, onAck }) {
   let connected = false;
   let paused = true;
   const seen = new Set();
+  const sentAt = new Map();
   const post = message => window.parent.postMessage(message, location.origin);
   const receive = event => {
     if (event.source !== window.parent || event.origin !== location.origin) return;
@@ -15,7 +16,11 @@ export function connectLobbySwings({ role, onSwing, onStatus, onAck }) {
       paused = message.paused !== false;
       onStatus(connected ? 'Connected to homepage lobby' : 'Reconnecting to homepage lobby…');
     } else if (message?.type === 'wee:swing-ack' && role === 'phone') {
-      onAck(message.result);
+      const start = sentAt.get(message.result?.id);
+      sentAt.delete(message.result?.id);
+      onAck({ ...message.result, ...(start === undefined ? {} : {
+        roundTripMs: Math.round(performance.now() - start), timingScope: 'game',
+      }) });
     } else if (message?.type === 'wee:game-swing' && role === 'game' &&
       connected && !paused && isSwing(message.event) && !seen.has(message.event.id)) {
       seen.add(message.event.id);
@@ -27,9 +32,11 @@ export function connectLobbySwings({ role, onSwing, onStatus, onAck }) {
   onStatus('Connecting to homepage lobby…');
   post({ type: 'wee:bridge-ready' });
   return {
-    sendSwing(label, hand) {
-      const event = { type: 'swing', id: createInputId(), label, hand };
+    sendSwing(label, hand, power = 0.5) {
+      const event = { type: 'swing', id: createInputId(), label, hand, power };
       if (role !== 'phone' || !connected || paused || !isSwing(event)) return false;
+      sentAt.set(event.id, performance.now());
+      if (sentAt.size > 40) sentAt.delete(sentAt.keys().next().value);
       post({ type: 'wee:player-swing', event });
       return true;
     },

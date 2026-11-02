@@ -95,7 +95,7 @@ test('Calibrate itself requests permission; only real still readings unlock setu
   expect(elements.get('stop').disabled).toBe(false);
   for (let i = 0; i < 15; i++) tick(20, { alpha: 300, beta: 600, gamma: 0 });
   for (let i = 0; i < 10; i++) tick();
-  expect(relay.sendSwing).toHaveBeenCalledWith('Forehand', 'Right');
+  expect(relay.sendSwing).toHaveBeenCalledWith('Forehand', 'Right', expect.any(Number));
 });
 
 test('opening settings preserves calibration but drops a partial swing and prevents strokes until returning', async () => {
@@ -118,7 +118,7 @@ test('opening settings preserves calibration but drops a partial swing and preve
   expect(relay.sendSwing).not.toHaveBeenCalled();
   for (let i = 0; i < 15; i++) tick(20, { alpha: 300, beta: 600, gamma: 0 });
   for (let i = 0; i < 10; i++) tick();
-  expect(relay.sendSwing.mock.calls).toEqual([['Forehand', 'Right']]);
+  expect(relay.sendSwing.mock.calls).toEqual([['Forehand', 'Right', expect.any(Number)]]);
   expect(permission).toHaveBeenCalledTimes(1);
   expect(messages.filter(message => message.type === 'wee:controller-setup')).toHaveLength(savedSetupCount);
 });
@@ -227,7 +227,7 @@ test('insecure phone links and denied permission provide a usable explanation', 
   expect(elements.get('manual-controls').hidden).toBe(false);
   expect(elements.get('record').hidden).toBe(true);
   elements.get('forehand').onclick();
-  expect(relay.sendSwing).toHaveBeenCalledWith('Forehand', 'Right');
+  expect(relay.sendSwing).toHaveBeenCalledWith('Forehand', 'Right', expect.any(Number));
   state({ playing: true, paused: true });
   expect(elements.get('manual-controls').hidden).toBe(true);
 });
@@ -414,7 +414,11 @@ for (const [name, hand, expected] of teamRecordings) {
         beta: sample.rotationBeta - .1, gamma: sample.rotationGamma + .2 });
       previous = sample.timeMs;
     }
-    expect(relay.sendSwing.mock.calls).toEqual(expected.map(label => [label, hand]));
+    expect(relay.sendSwing.mock.calls).toEqual(expected.map(label => [label, hand, expect.any(Number)]));
+    for (const [, , power] of relay.sendSwing.mock.calls) {
+      expect(power).toBeGreaterThanOrEqual(0.2);
+      expect(power).toBeLessThanOrEqual(1);
+    }
     expect(messages).toContainEqual({ type: 'wee:controller-setup', setup: 'motion' });
   });
 }

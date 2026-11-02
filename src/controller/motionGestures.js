@@ -7,11 +7,12 @@ export function createSimpleSwingStream(label = 'Forehand') {
   let previous = null;
   let started = null;
   let angle = 0;
+  let peak = 0;
   let quietSince = null;
   let recovering = false;
   let recoveryStarted = null;
   const pending = [];
-  const reset = () => { started = null; angle = 0; quietSince = null; };
+  const reset = () => { started = null; angle = 0; peak = 0; quietSince = null; };
   return {
     push(sample) {
       if (!finiteSample(sample)) { reset(); previous = null; return; }
@@ -28,9 +29,10 @@ export function createSimpleSwingStream(label = 'Forehand') {
       }
       if (speed < 140) { reset(); return; }
       started ??= sample.timeMs;
+      peak = Math.max(peak, speed);
       angle += speed * Math.max(0, Math.min(gap, 100)) / 1000;
       if (sample.timeMs - started >= 100 && angle >= 22) {
-        pending.push({ label, early: true, complete: false, detectionDelayMs: sample.timeMs - started, simple: true });
+        pending.push({ label, early: true, complete: false, peakRotation: peak, detectionDelayMs: sample.timeMs - started, simple: true });
         recovering = true; recoveryStarted = sample.timeMs; reset();
       }
     },

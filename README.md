@@ -1,5 +1,8 @@
 # Wee Sports
 
+Phone response/strength changes and manual testing: [tennis response](docs/tennis-response.md).
+Permanent server setup: [Railway](docs/railway.md).
+
 `update-homepage` combines the homepage/lobby/reconnect work with tennis from
 `main` and the team's scoring, model, and game-logic updates from `base-game`.
 

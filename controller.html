@@ -80,7 +80,8 @@
     <label>Response <select id="response"><option value="fast">Fast confirmation</option><option value="complete">Wait for completion</option><option value="early">Early · experimental</option></select></label>
     <p><label><input id="suppress-returns" type="checkbox" checked> Suppress return motions</label></p>
     <small>Filters your follow-through so one physical swing sends one shot.</small>
-    <small id="timing">Fast confirmation waits briefly for your swing direction to settle.</small>
+    <small id="timing">Fast confirmation recognizes a deliberate swing as it slows. Small grip changes are filtered.</small>
+    <small>Swing comfortably: gentle, medium and strong strokes change ball pace within a limited range. Swinging harder than the strong range adds no power.</small>
   </details>
   <details class="play-card"><summary>Controller help</summary>
     <p id="sensor-status" class="sensor-status" role="status">Checking motion support…</p>
@@ -91,6 +92,7 @@
     <button id="use-buttons" class="subtle">Use button controls</button>
     <p id="connection-help" class="play-muted">Open the game in the same room.</p>
     <p id="delivery"></p>
+    <small>Delivery timing is the acknowledgement round trip, not time to ball contact. Recognition timing is in Motion settings.</small>
     <small id="detector-state">Detector idle</small>
     <small id="sensor-detail">No sensor readings yet.</small>
     <small id="wake-status">The screen stays awake during play when your browser allows it.</small>

@@ -6,7 +6,10 @@ import { io } from 'socket.io-client';
  * drops a seat. Same origin by default: in development Vite proxies
  * /socket.io to the game server.
  */
-export const socket = io(import.meta.env.VITE_SERVER_URL || undefined);
+export const socket = io(import.meta.env.VITE_SERVER_URL || undefined, {
+  transports: ['websocket', 'polling'],
+  tryAllTransports: true,
+});
 
 const TIMEOUT_MS = 5000;
 

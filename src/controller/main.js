@@ -1,5 +1,6 @@
 import { createSwingStream } from './swingStream.js';
 import { createSimpleSwingStream, createBowlingMotionDetector, bowlingTiltAim } from './motionGestures.js';
+import { tennisPower, tennisStrength } from './tennisPower.js';
 import { connectSwings } from '../network/swingConnection.js';
 import { createInputId } from '../network/inputId.js';
 import { createCalibrationSession } from './calibration.js';
@@ -186,7 +187,9 @@ function deliveryResult(event, kind = 'swing') {
     ? event.error === 'game-loading' ? 'The game is loading. Try again when it appears on the TV.'
       : event.error === 'not-your-turn' || event.error === 'roll-rejected' ? 'Wait until the TV and your controller show your turn.'
       : `The ${kind} was not accepted. Wait for the game to reconnect, then try again.`
-    : event.receivers ? 'Delivered to game.' : 'No game connected. Check the TV.';
+    : event.receivers ? Number.isFinite(event.roundTripMs)
+      ? `Delivered · ${event.roundTripMs} ms ${event.timingScope === 'server' ? 'server' : 'game delivery'} round trip.`
+      : 'Delivered to game.' : 'No game connected. Check the TV.';
   playNotice = event.ok === false || !event.receivers ? element('delivery').textContent : '';
   if (event.ok !== false && event.receivers > 0) phoneFeedback.delivered(kind);
   renderPlayState();
@@ -202,9 +205,9 @@ const connection = connectSwings({ room, role: 'phone',
   },
   onAck: event => deliveryResult(event),
 });
-function send(label) {
+function send(label, power = 0.5) {
   if (bowling || lobbyPaused || !gameActive || !connected || document.hidden) return;
-  const sent = connection.sendSwing(label, element('hand').value);
+  const sent = connection.sendSwing(label, element('hand').value, power);
   if (sent) phoneFeedback.swing(label);
   element('delivery').textContent = sent ? 'Sending stroke…' : 'Disconnected: the stroke was not sent.';
   playNotice = sent ? '' : element('delivery').textContent;
@@ -260,12 +263,13 @@ for (const id of ['aim', 'spin', 'power']) {
 function analyze() {
   if (!recording || bowling) return;
   for (const swing of stream?.analyze() ?? []) {
-    element('latest').textContent = swing.label === 'Unknown' ? 'Try a clearer swing' : swing.label;
+    const power = tennisPower(swing.peakRotation);
+    element('latest').textContent = swing.label === 'Unknown' ? 'Try a clearer swing' : `${swing.label} · ${tennisStrength(power)}`;
     feedbackUntil = performance.now() + 1500;
     element('timing').textContent = swing.simple ? 'Simple motion mapping · your selected shot.' : swing.early || swing.fast
       ? `Recognized in ${Math.round(swing.detectionDelayMs)} ms, before network and game response.`
       : 'Stroke classified after completion.';
-    if ((swing.complete || swing.early || swing.fast) && swing.label !== 'Unknown') send(swing.label);
+    if ((swing.complete || swing.early || swing.fast) && swing.label !== 'Unknown') send(swing.label, power);
   }
 }
 function stop(message = 'Motion paused. Tap Resume motion when you are ready.', user = false) {

@@ -1,4 +1,4 @@
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import { strict as assert } from 'node:assert';
 import * as THREE from 'three';
 import { planCourtShot, MIN_NET_HEIGHT } from '../src/World/shotTrajectory.ts';
@@ -57,4 +57,31 @@ test('targeted returns tolerate the substeps used at 30, 60, and 144 FPS', () =>
         ball.geometry.dispose();
         (ball.material as THREE.Material).dispose();
     }
+});
+
+test('strength changes pace while retaining net clearance and legal landings', () => {
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    try {
+        const origin = new THREE.Vector3(0, 1.2, 10);
+        const gentle = planCourtShot(origin, 1, false, .006, .2)!;
+        const strong = planCourtShot(origin, 1, false, .006, 1)!;
+        assert.ok(strong.flightTime < gentle.flightTime);
+        assert.ok(gentle.target.equals(strong.target));
+        assert.deepEqual(planCourtShot(origin, 1, false), planCourtShot(origin, 1, false, .006, .5));
+        for (const power of [0, .2, .5, .8, 1]) {
+            for (const x of [-4, 0, 4]) for (const y of [.2, 1.2, 2.5]) {
+                const ball = createBall(x, y, 10);
+                const plan = planCourtShot(ball.position, 1, false, .006, power)!;
+                assert.ok(plan);
+                assert.ok(plan.netHeight >= MIN_NET_HEIGHT);
+                hitBall(ball, plan.velocity, 'player1');
+                const data = ball.userData as BallUserData;
+                for (let i = 0; i < 600 && !data.bounceCount; i++) updateBallMotion(ball, 1 / 120);
+                assert.equal(data.firstBounceInBounds, true);
+                assert.ok(ball.position.distanceTo(plan.target) < .4);
+                ball.geometry.dispose();
+                (ball.material as THREE.Material).dispose();
+            }
+        }
+    } finally { random.mockRestore(); }
 });

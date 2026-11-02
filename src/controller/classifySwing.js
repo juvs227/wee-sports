@@ -1,5 +1,5 @@
 // Provisional rules inferred from screenshots, not fitted to raw recordings.
-export const classifierVersion = 'gyro-handed-sensitive-v7'
+export const classifierVersion = 'gyro-handed-responsive-v8'
 export const SWING_LIMITS = Object.freeze({ start: 200, minPeak: 280 })
 const axes = ['Alpha', 'Beta', 'Gamma']
 const valid = sample => Number.isFinite(sample.timeMs) && axes.every(axis => Number.isFinite(sample[`rotation${axis}`]))
@@ -79,8 +79,9 @@ function describe(window, complete, hand) {
     integratedDegrees: angles, complete }
 }
 
-// Fast confirmation comes from the team's early-swing-prediction experiment
-// (80ec8f7): wait for deceleration and retain the directional context at peak.
+// Keep the team's peak-direction rules, but confirm on a sustained drop from
+// the peak instead of waiting for half-speed/rest. Minimum strength, duration,
+// travel and a distinct approach still reject taps and small grip changes.
 export function classifySwings(samples, { hand = 'Right', sport = 'Tennis', final = true, fast = false } = {}) {
   if (sport !== 'Tennis') return []
   const results = []
@@ -89,17 +90,25 @@ export function classifySwings(samples, { hand = 'Right', sport = 'Tennis', fina
   let previous = null
   let peak = 0
   let fastQuietSince = null
+  let idleSince = null
+  let rested = false
+  let gentleStart = false
   function completeWindow(fastWindow = false) {
     const peakIndex = window.reduce((best, sample, i) => speed(sample) > speed(window[best]) ? i : best, 0)
     const peakSample = window[peakIndex]
     const approach = window.slice(0, peakIndex + 1).filter(sample => peakSample.timeMs - sample.timeMs <= 250)
+    const active = window.filter(sample => speed(sample) >= Math.max(200, peak * 0.5))
+    const sustained = active.length >= 3 && active.at(-1).timeMs - active[0].timeMs >= 40
     // Broad repositioning humps should not become extra swings. A peak at the
     // recording boundary is retained, since its approach was not captured.
     const distinctRise = peakIndex === 0 || Math.min(...approach.map(speed)) <= peak * 0.5
-    const prediction = peak >= SWING_LIMITS.minPeak && distinctRise ? describe(window, true, hand) : null
+    const prediction = peak >= SWING_LIMITS.minPeak && distinctRise && sustained ? describe(window, true, hand) : null
+    // Total angular travel cannot cancel when a real stroke returns to rest.
+    const travel = window.reduce((total, sample, index) => index === 0 ? 0 : total +
+      (speed(window[index - 1]) + speed(sample)) * 0.5 * (sample.timeMs - window[index - 1].timeMs) / 1000, 0)
     // An ambiguous shorter window must retain its later evidence.
-    if (fastWindow && (!prediction || prediction.label === 'Unknown')) return false
-    if (prediction) results.push(fastWindow ? { ...prediction, complete: false, fast: true,
+    if (fastWindow && (!prediction || prediction.label === 'Unknown' || travel < 24)) return false
+    if (prediction && travel >= 24) results.push(fastWindow ? { ...prediction, complete: false, fast: true,
       detectedAtMs: window.at(-1).timeMs,
       detectionDelayMs: window.at(-1).timeMs - window[0].timeMs } : prediction)
     window = []
@@ -116,17 +125,31 @@ export function classifySwings(samples, { hand = 'Right', sport = 'Tennis', fina
       previous = null
       peak = 0
       fastQuietSince = null
+      idleSince = null
+      rested = false
       if (!valid(sample)) continue
     }
-    if (!window.length && speed(sample) >= SWING_LIMITS.start) window = [sample]
+    if (!window.length) {
+      idleSince = speed(sample) < 120 ? idleSince ?? sample.timeMs : null
+      if (idleSince !== null && sample.timeMs - idleSince >= 100) rested = true
+    }
+    if (!window.length && speed(sample) >= SWING_LIMITS.start) {
+      window = [sample]
+      gentleStart = rested
+      rested = false
+      idleSince = null
+    }
     else if (window.length) window.push(sample)
     if (window.length) {
       peak = Math.max(peak, speed(sample))
       quietSince = speed(sample) < Math.max(120, peak * 0.35) ? quietSince ?? sample.timeMs : null
-      fastQuietSince = speed(sample) < Math.max(120, peak * 0.5) ? fastQuietSince ?? sample.timeMs : null
-      if (fast && peak >= 800 && fastQuietSince !== null && sample.timeMs - fastQuietSince >= 40) {
+      fastQuietSince = speed(sample) < peak * 0.72 ? fastQuietSince ?? sample.timeMs : null
+      // A weaker return to the starting grip can resemble the opposite shot.
+      // Accelerate a gentle stroke only after observed stillness, not a gap.
+      if (fast && peak >= (gentleStart ? SWING_LIMITS.minPeak : 800) &&
+          fastQuietSince !== null && sample.timeMs - fastQuietSince >= 24) {
         const peakSample = window.reduce((best, value) => speed(value) > speed(best) ? value : best)
-        if (sample.timeMs - peakSample.timeMs >= 60 && completeWindow(true)) return results
+        if (sample.timeMs - peakSample.timeMs >= 40 && completeWindow(true)) return results
       }
       if (quietSince !== null && sample.timeMs - quietSince >= 100) {
         completeWindow()

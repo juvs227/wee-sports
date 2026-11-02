@@ -42,7 +42,7 @@ export function PrototypeFrame({ code, controller = false, player = 1, players =
       } else if (controller && data?.type === 'wee:player-swing' && isSwing(data.event)) {
         const result = paused || connection !== 'online' ? { ok: false, error: 'paused' }
           : await request(EVENTS.PLAYER_SWING, data.event);
-        post({ type: 'wee:swing-ack', result });
+        post({ type: 'wee:swing-ack', result: { ...result, id: data.event.id } });
       } else if (controller && data?.type === 'wee:player-roll' && isRoll(data.event)) {
         const result = paused || connection !== 'online' ? { ok: false, error: 'paused' }
           : await request(EVENTS.PLAYER_ROLL, data.event);

@@ -73,3 +73,16 @@ test('Cloudflare loopback addresses do not redirect back to the same secure page
     expect(passed).toBe(true);
   }
 });
+
+test('a Railway HTTPS proxy reaches the configured phone origin without a redirect loop', () => {
+  for (const header of ['host', 'x-forwarded-host']) {
+    for (const url of ['/join?code=ABCD', '/controller.html?room=lobby-ABCD']) {
+      let passed = false;
+      phoneLinkHandler('https://wee.up.railway.app', () => { passed = true; })({
+        url, headers: { [header]: 'wee.up.railway.app', 'x-forwarded-proto': 'https' },
+        socket: { remoteAddress: '172.16.0.1' },
+      }, { setHeader() {}, writeHead() { throw new Error('Redirect loop'); }, end() {} });
+      expect(passed).toBe(true);
+    }
+  }
+});

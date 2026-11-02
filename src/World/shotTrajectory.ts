@@ -41,7 +41,7 @@ function validate(origin: THREE.Vector3, velocity: THREE.Vector3, target: THREE.
 // Aim first, then solve for velocity in the game's units per 60-Hz tick.
 // Semi-implicit gravity uses a 0.5-tick substep in World, hence the correction.
 export function planCourtShot(origin: THREE.Vector3, player: 1 | 2, backhand: boolean,
-    gravity = 0.006): ShotPlan | null {
+    gravity = 0.006, power = 0.5): ShotPlan | null {
     if (![origin.x, origin.y, origin.z, gravity].every(Number.isFinite) || gravity <= 0 ||
         origin.y < RADIUS || (player === 1 ? origin.z <= 0 : origin.z >= 0)) return null;
     const direction = player === 1 ? -1 : 1;
@@ -65,8 +65,13 @@ export function planCourtShot(origin: THREE.Vector3, player: 1 | 2, backhand: bo
     );
     const targets = [new THREE.Vector3(x, RADIUS, direction * 8.5),
         new THREE.Vector3(0, RADIUS, direction * 7)];
+    // Change flight time modestly, then solve/validate the same target again.
+    // Multiplying velocity after solving would change the landing point/net
+    // clearance. Missing power preserves the original keyboard/bot behavior.
+    const strength = Number.isFinite(power) ? THREE.MathUtils.clamp(power, 0, 1) : 0.5;
+    const firstTicks = Math.round(THREE.MathUtils.lerp(66, 54, strength));
     for (const target of targets) {
-        for (let ticks = 60; ticks <= 150; ticks += 6) {
+        for (let ticks = firstTicks; ticks <= 150; ticks += 6) {
             const velocity = target.clone().sub(origin).divideScalar(ticks);
             velocity.y += gravity * (ticks + 0.5) / 2;
             const result = validate(origin, velocity, target, gravity);

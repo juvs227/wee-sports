@@ -105,7 +105,8 @@ export const EVENTS = {
 export function isSwing(event) {
   return event?.type === 'swing' && typeof event.id === 'string' && event.id.length > 0 &&
     event.id.length <= 100 && ['Forehand', 'Backhand'].includes(event.label) &&
-    ['Left', 'Right'].includes(event.hand);
+    ['Left', 'Right'].includes(event.hand) &&
+    (event.power === undefined || (Number.isFinite(event.power) && event.power >= 0 && event.power <= 1));
 }
 
 export function isRoll(event) {

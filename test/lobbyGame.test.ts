@@ -23,6 +23,7 @@ async function court() {
     scene.add(player1.group, player2.group);
     await vi.waitFor(() => { expect(player1.hitbox).toBeTruthy(); expect(player2.hitbox).toBeTruthy(); });
     const ball = createBall(0, .3, 10);
+    (ball.userData as BallUserData).serveDelayRemaining = 0;
     scene.add(ball);
     const feedback: string[] = [];
     const game = new GameLogic({ scene, player1, player2, ball,
@@ -44,6 +45,29 @@ for (const hand of ['Right', 'Left'] as const) for (const label of ['Forehand', 
         expect(data.velocity.z).toBeLessThan(0);
     });
 }
+
+test('phone strength changes an actual serve only after racket contact', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(.5);
+    const speeds: number[] = [];
+    for (const power of [.2, 1]) {
+        const { game, ball, feedback } = await court();
+        game.swing({ label: 'Forehand', hand: 'Right', player: 1, power });
+        expect(feedback.some(message => message.startsWith('Player 1: Hit!'))).toBe(false);
+        let time = 0;
+        while (time < 1 && !(ball.userData as BallUserData).lastHitBy) {
+            game.update(1 / 120);
+            time += 1 / 120;
+        }
+        // A prepared serve already has lastHitBy; wait for actual release.
+        while (time < 1 && (ball.userData as BallUserData).waitingForRacketHit) {
+            game.update(1 / 120);
+            time += 1 / 120;
+        }
+        expect(feedback.some(message => message.startsWith('Player 1: Hit!'))).toBe(true);
+        speeds.push(Math.abs((ball.userData as BallUserData).velocity.z));
+    }
+    expect(speeds[1]).toBeGreaterThan(speeds[0]);
+});
 
 test.each(['Right', 'Left'] as const)('P2 %s-hand phone returns a real serve with the bot disabled, scores, and starts the next point', async hand => {
     const { game, ball, player2, feedback } = await court();
@@ -85,10 +109,8 @@ test.each(['Right', 'Left'] as const)('P2 %s-hand phone returns a real serve wit
     expect(feedback.some(message => message.startsWith('Player 2: Hit!')), feedback.join('; ')).toBe(true);
     expect(game.getScore().player2).toBe(15);
     expect((ball.userData as BallUserData).isWaitingForServe).toBe(true);
-    feedback.length = 0;
-    game.swing({ label: 'Backhand', hand: 'Right', player: 1 });
-    for (let i = 0; i < 120; i++) game.update(1 / 120);
-    expect(feedback.some(message => message.startsWith('Player 1: Hit!'))).toBe(true);
+    expect((ball.userData as BallUserData).servingPlayer).toBe('player2');
+    expect(ball.position.z).toBe(-10);
 });
 
 test('team scoring handles deuce, advantage reversal, and a completed game', () => {

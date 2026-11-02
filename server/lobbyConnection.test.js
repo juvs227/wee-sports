@@ -51,3 +51,18 @@ test('embedded game validates parent/origin, ignores duplicates, and stops while
   expect(f.onSwing).toHaveBeenCalledTimes(1);
   f.connection.close();
 });
+
+test('phone strength reaches the bridge and timing uses one clock, not a remote timestamp', () => {
+  let now = 100;
+  vi.stubGlobal('performance', { now: () => now });
+  const f = embedded('phone');
+  f.receive({ type: 'wee:lobby-state', connected: true, paused: false });
+  expect(f.connection.sendSwing('Forehand', 'Right', .25)).toBe(true);
+  const event = f.parent.postMessage.mock.lastCall[0].event;
+  expect(event.power).toBe(.25);
+  now = 180;
+  f.receive({ type: 'wee:swing-ack', result: { id: event.id, ok: true, receivers: 1 } });
+  expect(f.onAck).toHaveBeenCalledWith({ id: event.id, ok: true, receivers: 1, roundTripMs: 80, timingScope: 'game' });
+  expect(f.connection.sendSwing('Forehand', 'Right', Infinity)).toBe(false);
+  f.connection.close();
+});

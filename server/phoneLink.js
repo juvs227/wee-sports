@@ -24,7 +24,13 @@ export function phoneLinkHandler(origin, next) {
     // so its controller iframe and Socket.io connection keep the same origin.
     const fromTunnel = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(request.socket.remoteAddress)
       && request.headers['x-forwarded-proto'] === 'https';
-    if (publicOrigin && !fromTunnel && (path === '/join' || path === '/controller.html')) {
+    // Railway terminates HTTPS outside this process. Its proxy is not loopback.
+    // Only accept the explicitly configured public host; never construct a
+    // redirect from an untrusted forwarded hostname.
+    const publicHost = publicOrigin && new URL(publicOrigin).host;
+    const onPublicHost = publicHost && request.headers['x-forwarded-proto'] === 'https' &&
+      [request.headers.host, request.headers['x-forwarded-host']].includes(publicHost);
+    if (publicOrigin && !fromTunnel && !onPublicHost && (path === '/join' || path === '/controller.html')) {
       response.writeHead(307, { location: `${publicOrigin}${request.url}`, 'cache-control': 'no-store' });
       response.end();
       return;
