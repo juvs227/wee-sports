@@ -3,11 +3,12 @@ import { createServer as createViteServer } from 'vite';
 import { attachRelay } from './relay.js';
 
 const port = Number(process.env.PORT || 5173);
+const allowedHosts = process.env.NGROK_HOST ? [process.env.NGROK_HOST] : [];
 const vite = await createViteServer({
   server: {
     middlewareMode: true,
     hmr: false,
-    allowedHosts: true,
+    allowedHosts,
   },
 });
 const server = createServer((request, response) => vite.middlewares(request, response));

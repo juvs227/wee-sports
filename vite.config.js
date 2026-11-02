@@ -1,6 +1,8 @@
 import { defineConfig } from 'vite';
 import { fileURLToPath } from 'node:url';
 
+const allowedHosts = process.env.NGROK_HOST ? [process.env.NGROK_HOST] : [];
+
 export default defineConfig({
   define: {
     '__PUBLIC_ORIGIN__': JSON.stringify(
@@ -11,7 +13,7 @@ export default defineConfig({
     ),
   },
   server: {
-    allowedHosts: true, // Allows your ngrok tunnel and other external hosts during development
+    allowedHosts,
   },
   build: {
     rollupOptions: {
