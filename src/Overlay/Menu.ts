@@ -1,15 +1,37 @@
 import { World } from '../World/World';
+import './css/menu.css';
 
 export class Menu {
     private paused: boolean = false;
     private world: World;
-    private menu: HTMLElement = document.getElementById('pause-menu') as HTMLElement;
-    private resumeButton: HTMLButtonElement = document.getElementById('resume') as HTMLButtonElement;
-    private resetButton: HTMLButtonElement = document.getElementById('reset') as HTMLButtonElement;
+    private menu: HTMLElement = document.createElement('div');
+    private resumeButton: HTMLButtonElement;
+    private resetButton: HTMLButtonElement;
     private pauseButton: HTMLButtonElement = document.getElementById('pause-btn') as HTMLButtonElement;
 
     constructor(world: World) {
+        // Set the world instance
         this.world = world;
+
+        // Set up the menu overlay
+        this.menu.id = 'pause-menu';
+        this.menu.className = 'overlay';
+        this.menu.hidden = true;
+        this.menu.innerHTML = `
+            <div class="panel" role="dialog" aria-modal="true" aria-labelledby="pause-title">
+                <h2 id="pause-title">Paused</h2>
+                <button id="resume">Resume</button>
+                <button id="reset">Reset</button>
+                <button id="quit">Quit</button>
+            </div>
+        `;
+        document.body.appendChild(this.menu);
+
+        // Get references to the buttons
+        this.resumeButton = document.getElementById('resume') as HTMLButtonElement;
+        this.resetButton = document.getElementById('reset') as HTMLButtonElement;
+
+        // Add event listeners
         window.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') {
                 this.toggleMenu();

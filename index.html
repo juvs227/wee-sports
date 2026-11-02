@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Modular Three.js Project</title>
-    <link rel="stylesheet" href="./src/Overlay/css/menu.css" />
     <link rel="stylesheet" href="./src/Overlay/css/pause.css" />
     <style>
         body { margin: 0; overflow: hidden; }
@@ -13,14 +12,6 @@
 </head>
 <body>
     <div id="scene-container"></div>
-    <div id="pause-menu" hidden>
-      <div class="panel" role="dialog" aria-modal="true" aria-labelledby="pause-title">
-        <h2 id="pause-title">Paused</h2>
-        <button id="resume">Resume</button>
-        <button id="reset">Reset</button>
-        <button id="quit">Quit</button>
-      </div>
-    </div>
     <button id="pause-btn" aria-label="Pause">
       <svg class="icon-pause" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
         <rect x="6" y="4" width="4" height="16" rx="1" />
