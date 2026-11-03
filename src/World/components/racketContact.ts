@@ -3,6 +3,20 @@ import * as THREE from 'three';
 export const CONTACT_START = 0.2;
 export const CONTACT_END = 0.7;
 
+// A timing search performs hundreds of these synchronous sweeps per stroke.
+// Reuse private scratch values so successive returns do not create thousands
+// of short-lived matrices/vectors on the input and render thread. None escape
+// this module, and the caller's bounds, poses and ball positions stay untouched.
+const sweepScale = new THREE.Vector3();
+const sweepPreviousScale = new THREE.Vector3();
+const sweepBox = new THREE.Box3();
+const sweepInverse = new THREE.Matrix4();
+const sweepFrom = new THREE.Vector3();
+const sweepTo = new THREE.Vector3();
+const sweepDirection = new THREE.Vector3();
+const sweepIntersection = new THREE.Vector3();
+const sweepRay = new THREE.Ray();
+
 export function contactWindowCrossed(from: number, to: number, backhand = false): boolean {
     const start = backhand ? 0.1 : CONTACT_START;
     const end = backhand ? 0.8 : CONTACT_END;
@@ -19,18 +33,19 @@ export function sweptRacketContact(
     currentBall: THREE.Vector3,
     radius: number,
 ): boolean {
-    const scale = new THREE.Vector3().setFromMatrixScale(currentMatrix);
-    const previousScale = new THREE.Vector3().setFromMatrixScale(previousMatrix);
-    const minScale = Math.min(...scale.toArray().map(Math.abs), ...previousScale.toArray().map(Math.abs));
+    const scale = sweepScale.setFromMatrixScale(currentMatrix);
+    const previousScale = sweepPreviousScale.setFromMatrixScale(previousMatrix);
+    const minScale = Math.min(Math.abs(scale.x), Math.abs(scale.y), Math.abs(scale.z),
+        Math.abs(previousScale.x), Math.abs(previousScale.y), Math.abs(previousScale.z));
     if (minScale < 1e-6) return false;
-    const box = bounds.clone().expandByScalar(radius / minScale);
-    const from = previousBall.clone().applyMatrix4(previousMatrix.clone().invert());
-    const to = currentBall.clone().applyMatrix4(currentMatrix.clone().invert());
+    const box = sweepBox.copy(bounds).expandByScalar(radius / minScale);
+    const from = sweepFrom.copy(previousBall).applyMatrix4(sweepInverse.copy(previousMatrix).invert());
+    const to = sweepTo.copy(currentBall).applyMatrix4(sweepInverse.copy(currentMatrix).invert());
     if (box.containsPoint(from) || box.containsPoint(to)) return true;
-    const direction = to.clone().sub(from);
+    const direction = sweepDirection.subVectors(to, from);
     const length = direction.length();
     if (length < 1e-8) return false;
-    const point = new THREE.Ray(from, direction.normalize()).intersectBox(box, new THREE.Vector3());
+    const point = sweepRay.set(from, direction.normalize()).intersectBox(box, sweepIntersection);
     return point !== null && point.distanceTo(from) <= length;
 }
 

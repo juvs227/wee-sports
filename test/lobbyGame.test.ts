@@ -252,10 +252,10 @@ test('a late stroke misses, and pausing discards a prepared stroke', async () =>
     expect(paused.game.getScore().player1).toBe(15);
 });
 
-test('consecutive human returns keep normal contact, then a missed ball scores only once', async () => {
+test('24 consecutive human returns keep normal contact, then a missed ball scores only once', async () => {
     const state = await court();
     state.game.swing({ label: 'Forehand', hand: 'Right', player: 1 });
-    for (let shot = 0; shot < 8; shot++) {
+    for (let shot = 0; shot < 24; shot++) {
         const number = shot % 2 === 0 ? 2 : 1;
         state.feedback.length = 0;
         swingNearArrival(state, number, shot % 3 === 0 ? 'Left' : 'Right',

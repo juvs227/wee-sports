@@ -1,5 +1,34 @@
 # Tennis response and strength
 
+## November 2 follow-up: repeated returns
+
+The reported third-hit slowdown was not consistently reproduced in local tests.
+There was a measurable source of repeated work in the TV's assistance search:
+every swept contact prediction cloned bounds, matrices and vectors. A single
+stroke can run hundreds of these predictions. The sweep now reuses private
+scratch values while performing the same contact calculation; it never changes
+the caller's racket bounds, transforms or ball positions.
+
+An instrumented replay with the shipped player/racket models, 24 alternating
+returns, a 300 ms input lead and 120 Hz steps measured **67,544 → 1,054 clone calls**
+inside assistance (98.4% fewer). Instrumented assistance CPU time totaled about
+**32.8 → 12.7 ms across all 24 returns** on this Mac. The probe wrapped
+`assistedStartTime` using `performance.now()` and counted Vector3/Matrix4/Box3
+clone calls only while that function ran. This is a local allocation/CPU
+comparison, not a measurement of phone-to-screen latency or proof of the exact
+third-hit cause. Timings vary with hardware and instrumentation.
+
+The permanent actual-model regression now checks 24 consecutive returns with
+both hands/strokes, then one missed ball awarding one point. A separate 120-case
+rotated/scaled sweep test alternates hits, misses and singular transforms and
+verifies inputs remain untouched. Controller replay of 50 identical strokes did
+not show growing recognition time; maps, listeners and audio voices were checked
+for accumulation. Motion classification, physics, hitbox sizes and power mapping
+remain unchanged. Use the stage measurements below when testing on a real phone
+to distinguish recognition, delivery and contact timing.
+
+Measurement reference: [MDN high precision timing](https://developer.mozilla.org/en-US/docs/Web/API/Performance_API/High_precision_timing).
+
 ## What was delaying a hit
 
 The existing path is phone sensors → local classification → parent page → Node
