@@ -1,0 +1,22 @@
+/* The same result language and layout in both sports; only the accent changes. */
+.game-result-card { position: absolute; z-index: 5; top: 50%; left: 50%; transform: translate(-50%, -42%); box-sizing: border-box; width: min(420px, calc(100% - 32px)); max-height: calc(100dvh - 190px); overflow-y: auto; padding: 26px 28px; border: 1px solid #c5e6a666; border-radius: 26px; background: #15392ff5; color: #f4fff3; box-shadow: 0 20px 70px #071d1959; text-align: center; pointer-events: auto; animation: game-result-in 260ms ease-out; }
+.game-result-card[hidden] { display: none; }
+.game-result-emblem { display: grid; place-items: center; width: 58px; height: 58px; margin: 0 auto 14px; border-radius: 50%; color: #dcf59b; background: #d5ef9e16; border: 1px solid #d5ef9e3d; }
+.game-result-emblem svg { width: 34px; height: 34px; }
+.result-eyebrow { margin: 0 0 8px; color: #d9edbd; text-transform: uppercase; letter-spacing: .14em; font-size: 10px; font-weight: 900; }
+.game-result-card h2, .game-panel .game-result-card #match-winner { margin: 0; color: #f4fff3; font-size: clamp(25px, 3vw, 36px); font-weight: 900; line-height: 1.18; letter-spacing: -.025em; overflow-wrap: anywhere; }
+.game-result-score { margin: 12px 0 5px; color: #e1f7b6; font-size: 22px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.game-result-detail { margin: 0; color: #c3d7ca; font-size: 12px; font-weight: 700; }
+.game-result-replay { margin: 19px 0 0; padding-top: 16px; border-top: 1px solid #b7d4bb33; font-size: 13px; font-weight: 800; color: #effce9; }
+.game-result-card button, .game-panel .game-result-card button, #bowling-app .game-result-card button { min-height: 44px; margin: 14px 0 0; width: 100%; border: 1px solid #d5ef9e; border-radius: 12px; background: #d5ef9e; color: #193b2c; font-size: 14px; font-weight: 900; }
+.game-panel #match-result.game-result-card { margin-top: 0; padding: 26px 28px; border-top: 1px solid #c5e6a666; }
+.game-result-card ol { margin: 17px 0 0; padding: 0; list-style: none; border-top: 1px solid #b7d4bb33; }
+.game-result-card li { display: flex; align-items: center; gap: 12px; padding: 9px 0; color: #c3d7ca; font-size: 13px; border-bottom: 1px solid #b7d4bb22; text-align: left; font-variant-numeric: tabular-nums; }
+.game-result-card li[data-winner='true'] { color: #effadb; font-weight: 900; }
+.game-result-card li .result-rank { width: 22px; flex-shrink: 0; font-weight: 900; opacity: .75; }
+.game-result-card li .result-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.game-result-card li strong { font-size: 16px; }
+.bowling-results.game-result-card { background: #172f2df5; }
+@keyframes game-result-in { from { opacity: 0; translate: 0 12px; } to { opacity: 1; translate: 0 0; } }
+@media (max-height: 550px) { .game-result-card { max-height: calc(100dvh - 120px); top: 55%; padding: 16px 22px; } .game-result-emblem { display: none; } .game-panel #match-result.game-result-card { padding: 16px 22px; } }
+@media (prefers-reduced-motion: reduce) { .game-result-card { animation: none; } }

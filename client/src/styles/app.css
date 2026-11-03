@@ -91,6 +91,7 @@
 
 .topbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
@@ -129,6 +130,28 @@
   color: var(--text);
   background: var(--surface);
 }
+
+.topbar__actions { margin-left: auto; }
+.topbar__actions,
+.session-heading { display: flex; align-items: center; gap: 10px; }
+.session-heading { justify-content: space-between; margin-bottom: 8px; }
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  padding: 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.theme-toggle:hover { background: var(--accent-soft); }
+.theme-toggle:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 
 /* Hero --------------------------------------------------------------------- */
 
@@ -399,7 +422,7 @@
 .tile--create {
   border-style: dashed;
   border-color: var(--border-strong);
-  background: rgb(255 255 255 / 0.55);
+  background: var(--surface);
   box-shadow: none;
 }
 
@@ -1071,6 +1094,7 @@
   gap: 0.75rem;
   min-height: 3.5rem;
   padding: 0.5rem 1.6rem;
+  margin-top: 1.5rem;
   border-radius: var(--radius-pill);
   font-weight: 900;
 }
@@ -1478,3 +1502,76 @@
   border-radius: var(--radius-lg);
   font-size: 1.75rem;
 }
+/* The lobby stays mounted while the existing tennis pages run inside it. */
+.tennis-session { padding: 16px; }
+.prototype-frame { position: relative; margin: 16px 0; }
+.prototype-frame iframe { display: block; width: 100%; height: 75vh; min-height: 480px; border: 0; border-radius: 12px; }
+.prototype-frame__pause { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; background: var(--page-overlay); color: var(--text); text-align: center; font-weight: 800; }
+
+/* Continue the homepage's rounded, light surfaces through the whole session. */
+.host-lobby { max-width: 64rem; }
+.host-lobby .stub__row { background: var(--surface); padding: 24px; border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); }
+.host-lobby .stub__qr { width: min(12rem, 60vw); }
+.phone-session { max-width: 42rem; }
+.phone-session .you { padding: 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
+.phone-session__name { min-width: 0; flex: 1; }
+.phone-session .you h1 { font-size: 1.4rem; overflow-wrap: anywhere; }
+.phone-session .phone-ready { padding: 18px 0; }
+.phone-session .phone-ready__btn { width: 100%; }
+.phone-session--playing { padding-top: 1rem; }
+.phone-session--playing .you { gap: 12px; padding: 12px 16px; box-shadow: none; }
+.phone-session--playing .you h1 { font-size: 1.1rem; overflow-wrap: anywhere; }
+.phone-session--playing .you .stub__muted { margin-top: 2px; font-size: 0.85rem; }
+.phone-session--playing .seat__badge--big { width: 2.5rem; height: 2.5rem; font-size: 1rem; }
+.phone-session--playing .prototype-frame { margin: 12px 0; }
+.phone-session--playing .prototype-frame--phone iframe { min-height: 0; }
+.phone-session__options { padding: 0 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.phone-session__options summary { min-height: 48px; padding: 14px 0; cursor: pointer; font-weight: 800; color: var(--text-muted); }
+.phone-session__options summary span { float: right; font-size: 0.85rem; font-weight: 600; letter-spacing: 0.08em; }
+.phone-session__options summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; border-radius: var(--radius-sm); }
+.phone-session__options[open] { padding-bottom: 16px; }
+.phone-session__options h2 { margin-top: 0.5rem; }
+.phone-options-toggle { display: grid; place-items: center; flex: 0 0 44px; width: 44px; height: 44px; padding: 0; border: 1px solid var(--border-strong); border-radius: 50%; color: var(--accent-ink); background: var(--surface-sunk); cursor: pointer; }
+.phone-game-options { width: min(440px, calc(100% - 24px)); max-height: min(88dvh, 850px); padding: 0; border: 1px solid var(--border-strong); border-radius: 24px; color: var(--text); background: var(--surface); box-shadow: var(--shadow-lift); overscroll-behavior: contain; }
+.phone-game-options::backdrop { background: #081c24aa; }
+.phone-game-options__content { padding: 22px; }
+.phone-game-options header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.phone-game-options h2 { font-size: 1.4rem; margin-top: 3px; }
+.phone-options-close { width: 44px; height: 44px; flex: 0 0 auto; border: 1px solid var(--border); border-radius: 50%; background: var(--surface-sunk); font-size: 24px; cursor: pointer; }
+.phone-game-options__appearance { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 0; margin-bottom: 14px; border-bottom: 1px solid var(--border); font-weight: 700; }
+.phone-game-options fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.phone-game-options fieldset:disabled { opacity: .65; }
+.phone-game-options label { display: grid; gap: 7px; margin-bottom: 14px; font-size: .9rem; font-weight: 800; }
+.phone-game-options select { width: 100%; min-height: 46px; border: 1px solid var(--border-strong); border-radius: 10px; padding: 10px; font: inherit; background: var(--surface-sunk); color: var(--text); }
+.phone-game-options .phone-options-check { display: flex; align-items: center; gap: 10px; min-height: 40px; margin-bottom: 4px; }
+.phone-options-check input { width: 20px; height: 20px; accent-color: var(--accent-ink); flex-shrink: 0; }
+.phone-options-section { padding: 4px 0; border-top: 1px solid var(--border); margin-top: 12px; }
+.phone-options-section summary { font-weight: 800; cursor: pointer; padding: 12px 0; }
+.phone-options-section p { margin-bottom: 14px; font-size: .85rem; }
+.phone-options-section .btn { min-height: 44px; padding: 10px 14px; font-size: .85rem; }
+.phone-options-confirm { display: flex; flex-wrap: wrap; gap: 8px; }
+.phone-options-return { padding-top: 16px; }
+.phone-options-return p { margin: 12px 0; line-height: 1.5; }
+.phone-options-pause { margin: 16px 0; }
+.phone-options-pause .btn { width: 100%; }
+.phone-options-pause p { margin: 12px 0; font-size: .85rem; color: var(--text-muted); }
+.phone-options-message { font-size: .85rem; color: var(--accent-ink); margin: 12px 0; min-height: 1.5em; }
+.phone-options-done { width: 100%; }
+.phone-game-options--result { border-color: var(--accent-ink); }
+.phone-match-result { text-align: center; padding-top: 24px; }
+.phone-match-result__medal { display: grid; place-items: center; width: 90px; height: 90px; margin: 0 auto 18px; border-radius: 50%; color: #e6f3ad; background: #204f3b; border: 1px solid #8ca36c; }
+.phone-game-options[data-sport='bowling'] .phone-match-result__medal { background: #233d51; color: #f6d690; border-color: #8f8565; }
+.phone-match-result h3 { font-size: clamp(1.6rem, 7vw, 2rem); line-height: 1.15; overflow-wrap: anywhere; margin-bottom: 12px; }
+.phone-match-result p { margin: 12px 0 20px; }
+.phone-match-result .btn { width: 100%; min-height: 48px; }
+.phone-match-result__score { display: flex; align-items: baseline; justify-content: center; gap: 8px; font-size: 2.3rem; font-weight: 900; color: var(--accent-ink); font-variant-numeric: tabular-nums; }
+.phone-match-result__score span { font-size: .85rem; font-weight: 700; color: var(--muted); }
+.phone-match-result .phone-options-message { margin: 8px 0 0; min-height: 1.5em; }
+.tennis-session { max-width: 1440px; margin: auto; padding: 24px var(--gutter); }
+.match-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+.match-heading h1 { font-size: clamp(1.6rem, 4vw, 2.4rem); font-weight: 900; }
+.match-pill { background: var(--accent-soft); color: var(--accent-ink); padding: 8px 16px; border-radius: var(--radius-pill); font-weight: 800; }
+.prototype-frame iframe { border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); }
+.prototype-frame--phone iframe { box-shadow: none; border: 0; height: 1050px; }
+.prototype-frame__pause { border-radius: var(--radius-lg); }
+@media (max-width: 600px) { .host-lobby .stub__row { padding: 16px; justify-content: center; text-align: center; } .tennis-session { padding: 16px; } }

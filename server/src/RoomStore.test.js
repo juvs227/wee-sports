@@ -6,18 +6,20 @@ import {
   MAX_PLAYERS,
   NAME_MAX,
   PHASES,
-  PLAYERS_TO_START,
+  PICKS,
   PROTOCOL_VERSION,
+  READY_AT_PLAYERS,
   TUTORIAL_MOVES,
   VOTE_SECONDS,
   isRoomCode,
+  playerCapacity,
 } from '@wee/shared/protocol.js';
 import { RoomStore } from './RoomStore.js';
 
 const v = PROTOCOL_VERSION;
 
-function openRoom(store = new RoomStore()) {
-  const room = store.createRoom('tv', { v, sport: 'tennis' });
+function openRoom(store = new RoomStore(), sport = 'tennis') {
+  const room = store.createRoom('tv', { v, sport });
   assert.equal(room.ok, true);
   return { store, code: room.code };
 }
@@ -35,7 +37,7 @@ test('createRoom opens a tennis lobby with a valid, empty code', () => {
 test('createRoom rejects an old client and a sport that is not open', () => {
   const store = new RoomStore();
   assert.deepEqual(store.createRoom('tv', { v: 0, sport: 'tennis' }), { ok: false, error: ERRORS.BAD_VERSION });
-  assert.deepEqual(store.createRoom('tv', { v, sport: 'bowling' }), { ok: false, error: ERRORS.BAD_SPORT });
+  assert.deepEqual(store.createRoom('tv', { v, sport: 'golf' }), { ok: false, error: ERRORS.BAD_SPORT });
   assert.equal(store.roomCount, 0);
 });
 
@@ -53,17 +55,24 @@ test('players take the lowest seat and every join returns the lobby', () => {
   assert.equal(first.slot, 0);
   assert.equal(second.slot, 1);
   assert.deepEqual(second.players, [
-    { slot: 0, name: 'Ada', ready: false },
-    { slot: 1, name: 'Bo', ready: false },
+    { slot: 0, name: 'Ada', ready: false, setup: null },
+    { slot: 1, name: 'Bo', ready: false, setup: null },
   ]);
 });
 
-test(`the lobby is full after ${MAX_PLAYERS} players`, () => {
-  const { store, code } = openRoom();
-  for (let i = 0; i < MAX_PLAYERS; i += 1) {
-    assert.equal(store.join(`p${i}`, { v, code, name: `P${i}` }).ok, true);
+for (const sport of ['tennis', 'bowling']) test(`${sport} rejects joins beyond its playing seats, including reserved seats`, () => {
+  const { store, code } = openRoom(new RoomStore(), sport);
+  let first;
+  for (let i = 0; i < playerCapacity(sport); i += 1) {
+    const seat = store.join(`p${i}`, { v, code, name: `P${i}` });
+    assert.equal(seat.ok, true);
+    if (i === 0) first = seat;
   }
+  store.disconnect('p0');
   assert.deepEqual(store.join('late', { v, code, name: 'Late' }), { ok: false, error: ERRORS.ROOM_FULL });
+  const resumed = store.resume('back', { v, code, role: 'player', token: first.token });
+  assert.equal(resumed.slot, 0);
+  assert.equal(resumed.players.length, playerCapacity(sport));
 });
 
 test('a wrong or malformed code is no-room', () => {
@@ -84,7 +93,7 @@ test('names are cleaned, capped, and required', () => {
 });
 
 test('duplicate names get a number and still fit', () => {
-  const { store, code } = openRoom();
+  const { store, code } = openRoom(new RoomStore(), 'bowling');
   assert.equal(store.join('a', { v, code, name: 'Sam' }).name, 'Sam');
   assert.equal(store.join('b', { v, code, name: 'sam' }).name, 'sam 2');
   assert.equal(store.join('c', { v, code, name: 'Sam' }).name, 'Sam 3');
@@ -126,51 +135,42 @@ test('removing someone who is not in a room is a no-op', () => {
   assert.equal(store.remove('nobody'), null);
 });
 
-// Shared setup ---------------------------------------------------------------
+// Ready check -------------------------------------------------------------
 
-const COUNTDOWN_MS = COUNTDOWN_SECONDS * 1000;
-const VOTE_MS = VOTE_SECONDS * 1000;
-
-/** A room with a fake clock and a full lobby. Players are p0, p1, … */
-function fullLobby() {
+/** A room with a fake clock, filled with four players to retain multiplayer lobby coverage. Players are p0, p1, … */
+function startReadyCheck(sport = 'bowling') {
   const clock = { t: 1_000_000 };
-  const { store, code } = openRoom(new RoomStore({ now: () => clock.t }));
-  for (let i = 0; i < PLAYERS_TO_START; i += 1) store.join(`p${i}`, { v, code, name: `P${i}` });
+  const { store, code } = openRoom(new RoomStore({ now: () => clock.t }), sport);
+  for (let i = 0; i < playerCapacity(sport); i += 1) store.join(`p${i}`, { v, code, name: `P${i}` });
+  store.setSetup('p0', { setup: 'buttons' });
+  for (let i = 1; i < playerCapacity(sport); i += 1) store.setSetup(`p${i}`, { setup: 'motion' });
   return { store, code, clock };
 }
 
 function everyoneReady(store) {
-  for (let i = 0; i < PLAYERS_TO_START; i += 1) store.setReady(`p${i}`, { ready: true });
-}
-
-/** A full lobby where everyone is ready and the countdown has run out, so the vote is open. */
-function openVote() {
-  const room = fullLobby();
-  everyoneReady(room.store);
-  room.clock.t += COUNTDOWN_MS;
-  room.store.finishCountdown(room.code);
-  return room;
-}
-
-function everyoneVotes(store, watch = () => false) {
-  for (let i = 0; i < PLAYERS_TO_START; i += 1) store.vote(`p${i}`, { watch: watch(i) });
+  for (let i = 0; i < MAX_PLAYERS; i += 1) store.setReady(`p${i}`, { ready: true });
 }
 
 const readyFlags = (store, code) => store.lobby(code).players.map((player) => player.ready);
 
-// Ready ---------------------------------------------------------------------
+const COUNTDOWN_MS = COUNTDOWN_SECONDS * 1000;
+const VOTE_MS = VOTE_SECONDS * 1000;
 
-test('a player can ready up as soon as they join', () => {
+test(`the ready check starts at ${READY_AT_PLAYERS} players and not before`, () => {
   const { store, code } = openRoom();
-  store.join('a', { v, code, name: 'Ada' });
-  assert.deepEqual(store.setReady('a', { ready: true }), { ok: true, code });
-  assert.deepEqual(readyFlags(store, code), [true]);
   assert.equal(store.lobby(code).phase, PHASES.LOBBY);
+  for (let i = 0; i < READY_AT_PLAYERS - 1; i += 1) {
+    assert.equal(store.join(`p${i}`, { v, code, name: `P${i}` }).phase, PHASES.LOBBY);
+  }
+  // The join ack itself carries the new phase, so the last phone needs no update.
+  const last = store.join('last', { v, code, name: 'Last' });
+  assert.equal(last.phase, PHASES.READY);
+  assert.ok(last.players.every((player) => player.ready === false));
 });
 
 test('ready toggles on and off, and the snapshot reflects it', () => {
-  const { store, code } = fullLobby();
-  store.setReady('p1', { ready: true });
+  const { store, code } = startReadyCheck();
+  assert.deepEqual(store.setReady('p1', { ready: true }), { ok: true, code });
   assert.deepEqual(readyFlags(store, code), [false, true, false, false]);
   store.setReady('p1', { ready: false });
   assert.deepEqual(readyFlags(store, code), [false, false, false, false]);
@@ -180,62 +180,94 @@ test('ready toggles on and off, and the snapshot reflects it', () => {
   assert.deepEqual(readyFlags(store, code), [false, false, true, false]);
 });
 
-test(`everyone ready with fewer than ${PLAYERS_TO_START} players does not start the countdown`, () => {
-  const { store, code } = openRoom();
-  for (let i = 0; i < PLAYERS_TO_START - 1; i += 1) {
-    store.join(`p${i}`, { v, code, name: `P${i}` });
+test('3 of 4 ready stays in the ready check', () => {
+  const { store, code } = startReadyCheck();
+  for (let i = 0; i < MAX_PLAYERS - 1; i += 1) {
     assert.equal(store.setReady(`p${i}`, { ready: true }).countdownStarted, undefined);
   }
-  assert.equal(store.lobby(code).phase, PHASES.LOBBY);
+  assert.equal(store.lobby(code).phase, PHASES.READY);
   assert.equal(store.lobby(code).countdown, null);
 });
 
-test('3 of 4 ready does not start the countdown', () => {
-  const { store, code } = fullLobby();
-  for (let i = 0; i < PLAYERS_TO_START - 1; i += 1) store.setReady(`p${i}`, { ready: true });
+test('un-readying before the last player is ready keeps the check open', () => {
+  const { store, code } = startReadyCheck();
+  for (let i = 0; i < MAX_PLAYERS - 1; i += 1) store.setReady(`p${i}`, { ready: true });
+  store.setReady('p0', { ready: false });
+  assert.equal(store.setReady(`p${MAX_PLAYERS - 1}`, { ready: true }).countdownStarted, undefined);
+  assert.equal(store.lobby(code).phase, PHASES.READY);
+});
+
+test('ready outside the ready check and the countdown is rejected', () => {
+  // A bowling room with nobody seated has no ready check yet.
+  const { store, code } = openRoom(new RoomStore(), 'bowling');
   assert.equal(store.lobby(code).phase, PHASES.LOBBY);
+  // Once the vote opens, readiness is locked.
+  const voting = openVote();
+  assert.deepEqual(voting.store.setReady('p0', { ready: false }), { ok: false, error: ERRORS.NO_READY_CHECK });
+});
+
+test('only players in a room can send ready', () => {
+  const { store } = startReadyCheck();
+  assert.deepEqual(store.setReady('stranger', { ready: true }), { ok: false, error: ERRORS.NOT_PLAYER });
+  assert.deepEqual(store.setReady('tv', { ready: true }), { ok: false, error: ERRORS.NOT_PLAYER });
 });
 
 test('a bad ready payload is rejected and changes nothing', () => {
-  const { store, code } = fullLobby();
+  const { store, code } = startReadyCheck();
   for (const payload of [undefined, null, {}, { ready: 'yes' }, { ready: 1 }, 'true']) {
     assert.deepEqual(store.setReady('p0', payload), { ok: false, error: ERRORS.BAD_READY });
   }
   assert.deepEqual(readyFlags(store, code), [false, false, false, false]);
 });
 
-test('only players in a room can send ready', () => {
-  const { store } = fullLobby();
-  assert.deepEqual(store.setReady('stranger', { ready: true }), { ok: false, error: ERRORS.NOT_PLAYER });
-  assert.deepEqual(store.setReady('tv', { ready: true }), { ok: false, error: ERRORS.NOT_PLAYER });
+test('a player leaving restarts readiness for the remaining players', () => {
+  const { store, code } = startReadyCheck();
+  store.setReady('p0', { ready: true });
+  store.setReady('p2', { ready: true });
+  assert.deepEqual(store.remove('p1'), { code, closed: false });
+  assert.equal(store.lobby(code).phase, PHASES.READY);
+  assert.deepEqual(readyFlags(store, code), [false, false, false]);
+  assert.equal(store.setReady('p0', { ready: true }).ok, true);
 });
 
-test('ready is locked once the vote opens', () => {
-  const { store, code } = openVote();
-  assert.deepEqual(store.setReady('p0', { ready: false }), { ok: false, error: ERRORS.READY_LOCKED });
-  // The flags were cleared when the vote opened.
-  assert.deepEqual(readyFlags(store, code), [false, false, false, false]);
+test('a new 4th player restarts the ready check from scratch', () => {
+  const { store, code } = startReadyCheck();
+  store.setReady('p0', { ready: true });
+  store.remove('p3');
+  const back = store.join('new', { v, code, name: 'New' });
+  assert.equal(back.slot, 3);
+  assert.equal(back.phase, PHASES.READY);
+  assert.ok(back.players.every((player) => player.ready === false));
 });
 
-// Countdown -------------------------------------------------------------------
+test('the host leaving during the ready check still closes the room', () => {
+  const { store, code } = startReadyCheck();
+  store.setReady('p0', { ready: true });
+  const result = store.remove('tv');
+  assert.equal(result.closed, true);
+  assert.equal(result.playerIds.length, MAX_PLAYERS);
+  assert.equal(store.lobby(code), null);
+  assert.deepEqual(store.setReady('p1', { ready: true }), { ok: false, error: ERRORS.NOT_PLAYER });
+});
 
-test(`all ${PLAYERS_TO_START} ready starts the countdown on its own`, () => {
-  const { store, code } = fullLobby();
-  for (let i = 0; i < PLAYERS_TO_START - 1; i += 1) store.setReady(`p${i}`, { ready: true });
-  assert.deepEqual(store.setReady(`p${PLAYERS_TO_START - 1}`, { ready: true }), {
-    ok: true,
-    code,
-    countdownStarted: true,
-    msLeft: COUNTDOWN_MS,
-  });
+// The countdown starts by itself ---------------------------------------------
+
+test('the last player to ready up starts the countdown on its own', () => {
+  const { store, code } = startReadyCheck();
+  for (let i = 0; i < MAX_PLAYERS - 1; i += 1) store.setReady(`p${i}`, { ready: true });
+  assert.equal(store.lobby(code).countdown, null);
+  assert.deepEqual(store.setReady(`p${MAX_PLAYERS - 1}`, { ready: true }),
+    { ok: true, code, countdownStarted: true, msLeft: COUNTDOWN_MS });
   const lobby = store.lobby(code);
   assert.equal(lobby.phase, PHASES.COUNTDOWN);
   assert.deepEqual(lobby.countdown, { msLeft: COUNTDOWN_MS });
+  assert.equal(typeof lobby.gameId, 'string');
+  // Everyone stays ready while the countdown runs, so anyone can still back out.
   assert.deepEqual(readyFlags(store, code), [true, true, true, true]);
 });
 
-test('countdown msLeft follows the clock and never goes negative', () => {
-  const { store, code, clock } = fullLobby();
+test('msLeft counts down with the clock and never goes negative', () => {
+  const { store, code, clock } = startReadyCheck();
   everyoneReady(store);
   clock.t += 2000;
   assert.deepEqual(store.lobby(code).countdown, { msLeft: COUNTDOWN_MS - 2000 });
@@ -244,77 +276,100 @@ test('countdown msLeft follows the clock and never goes negative', () => {
 });
 
 test('un-readying during the countdown cancels it, and everyone else stays ready', () => {
-  const { store, code } = fullLobby();
+  const { store, code, clock } = startReadyCheck();
   everyoneReady(store);
   assert.deepEqual(store.setReady('p2', { ready: false }), { ok: true, code, countdownCancelled: true });
   const lobby = store.lobby(code);
-  assert.equal(lobby.phase, PHASES.LOBBY);
+  assert.equal(lobby.phase, PHASES.READY);
   assert.equal(lobby.countdown, null);
+  assert.equal(lobby.gameId, null);
   assert.deepEqual(readyFlags(store, code), [true, true, false, true]);
-  // Readying again restarts a fresh countdown.
+  // The cancelled countdown's deadline passing later changes nothing.
+  clock.t += COUNTDOWN_MS;
+  assert.equal(store.finishCountdown(code), null);
+  // Readying up again restarts it straight away.
   assert.equal(store.setReady('p2', { ready: true }).countdownStarted, true);
 });
 
-test('a player leaving during the countdown cancels it', () => {
-  const { store, code, clock } = fullLobby();
-  everyoneReady(store);
-  assert.deepEqual(store.remove('p1'), { code, closed: false, countdownCancelled: true });
-  assert.equal(store.lobby(code).phase, PHASES.LOBBY);
-  // The cancelled countdown's timer firing later changes nothing.
-  clock.t += COUNTDOWN_MS;
-  assert.equal(store.finishCountdown(code), null);
-  // A new 4th player who readies up starts it again.
-  store.join('new', { v, code, name: 'New' });
-  assert.equal(store.setReady('new', { ready: true }).countdownStarted, true);
-});
-
-test('nobody can join during the countdown', () => {
-  const store = new RoomStore({ maxPlayers: PLAYERS_TO_START + 1 });
-  const { code } = openRoom(store);
-  for (let i = 0; i < PLAYERS_TO_START; i += 1) store.join(`p${i}`, { v, code, name: `P${i}` });
-  everyoneReady(store);
-  assert.deepEqual(store.join('late', { v, code, name: 'Late' }), { ok: false, error: ERRORS.IN_PROGRESS });
-});
-
-test('the countdown opens the vote, and not a moment early', () => {
-  const { store, code, clock } = fullLobby();
+test('a bowling countdown ends in the game, and not a moment early', () => {
+  const { store, code, clock } = startReadyCheck();
   everyoneReady(store);
   clock.t += COUNTDOWN_MS - 1;
   assert.equal(store.finishCountdown(code), null);
   assert.equal(store.lobby(code).phase, PHASES.COUNTDOWN);
   clock.t += 1;
-  assert.deepEqual(store.finishCountdown(code), { code, msLeft: VOTE_MS });
+  assert.deepEqual(store.finishCountdown(code), { code });
   const lobby = store.lobby(code);
-  assert.equal(lobby.phase, PHASES.VOTE);
+  // Bowling has no tutorial, so there is no vote either.
+  assert.equal(lobby.phase, PHASES.GAME);
   assert.equal(lobby.countdown, null);
-  assert.deepEqual(lobby.vote, { msLeft: VOTE_MS, voted: [] });
-  // A second, stale timer changes nothing.
+  assert.equal(lobby.vote, null);
+  assert.deepEqual(readyFlags(store, code), [false, false, false, false]);
+  // A second, stale tick changes nothing.
   assert.equal(store.finishCountdown(code), null);
   assert.equal(store.finishCountdown('ZZZZ'), null);
 });
 
+test('a player leaving during the countdown cancels it and clears the ready flags', () => {
+  const { store, code, clock } = startReadyCheck();
+  everyoneReady(store);
+  assert.deepEqual(store.remove('p1'), { code, closed: false, countdownCancelled: true });
+  const lobby = store.lobby(code);
+  assert.equal(lobby.phase, PHASES.READY);
+  assert.equal(lobby.countdown, null);
+  assert.deepEqual(readyFlags(store, code), [false, false, false]);
+  clock.t += COUNTDOWN_MS;
+  assert.equal(store.finishCountdown(code), null);
+  // A new 4th player starts a fresh ready check.
+  assert.equal(store.join('new', { v, code, name: 'New' }).phase, PHASES.READY);
+});
+
+test('nobody can join during the countdown', () => {
+  const { store, code } = openRoom(new RoomStore(), 'bowling');
+  store.join('p0', { v, code, name: 'P0' });
+  store.setSetup('p0', { setup: 'buttons' });
+  store.setReady('p0', { ready: true });
+  assert.equal(store.lobby(code).phase, PHASES.COUNTDOWN);
+  assert.deepEqual(store.join('late', { v, code, name: 'Late' }), { ok: false, error: ERRORS.IN_PROGRESS });
+});
+
 test('the host leaving during the countdown closes the room', () => {
-  const { store, code, clock } = fullLobby();
+  const { store, code, clock } = startReadyCheck();
   everyoneReady(store);
   const result = store.remove('tv');
   assert.equal(result.closed, true);
-  assert.equal(result.playerIds.length, PLAYERS_TO_START);
+  assert.equal(result.playerIds.length, MAX_PLAYERS);
   assert.equal(store.lobby(code), null);
   clock.t += COUNTDOWN_MS;
   assert.equal(store.finishCountdown(code), null);
 });
 
-// Tutorial vote ------------------------------------------------------------
+// Tutorial vote (tennis) -----------------------------------------------------
 
-test('a full lobby alone does not open the vote', () => {
-  const { store, code } = fullLobby();
-  assert.equal(store.lobby(code).phase, PHASES.LOBBY);
-  assert.equal(store.lobby(code).vote, null);
-  assert.deepEqual(store.vote('p0', { watch: true }), { ok: false, error: ERRORS.NO_VOTE });
+/** Two tennis players, p0 and p1, through the countdown and into the vote. */
+function openVote() {
+  const fixture = startReadyCheck('tennis');
+  everyoneReady(fixture.store);
+  fixture.clock.t += COUNTDOWN_MS;
+  assert.deepEqual(fixture.store.finishCountdown(fixture.code), { code: fixture.code, msLeft: VOTE_MS });
+  return fixture;
+}
+
+test('a tennis countdown opens the vote, keeping the same game id', () => {
+  const { store, code, clock } = startReadyCheck('tennis');
+  everyoneReady(store);
+  const { gameId } = store.lobby(code);
+  clock.t += COUNTDOWN_MS;
+  assert.deepEqual(store.finishCountdown(code), { code, msLeft: VOTE_MS });
+  const lobby = store.lobby(code);
+  assert.equal(lobby.phase, PHASES.VOTE);
+  assert.equal(lobby.gameId, gameId);
+  assert.deepEqual(readyFlags(store, code), [false, false]);
 });
 
 test('vote msLeft counts down with the clock and never goes negative', () => {
   const { store, code, clock } = openVote();
+  assert.deepEqual(store.lobby(code).vote, { msLeft: VOTE_MS, voted: [] });
   clock.t += 5000;
   assert.equal(store.lobby(code).vote.msLeft, VOTE_MS - 5000);
   clock.t += VOTE_MS;
@@ -323,273 +378,279 @@ test('vote msLeft counts down with the clock and never goes negative', () => {
 
 test('the open vote shows who voted but never their pick', () => {
   const { store, code } = openVote();
-  assert.deepEqual(store.vote('p2', { watch: true }), { ok: true, code, resolved: false });
-  store.vote('p0', { watch: false });
-  assert.deepEqual(store.lobby(code).vote, { msLeft: VOTE_MS, voted: [0, 2] });
+  assert.deepEqual(store.vote('p1', { watch: true }), { ok: true, code, resolved: false });
+  assert.deepEqual(store.lobby(code).vote.voted, [1]);
+  assert.equal('picks' in store.lobby(code).vote, false);
 });
 
 test('one Yes means the tutorial, and the resolved vote reveals every pick', () => {
   const { store, code } = openVote();
   store.vote('p0', { watch: false });
-  store.vote('p1', { watch: true });
-  store.vote('p2', { watch: false });
-  assert.deepEqual(store.vote('p3', { watch: false }), { ok: true, code, resolved: true });
+  assert.deepEqual(store.vote('p1', { watch: true }), { ok: true, code, resolved: true });
   const lobby = store.lobby(code);
   assert.equal(lobby.phase, PHASES.TUTORIAL);
-  assert.deepEqual(lobby.vote, {
-    picks: [
-      { slot: 0, pick: 'no' },
-      { slot: 1, pick: 'yes' },
-      { slot: 2, pick: 'no' },
-      { slot: 3, pick: 'no' },
-    ],
-  });
+  assert.deepEqual(lobby.vote, { picks: [{ slot: 0, pick: PICKS.NO }, { slot: 1, pick: PICKS.YES }] });
+  assert.deepEqual(lobby.tutorial, { step: 0, moves: TUTORIAL_MOVES.tennis, learners: [1], done: [] });
 });
 
 test('all No skips to the game', () => {
   const { store, code } = openVote();
-  everyoneVotes(store);
+  store.vote('p0', { watch: false });
+  store.vote('p1', { watch: false });
   assert.equal(store.lobby(code).phase, PHASES.GAME);
+  assert.equal(store.lobby(code).tutorial, null);
 });
 
-test('the vote resolves as soon as everyone has voted, before the deadline', () => {
-  const { store, code } = openVote();
-  for (let i = 0; i < PLAYERS_TO_START - 1; i += 1) {
-    assert.equal(store.vote(`p${i}`, { watch: false }).resolved, false);
-    assert.equal(store.lobby(code).phase, PHASES.VOTE);
-  }
-  assert.equal(store.vote(`p${PLAYERS_TO_START - 1}`, { watch: true }).resolved, true);
-  assert.equal(store.lobby(code).phase, PHASES.TUTORIAL);
-});
-
-test('expireVote before the deadline does nothing', () => {
+test('on timeout, non-voters count as No, and not a moment early', () => {
   const { store, code, clock } = openVote();
+  store.vote('p0', { watch: false });
   clock.t += VOTE_MS - 1;
   assert.equal(store.expireVote(code), null);
-  assert.equal(store.lobby(code).phase, PHASES.VOTE);
-});
-
-test('on timeout, non-voters count as No', () => {
-  const { store, code, clock } = openVote();
-  store.vote('p1', { watch: false });
-  clock.t += VOTE_MS;
+  clock.t += 1;
   assert.deepEqual(store.expireVote(code), { code });
   const lobby = store.lobby(code);
   assert.equal(lobby.phase, PHASES.GAME);
-  assert.deepEqual(lobby.vote.picks, [
-    { slot: 0, pick: 'none' },
-    { slot: 1, pick: 'no' },
-    { slot: 2, pick: 'none' },
-    { slot: 3, pick: 'none' },
-  ]);
+  assert.deepEqual(lobby.vote.picks, [{ slot: 0, pick: PICKS.NO }, { slot: 1, pick: PICKS.NONE }]);
+  // A stale tick after the vote resolved is harmless.
+  assert.equal(store.expireVote(code), null);
 });
 
 test('on timeout, one Yes still means the tutorial', () => {
   const { store, code, clock } = openVote();
-  store.vote('p3', { watch: true });
+  store.vote('p0', { watch: true });
   clock.t += VOTE_MS;
   store.expireVote(code);
   assert.equal(store.lobby(code).phase, PHASES.TUTORIAL);
+  assert.deepEqual(store.lobby(code).tutorial.learners, [0]);
 });
 
-test('a stale vote timer after the vote resolved is harmless', () => {
+test('the vote deadline does not run while someone is reconnecting', () => {
   const { store, code, clock } = openVote();
-  everyoneVotes(store, (i) => i === 0);
-  const before = store.lobby(code);
+  clock.t += 5000;
+  store.disconnect('p1');
   clock.t += VOTE_MS;
   assert.equal(store.expireVote(code), null);
-  assert.equal(store.expireVote('ZZZZ'), null);
-  assert.deepEqual(store.lobby(code), before);
+  assert.equal(store.lobby(code).vote.msLeft, VOTE_MS - 5000);
+  assert.deepEqual(store.vote('p0', { watch: true }), { ok: false, error: ERRORS.PAUSED });
 });
 
-test('a vote is final', () => {
-  const { store } = openVote();
-  store.vote('p0', { watch: true });
-  assert.deepEqual(store.vote('p0', { watch: false }), { ok: false, error: ERRORS.ALREADY_VOTED });
-  assert.deepEqual(store.vote('p0', { watch: true }), { ok: false, error: ERRORS.ALREADY_VOTED });
-});
-
-test('voting after the vote resolved is rejected', () => {
-  const { store } = openVote();
-  everyoneVotes(store);
-  assert.deepEqual(store.vote('p0', { watch: true }), { ok: false, error: ERRORS.NO_VOTE });
-});
-
-test('only players in a room can vote', () => {
-  const { store } = openVote();
-  assert.deepEqual(store.vote('stranger', { watch: true }), { ok: false, error: ERRORS.NOT_PLAYER });
-  assert.deepEqual(store.vote('tv', { watch: true }), { ok: false, error: ERRORS.NOT_PLAYER });
-});
-
-test('a bad vote payload is rejected and does not count', () => {
+test('a vote is final, and bad or late votes are rejected', () => {
   const { store, code } = openVote();
-  for (const payload of [undefined, null, {}, { watch: 'yes' }, { watch: 1 }, 'true']) {
+  for (const payload of [undefined, null, {}, { watch: 'yes' }, { watch: 1 }]) {
     assert.deepEqual(store.vote('p0', payload), { ok: false, error: ERRORS.BAD_VOTE });
   }
   assert.deepEqual(store.lobby(code).vote.voted, []);
+  store.vote('p0', { watch: true });
+  assert.deepEqual(store.vote('p0', { watch: false }), { ok: false, error: ERRORS.ALREADY_VOTED });
+  assert.deepEqual(store.vote('tv', { watch: true }), { ok: false, error: ERRORS.NOT_PLAYER });
+  assert.deepEqual(store.vote('stranger', { watch: true }), { ok: false, error: ERRORS.NOT_PLAYER });
+  store.vote('p1', { watch: false });
+  assert.deepEqual(store.vote('p1', { watch: true }), { ok: false, error: ERRORS.NO_VOTE });
 });
 
-test('a player leaving cancels the vote; the lobby must ready up again for a fresh one', () => {
+test('there is no vote outside the vote phase', () => {
+  const { store } = startReadyCheck('tennis');
+  assert.deepEqual(store.vote('p0', { watch: true }), { ok: false, error: ERRORS.NO_VOTE });
+});
+
+test('a player leaving during the vote ends the match back to the lobby', () => {
   const { store, code, clock } = openVote();
   store.vote('p0', { watch: true });
-  assert.deepEqual(store.remove('p1'), { code, closed: false, voteCancelled: true });
+  store.remove('p1');
   const lobby = store.lobby(code);
-  assert.equal(lobby.phase, PHASES.LOBBY);
+  assert.equal(lobby.phase, PHASES.READY);
   assert.equal(lobby.vote, null);
-  assert.deepEqual(readyFlags(store, code), [false, false, false]);
-  // The cancelled vote's timer firing later changes nothing.
+  assert.equal(lobby.gameId, null);
   clock.t += VOTE_MS;
   assert.equal(store.expireVote(code), null);
+});
 
-  store.join('new', { v, code, name: 'New' });
-  everyoneReady(store);
-  store.setReady('new', { ready: true });
-  assert.equal(store.lobby(code).phase, PHASES.COUNTDOWN);
+test('nobody can join during the vote', () => {
+  const clock = { t: 0 };
+  const { store, code } = openRoom(new RoomStore({ now: () => clock.t }));
+  store.join('solo', { v, code, name: 'Solo' });
+  store.setSetup('solo', { setup: 'buttons' });
+  store.setReady('solo', { ready: true });
   clock.t += COUNTDOWN_MS;
   store.finishCountdown(code);
-  // A fresh vote: the full time, and p0's old Yes is gone.
-  assert.deepEqual(store.lobby(code).vote, { msLeft: VOTE_MS, voted: [] });
-});
-
-test('leaving after the vote resolved keeps the result and the reveal', () => {
-  const { store, code } = openVote();
-  everyoneVotes(store, (i) => i === 2);
-  assert.deepEqual(store.remove('p0'), { code, closed: false });
-  const lobby = store.lobby(code);
-  assert.equal(lobby.phase, PHASES.TUTORIAL);
-  assert.equal(lobby.vote.picks.length, PLAYERS_TO_START);
-});
-
-test('nobody can join once the vote has resolved', () => {
-  const { store, code } = openVote();
-  everyoneVotes(store);
-  store.remove('p0');
+  assert.equal(store.lobby(code).phase, PHASES.VOTE);
   assert.deepEqual(store.join('late', { v, code, name: 'Late' }), { ok: false, error: ERRORS.IN_PROGRESS });
 });
 
-test('the host leaving during the vote still closes the room', () => {
-  const { store, code } = openVote();
-  store.vote('p0', { watch: true });
-  const result = store.remove('tv');
-  assert.equal(result.closed, true);
-  assert.equal(result.playerIds.length, PLAYERS_TO_START);
-  assert.equal(store.lobby(code), null);
-  assert.equal(store.expireVote(code), null);
-  assert.deepEqual(store.vote('p1', { watch: true }), { ok: false, error: ERRORS.NOT_PLAYER });
-});
-
-// Tutorial -----------------------------------------------------------------
+// Tutorial (tennis) ----------------------------------------------------------
 
 const MOVES = TUTORIAL_MOVES.tennis;
 
-/** A tutorial whose learners are the players watch(i) picks. */
-function openTutorial(watch = (i) => i === 1 || i === 3) {
-  const room = openVote();
-  everyoneVotes(room.store, watch);
-  return room;
+/** Both tennis players vote, then the tutorial starts for whoever said Yes. */
+function openTutorial(watch = [true, true]) {
+  const fixture = openVote();
+  watch.forEach((pick, i) => fixture.store.vote(`p${i}`, { watch: pick }));
+  return fixture;
 }
-
-/** Every learner in ids does the current step's move. */
-function allDo(store, code, ids) {
-  const { step } = store.lobby(code).tutorial;
-  for (const id of ids) store.tutorialMove(id, { step });
-}
-
-test('the tutorial starts at step 0 with the Yes voters as learners', () => {
-  const { store, code } = openTutorial();
-  assert.deepEqual(store.lobby(code).tutorial, { step: 0, moves: MOVES, learners: [1, 3], done: [] });
-});
-
-test('there is no tutorial outside the tutorial phase', () => {
-  const { store, code } = fullLobby();
-  assert.equal(store.lobby(code).tutorial, null);
-  assert.deepEqual(store.tutorialMove('p0', { step: 0 }), { ok: false, error: ERRORS.NO_TUTORIAL });
-
-  const skipped = openVote();
-  everyoneVotes(skipped.store);
-  assert.equal(skipped.store.lobby(skipped.code).phase, PHASES.GAME);
-  assert.equal(skipped.store.lobby(skipped.code).tutorial, null);
-});
 
 test('a step waits for every learner, then the next one starts', () => {
   const { store, code } = openTutorial();
-  assert.deepEqual(store.tutorialMove('p1', { step: 0 }), { ok: true, code, advanced: false });
-  assert.deepEqual(store.lobby(code).tutorial.done, [1]);
-  assert.deepEqual(store.tutorialMove('p3', { step: 0 }), { ok: true, code, advanced: true });
-  assert.deepEqual(store.lobby(code).tutorial, { step: 1, moves: MOVES, learners: [1, 3], done: [] });
+  assert.deepEqual(store.tutorialMove('p0', { step: 0 }), { ok: true, code, advanced: false });
+  assert.deepEqual(store.lobby(code).tutorial.done, [0]);
+  assert.deepEqual(store.tutorialMove('p1', { step: 0 }), { ok: true, code, advanced: true });
+  assert.deepEqual(store.lobby(code).tutorial, { step: 1, moves: MOVES, learners: [0, 1], done: [] });
 });
 
 test('after the last step the game starts', () => {
-  const { store, code } = openTutorial();
+  const { store, code } = openTutorial([false, true]);
   for (let step = 0; step < MOVES.length; step += 1) {
     assert.equal(store.lobby(code).phase, PHASES.TUTORIAL);
-    allDo(store, code, ['p1', 'p3']);
+    assert.equal(store.tutorialMove('p1', { step }).advanced, true);
   }
   const lobby = store.lobby(code);
   assert.equal(lobby.phase, PHASES.GAME);
   assert.equal(lobby.tutorial, null);
-  // The reveal is still there for anyone who wants it.
-  assert.equal(lobby.vote.picks.length, PLAYERS_TO_START);
+  // The game the tutorial leads into is the one the countdown started.
+  assert.equal(typeof lobby.gameId, 'string');
 });
 
 test('a repeat or a step that already ended changes nothing', () => {
   const { store, code } = openTutorial();
+  store.tutorialMove('p0', { step: 0 });
+  assert.deepEqual(store.tutorialMove('p0', { step: 0 }), { ok: true, code, advanced: false });
   store.tutorialMove('p1', { step: 0 });
-  assert.deepEqual(store.tutorialMove('p1', { step: 0 }), { ok: true, code, advanced: false });
-  assert.deepEqual(store.lobby(code).tutorial.done, [1]);
-  store.tutorialMove('p3', { step: 0 });
-  // p1's phone is a beat behind and sends step 0 again during step 1.
-  assert.deepEqual(store.tutorialMove('p1', { step: 0 }), { ok: true, code, advanced: false });
-  assert.deepEqual(store.tutorialMove('p1', { step: 2 }), { ok: true, code, advanced: false });
-  assert.deepEqual(store.lobby(code).tutorial, { step: 1, moves: MOVES, learners: [1, 3], done: [] });
-});
-
-test('only learners can do the moves; watchers and strangers cannot', () => {
-  const { store, code } = openTutorial();
-  assert.deepEqual(store.tutorialMove('p0', { step: 0 }), { ok: false, error: ERRORS.NOT_LEARNER });
-  assert.deepEqual(store.tutorialMove('stranger', { step: 0 }), { ok: false, error: ERRORS.NOT_PLAYER });
-  assert.deepEqual(store.tutorialMove('tv', { step: 0 }), { ok: false, error: ERRORS.NOT_PLAYER });
+  assert.deepEqual(store.tutorialMove('p0', { step: 0 }), { ok: true, code, advanced: false });
   assert.deepEqual(store.lobby(code).tutorial.done, []);
 });
 
-test('a bad move payload is rejected and does not count', () => {
-  const { store, code } = openTutorial();
-  for (const payload of [undefined, null, {}, { step: '0' }, { step: 0.5 }, { step: -1 }, 0]) {
+test('only learners can do the moves, and bad moves do not count', () => {
+  const { store, code } = openTutorial([false, true]);
+  assert.deepEqual(store.tutorialMove('p0', { step: 0 }), { ok: false, error: ERRORS.NOT_LEARNER });
+  assert.deepEqual(store.tutorialMove('tv', { step: 0 }), { ok: false, error: ERRORS.NOT_PLAYER });
+  for (const payload of [undefined, {}, { step: -1 }, { step: 0.5 }, { step: '0' }]) {
     assert.deepEqual(store.tutorialMove('p1', payload), { ok: false, error: ERRORS.BAD_MOVE });
   }
   assert.deepEqual(store.lobby(code).tutorial.done, []);
 });
 
-test('a watcher leaving changes nothing in the tutorial', () => {
-  const { store, code } = openTutorial();
-  store.tutorialMove('p1', { step: 0 });
-  assert.deepEqual(store.remove('p0'), { code, closed: false });
-  assert.deepEqual(store.lobby(code).tutorial, { step: 0, moves: MOVES, learners: [1, 3], done: [1] });
+test('there is no tutorial outside the tutorial phase', () => {
+  const { store } = openVote();
+  assert.deepEqual(store.tutorialMove('p0', { step: 0 }), { ok: false, error: ERRORS.NO_TUTORIAL });
 });
 
-test('a learner leaving no longer holds up the step', () => {
+test('a player leaving during the tutorial ends the match back to the lobby', () => {
   const { store, code } = openTutorial();
-  store.tutorialMove('p1', { step: 0 });
-  assert.deepEqual(store.remove('p3'), { code, closed: false, tutorialAdvanced: true });
-  assert.deepEqual(store.lobby(code).tutorial, { step: 1, moves: MOVES, learners: [1], done: [] });
+  store.remove('p0');
+  const lobby = store.lobby(code);
+  assert.equal(lobby.phase, PHASES.LOBBY);
+  assert.equal(lobby.tutorial, null);
+  assert.equal(store.join('replacement', { v, code, name: 'Replacement' }).slot, 0);
 });
 
-test('a learner leaving before anyone moved just shrinks the step', () => {
-  const { store, code } = openTutorial();
-  assert.deepEqual(store.remove('p3'), { code, closed: false });
-  assert.deepEqual(store.lobby(code).tutorial, { step: 0, moves: MOVES, learners: [1], done: [] });
+test('the TV or P1 can return to the lobby from the vote or the tutorial', () => {
+  for (const open of [openVote, openTutorial]) {
+    const { store, code } = open();
+    const { gameId } = store.lobby(code);
+    assert.deepEqual(store.returnToLobby('tv', { gameId }), { ok: true, code });
+    const lobby = store.lobby(code);
+    assert.equal(lobby.phase, PHASES.READY);
+    assert.equal(lobby.vote, null);
+    assert.equal(lobby.tutorial, null);
+  }
 });
 
-test('the last learner leaving starts the game', () => {
-  const { store, code } = openTutorial((i) => i === 2);
-  assert.deepEqual(store.remove('p2'), { code, closed: false, tutorialAdvanced: true });
-  assert.equal(store.lobby(code).phase, PHASES.GAME);
-  assert.equal(store.lobby(code).tutorial, null);
+test('game input waits until the tutorial is over', () => {
+  const { store, code } = openTutorial([true, false]);
+  const stroke = { type: 'swing', id: 'one', gameId: store.lobby(code).gameId, label: 'Forehand', hand: 'Right' };
+  assert.equal(store.swingTarget('p0', stroke).error, 'not-playing');
+  for (let step = 0; step < MOVES.length; step += 1) store.tutorialMove('p0', { step });
+  assert.equal(store.swingTarget('p0', stroke).ok, true);
 });
 
 test('the host leaving during the tutorial closes the room', () => {
   const { store, code } = openTutorial();
   assert.equal(store.remove('tv').closed, true);
   assert.equal(store.lobby(code), null);
-  assert.deepEqual(store.tutorialMove('p1', { step: 0 }), { ok: false, error: ERRORS.NOT_PLAYER });
+});
+
+// Solo, setup and reconnects ---------------------------------------------------
+
+test('an active tennis game rejects mid-game joining', () => {
+  const { store, code, clock } = startReadyCheck('tennis');
+  store.remove('p1');
+  everyoneReady(store);
+  clock.t += COUNTDOWN_MS;
+  store.finishCountdown(code);
+  clock.t += VOTE_MS;
+  store.expireVote(code);
+  assert.equal(store.lobby(code).phase, PHASES.GAME);
+  assert.deepEqual(store.join('late', { v, code, name: 'Late' }), { ok: false, error: ERRORS.IN_PROGRESS });
+});
+
+test('the tennis controller leaving returns everyone to the lobby to refill P1', () => {
+  const { store, code, clock } = startReadyCheck('tennis');
+  everyoneReady(store);
+  clock.t += COUNTDOWN_MS;
+  store.finishCountdown(code);
+  clock.t += VOTE_MS;
+  store.expireVote(code);
+  assert.deepEqual(store.remove('p0'), { code, closed: false });
+  assert.equal(store.lobby(code).phase, PHASES.LOBBY);
+  assert.equal(store.join('replacement', { v, code, name: 'Replacement' }).slot, 0);
+});
+
+test('one phone can ready, start tennis, and reconnect without extra players', () => {
+  const clock = { t: 0 };
+  const { store, code } = openRoom(new RoomStore({ now: () => clock.t }));
+  const seat = store.join('solo', { v, code, name: 'Solo' });
+  assert.equal(seat.phase, PHASES.READY);
+  store.setSetup('solo', { setup: 'buttons' });
+  assert.equal(store.setReady('solo', { ready: true }).countdownStarted, true);
+  assert.equal(store.join('late', { v, code, name: 'Late' }).error, ERRORS.IN_PROGRESS);
+  clock.t += COUNTDOWN_MS;
+  store.finishCountdown(code);
+  assert.equal(store.vote('solo', { watch: false }).resolved, true);
+  store.disconnect('solo');
+  assert.equal(store.lobby(code).paused, true);
+  assert.equal(store.resume('back', { v, code, role: 'player', token: seat.token }).phase, PHASES.GAME);
+  store.remove('back');
+  assert.equal(store.lobby(code).phase, PHASES.LOBBY);
+});
+
+test('joining during the ready check reopens readiness before the countdown', () => {
+  const { store, code } = openRoom();
+  store.join('solo', { v, code, name: 'Solo' });
+  store.setSetup('solo', { setup: 'motion' });
+  const friend = store.join('friend', { v, code, name: 'Friend' });
+  assert.equal(friend.ok, true);
+  assert.equal(friend.phase, PHASES.READY);
+  assert.equal(store.setReady('solo', { ready: true }).countdownStarted, undefined);
+  store.setSetup('friend', { setup: 'buttons' });
+  assert.equal(store.setReady('friend', { ready: true }).countdownStarted, true);
+});
+
+test('setup gates readiness, cancels a countdown, and pauses a running match until restored', () => {
+  let now = 0;
+  const { store, code } = openRoom(new RoomStore({ now: () => now }));
+  store.join('p0', { v, code, name: 'Blue' });
+  store.join('p1', { v, code, name: 'Red' });
+  assert.equal(store.setReady('p0', { ready: true }).error, 'setup-required');
+  assert.equal(store.setSetup('tv', { setup: 'buttons' }).error, 'not-controller');
+  assert.equal(store.setSetup('p0', { setup: 'fake' }).error, 'bad-setup');
+  store.setSetup('p0', { setup: 'motion' }); store.setSetup('p1', { setup: 'buttons' });
+  store.setReady('p0', { ready: true }); store.setReady('p1', { ready: true });
+  assert.equal(store.lobby(code).phase, PHASES.COUNTDOWN);
+  store.setSetup('p1', { setup: null });
+  assert.equal(store.lobby(code).phase, PHASES.READY);
+  assert.equal(store.lobby(code).countdown, null);
+  store.setSetup('p1', { setup: 'motion' });
+  store.setReady('p0', { ready: true }); store.setReady('p1', { ready: true });
+  now += 5000; store.finishCountdown(code);
+  now += VOTE_MS; store.expireVote(code);
+  store.setSetup('p1', { setup: null });
+  assert.equal(store.lobby(code).paused, true);
+  assert.deepEqual(store.lobby(code).setupPending, ['Red']);
+  const stroke = { type: 'swing', id: 'one', gameId: store.lobby(code).gameId, label: 'Forehand', hand: 'Right' };
+  assert.equal(store.swingTarget('p0', stroke).error, 'paused');
+  store.setSetup('p1', { setup: 'buttons' });
+  assert.equal(store.lobby(code).paused, false);
+  assert.equal(store.swingTarget('p1', { ...stroke, player: 1 }).event.player, 2);
+  store.remove('p1');
+  assert.equal(store.lobby(code).phase, PHASES.READY);
+  assert.equal(store.lobby(code).paused, false);
 });

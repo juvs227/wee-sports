@@ -1,0 +1,78 @@
+.sports-sound-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 30;
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
+  color: #fff;
+  background: #18363a;
+  font:
+    600 12px/1.2 system-ui,
+    sans-serif;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.sports-sound-toggle[aria-pressed='true'] {
+  border-color: #81dfbb;
+  background: #214e42;
+}
+
+.sports-sound-toggle:hover {
+  filter: brightness(1.15);
+}
+
+.sports-sound-toggle:focus-visible {
+  outline: 3px solid #a6f5d5;
+  outline-offset: 3px;
+}
+
+.tv-sound-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+.tv-sound-error,
+.phone-sound-control__error {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(280px, calc(100vw - 32px));
+  padding: 14px;
+  background: #18363a;
+  color: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px #0004;
+}
+.sports-sound-toggle--icon { width: 44px; height: 44px; min-height: 44px; padding: 9px; }
+.sports-sound-toggle--icon[aria-pressed='false'] { border-color: #81dfbb; background: #214e42; }
+.sports-sound-toggle--icon[aria-pressed='true'] { border-color: #ffffff4d; background: #18363a; }
+.sports-sound-toggle--icon:disabled { opacity: .5; cursor: default; }
+.phone-sound-control { margin-left: auto; position: relative; flex-shrink: 0; }
+.phone-session__name { min-width: 0; }
+.phone-session .sports-sound-toggle--icon { color: var(--accent-ink); background: var(--accent-soft); border-color: var(--border); }
+.phone-session .sports-sound-toggle--icon[aria-pressed='true'] { color: var(--text-muted); background: var(--surface); }
+.game-countdown__sound {
+  position: absolute;
+  z-index: 4;
+  top: 16px;
+  left: 16px;
+}
+@media (max-width: 600px) {
+  .game-session__actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+  .game-session .sports-sound-toggle {
+    min-height: 36px;
+    padding: 6px 8px;
+  }
+}

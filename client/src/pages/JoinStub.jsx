@@ -4,7 +4,7 @@
  * (leave), with every failure said in plain words.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   CODE_LENGTH,
@@ -13,17 +13,24 @@ import {
   PHASES,
   PROTOCOL_VERSION,
   cleanName,
+  isController,
   isRoomCode,
   normalizeCode,
 } from '@wee/shared/protocol.js';
 import { PhoneReady } from '../components/PhoneReady.jsx';
 import { PhoneTutorial } from '../components/PhoneTutorial.jsx';
 import { PhoneVote } from '../components/PhoneVote.jsx';
-import { StubBanner } from '../components/StubBanner.jsx';
-import { errorText } from '../lib/errors.js';
-import { cancelLeave, leaveSoon, request, socket } from '../lib/socket.js';
-import { sportName } from '../lib/sports.js';
 import { useRevealHold } from '../lib/useRevealHold.js';
+import { errorText } from '../lib/errors.js';
+import { request } from '../lib/socket.js';
+import { useReconnect } from '../lib/useReconnect.js';
+import { ReconnectNotice } from '../components/ReconnectNotice.jsx';
+import { sportName } from '../lib/sports.js';
+import { PrototypeFrame } from '../components/PrototypeFrame.jsx';
+import { usePhoneLink } from '../lib/usePhoneLink.js';
+import { PhoneSoundToggle } from '../components/PhoneSoundToggle.jsx';
+import { ThemeToggle } from '../components/ThemeToggle.jsx';
+import { PhoneGameOptions } from '../components/PhoneGameOptions.jsx';
 
 const NAME_KEY = 'wee:name';
 
@@ -44,56 +51,25 @@ function saveName(name) {
   }
 }
 
-/** The part of the phone screen that changes with the lobby's phase. */
-function PhonePhase({ lobby, phase, slot, revealing }) {
-  if (phase === PHASES.LOBBY || phase === PHASES.COUNTDOWN) return <PhoneReady lobby={lobby} slot={slot} />;
-  // The vote, then its result for as long as the TV shows the reveal.
-  if (phase === PHASES.VOTE || (revealing && lobby.vote)) return <PhoneVote lobby={lobby} slot={slot} />;
-  if (phase === PHASES.TUTORIAL) {
-    // Keyed by step, so each move starts with a fresh button.
-    return <PhoneTutorial key={lobby.tutorial.step} lobby={lobby} slot={slot} />;
-  }
-  return <p className="stub__status">Game on! Look at the TV.</p>;
-}
-
 export default function JoinStub() {
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const [code, setCode] = useState(() => normalizeCode(params.get('code')));
   const [name, setName] = useState(loadName);
-  const [seat, setSeat] = useState(null);
-  // The latest lobby snapshot: players, phase, who is ready, and the tutorial vote.
-  const [lobby, setLobby] = useState(null);
+  const { url: secureUrl, loading: phoneLinkLoading, status: phoneLinkStatus } = usePhoneLink(code);
+  const needsSecurePage = window.location.protocol === 'http:';
+  const openingSecurePage = needsSecurePage && (phoneLinkLoading || Boolean(secureUrl) || ['connecting', 'reconnecting'].includes(phoneLinkStatus));
+  useEffect(() => {
+    // React Router can arrive here without an HTTP request, so server redirects
+    // alone cannot recover a phone that joined from an old LAN homepage.
+    if (needsSecurePage && !phoneLinkLoading && secureUrl) window.location.replace(secureUrl);
+  }, [needsSecurePage, phoneLinkLoading, secureUrl]);
+  const { snapshot: seat, reconnecting, ended, storageWarning, accept, leave: leaveSession } = useReconnect('player', code);
+  const lobby = seat;
+  // Holds the vote's reveal on screen for a moment; a cancelled vote has none.
+  const revealing = useRevealHold(lobby?.phase) && Boolean(lobby?.vote?.picks);
   const [error, setError] = useState(null);
   const [joining, setJoining] = useState(false);
-  const seated = useRef(false);
-  const revealing = useRevealHold(lobby?.phase);
-
-  useEffect(() => {
-    cancelLeave(EVENTS.PLAYER_LEAVE);
-
-    const onUpdate = (next) => setLobby(next ?? null);
-    const lose = (reason) => () => {
-      if (!seated.current) return;
-      seated.current = false;
-      setSeat(null);
-      setLobby(null);
-      setError(reason);
-    };
-    const onClosed = lose('closed');
-    const onDisconnect = lose('disconnected');
-
-    socket.on(EVENTS.LOBBY_UPDATE, onUpdate);
-    socket.on(EVENTS.ROOM_CLOSED, onClosed);
-    socket.on('disconnect', onDisconnect);
-    return () => {
-      socket.off(EVENTS.LOBBY_UPDATE, onUpdate);
-      socket.off(EVENTS.ROOM_CLOSED, onClosed);
-      socket.off('disconnect', onDisconnect);
-      leaveSoon(EVENTS.PLAYER_LEAVE);
-    };
-  }, []);
-
-  const canJoin = isRoomCode(code) && cleanName(name) !== '' && !joining;
+  const canJoin = !openingSecurePage && isRoomCode(code) && cleanName(name) !== '' && !joining;
 
   async function join(event) {
     event.preventDefault();
@@ -106,43 +82,23 @@ export default function JoinStub() {
       setError(result.error);
       return;
     }
-    seated.current = true;
     saveName(cleanName(name));
-    setSeat(result);
-    // Keep the whole snapshot: players, phase, who is ready.
-    setLobby(result);
+    accept(result);
+    setParams({ code }, { replace: true });
   }
 
-  function leave() {
-    socket.emit(EVENTS.PLAYER_LEAVE);
-    seated.current = false;
-    setSeat(null);
-    setLobby(null);
+  async function leave() {
+    if (!(await leaveSession())) setError('disconnected');
   }
+
+  if (openingSecurePage) return <main className="stub"><p className="eyebrow">Wee Sports · phone controller</p><h1>Opening your controller…</h1><p className="stub__muted" role="status">Connecting your phone for motion play.</p></main>;
 
   if (seat) {
     const players = lobby?.players ?? [];
     const phase = lobby?.phase ?? PHASES.LOBBY;
-    return (
-      <main className="stub">
-        <StubBanner>Phone screen</StubBanner>
-        <div className="you">
-          <span
-            className="seat__badge seat__badge--big"
-            data-slot={seat.slot}
-            style={{ '--player': `var(--p${seat.slot + 1})` }}
-          >
-            P{seat.slot + 1}
-          </span>
-          <div>
-            <h1>You&rsquo;re in, {seat.name}</h1>
-            <p className="stub__muted">
-              {sportName(seat.sport)} · lobby {seat.code}
-            </p>
-          </div>
-        </div>
-        <PhonePhase lobby={lobby} phase={phase} slot={seat.slot} revealing={revealing} />
-
+    const playing = phase === PHASES.GAME && !revealing;
+    const lobbyOptions = (
+      <>
         <h2>In this lobby</h2>
         <ul className="seats" aria-live="polite">
           {players.map((player) => (
@@ -159,20 +115,76 @@ export default function JoinStub() {
             </li>
           ))}
         </ul>
-
         <div className="stub__actions">
           <button type="button" className="btn btn--ghost" onClick={leave}>
             Leave game
           </button>
         </div>
+      </>
+    );
+    return (
+      <main className={`stub phone-session${playing ? ' phone-session--playing' : ''}`}>
+        {!playing ? <p className="eyebrow">Homepage lobby · {seat.code}</p> : null}
+        {storageWarning ? <p className="alert">Browser storage is unavailable. Keep this tab open to preserve your seat.</p> : null}
+        {error ? <p className="alert" role="alert">{errorText(error)}</p> : null}
+        <div className="you">
+          <span
+            className="seat__badge seat__badge--big"
+            data-slot={seat.slot}
+            style={{ '--player': `var(--p${seat.slot + 1})` }}
+          >
+            P{seat.slot + 1}
+          </span>
+          <div className="phone-session__name">
+            <h1>{playing ? seat.name : <>You&rsquo;re in, {seat.name}</>}</h1>
+            <p className="stub__muted">
+              {sportName(seat.sport)}{playing ? '' : ` · lobby ${seat.code}`}
+            </p>
+          </div>
+          <PhoneSoundToggle lobby={lobby} disabled={reconnecting} />
+          <PhoneGameOptions lobby={lobby} slot={seat.slot} disabled={reconnecting} />
+        </div>
+        {playing ? null : phase === PHASES.LOBBY ? (
+          <p className="stub__status">Waiting for a player to join the P1 controller seat…</p>
+        ) : phase === PHASES.VOTE || revealing ? (
+          // Keyed by game, so a fresh vote forgets this phone's last pick.
+          <PhoneVote key={lobby.gameId} lobby={lobby} slot={seat.slot} />
+        ) : phase === PHASES.TUTORIAL ? (
+          <PhoneTutorial key={lobby.tutorial.step} lobby={lobby} slot={seat.slot} />
+        ) : (
+          <PhoneReady lobby={lobby} slot={seat.slot} disabled={reconnecting || lobby.paused} />
+        )}
+
+        {reconnecting || lobby.reconnecting?.length ? <ReconnectNotice lobby={lobby} reconnecting={reconnecting} /> : null}
+        {isController(seat.sport, seat.slot) ? (
+          <>
+            <PrototypeFrame code={seat.code} controller player={seat.slot + 1} sport={seat.sport} gameId={seat.gameId} gameState={seat.gameState}
+              playing={phase === PHASES.GAME}
+              paused={phase !== PHASES.GAME || reconnecting || seat.paused}
+              manuallyPaused={Boolean(lobby.manuallyPaused && !reconnecting && !lobby.reconnecting?.length && !lobby.setupPending?.length)}
+              showPause={reconnecting} />
+          </>
+        ) : null}
+        {playing ? (
+          <details className="phone-session__options">
+            <summary>Lobby options <span>{seat.code}</span></summary>
+            {lobbyOptions}
+          </details>
+        ) : lobbyOptions}
       </main>
     );
   }
 
+  if (reconnecting) return <ReconnectNotice reconnecting />;
+
   return (
     <main className="stub">
-      <StubBanner>Phone screen</StubBanner>
+      <div className="session-heading"><p className="eyebrow">Wee Sports · phone controller</p><ThemeToggle /></div>
       <h1>Join a game</h1>
+      {ended ? <p className="alert" role="alert">{ended === 'replaced'
+        ? 'This controller is active in another tab. Continue there or reload this page.'
+        : ended === 'expired' ? 'Your reconnect window expired. Join again if the lobby is still open.'
+        : 'This game has ended. Check the TV for a new lobby.'}</p> : null}
       <p className="stub__muted">The code is on the TV, under the QR code.</p>
 
       {error ? (

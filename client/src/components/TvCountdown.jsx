@@ -4,12 +4,14 @@
  * ends the countdown; this only shows the time left.
  */
 
+import { useEffect } from 'react';
 import { PHASES } from '@wee/shared/protocol.js';
 import { useCountdown } from '../lib/useCountdown.js';
 
-export function TvCountdown({ lobby }) {
+export function TvCountdown({ lobby, onTick }) {
   const counting = lobby.phase === PHASES.COUNTDOWN;
   const secondsLeft = useCountdown(counting ? lobby.countdown.msLeft : null);
+  useEffect(() => { if (counting) onTick?.(secondsLeft); }, [counting, secondsLeft, onTick, lobby.gameId]);
 
   if (!counting) {
     return (

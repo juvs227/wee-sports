@@ -5,9 +5,12 @@ import { BallMark } from '../components/icons.jsx';
 import { HowItWorks } from '../components/HowItWorks.jsx';
 import { JoinBox } from '../components/JoinBox.jsx';
 import { CreateTile, SportTile } from '../components/SportTile.jsx';
+import { ThemeToggle } from '../components/ThemeToggle.jsx';
 import { errorText } from '../lib/errors.js';
 import { request, useConnection } from '../lib/socket.js';
+import { saveToken } from '../lib/reconnect.js';
 import { SPORTS } from '../lib/sports.js';
+import './Home.css';
 
 /**
  * The homepage, for the TV and for phones.
@@ -24,11 +27,13 @@ export default function Home() {
   const [failure, setFailure] = useState(null);
 
   async function host(sport) {
+    if (opening) return;
     setOpening(sport.id);
     setFailure(null);
     const result = await request(EVENTS.HOST_CREATE, { v: PROTOCOL_VERSION, sport: sport.id });
     setOpening(null);
     if (result?.ok) {
+      saveToken('host', result.code, result.token);
       navigate(`/host/${result.code}`);
       return;
     }
@@ -36,13 +41,13 @@ export default function Home() {
   }
 
   function tileState(sport) {
-    if (opening === sport.id) return 'opening';
+    if (opening) return 'opening';
     if (connection !== 'online') return connection;
     return failure?.sport === sport.id ? 'retry' : 'idle';
   }
 
   return (
-    <div className="home">
+    <div className="home home--polished">
       <header className="topbar page">
         <a className="wordmark" href="/">
           <BallMark className="wordmark__mark" />
@@ -50,21 +55,22 @@ export default function Home() {
             <span className="wordmark__wee">Wee</span> Sports
           </span>
         </a>
-        <a className="topbar__link" href="#how">
-          How it works
-        </a>
+        <div className="topbar__actions">
+          <a className="topbar__link" href="#how">How it works</a>
+          <ThemeToggle />
+        </div>
       </header>
 
       <main className="page">
         <section className="hero" aria-labelledby="hero-title">
           <div className="hero__copy">
-            <p className="eyebrow">Wii-style sports, no console</p>
+            <p className="eyebrow">Sports for your whole crew</p>
             <h1 id="hero-title" className="hero__title">
               Your phone is the remote.
             </h1>
             <p className="hero__lede">
-              Plug a laptop into the TV, pick a sport, and everyone joins by scanning a code.
-              Then swing.
+              Pick a sport on the TV and join from your phone.
+              Calibrate, get ready, and swing together.
             </p>
           </div>
           <JoinBox />

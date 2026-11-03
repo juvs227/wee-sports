@@ -1,0 +1,45 @@
+.controller-page [hidden] { display: none !important; }
+.controller-page .sensor-status { border-left: 3px solid var(--accent-bottom); padding: 8px 12px; background: var(--accent-soft); border-radius: 0 8px 8px 0; font-size: .88rem; }
+.controller-page .sensor-status[data-state="error"] { border-color: var(--danger); background: var(--danger-soft); color: var(--danger); }
+.controller-page progress { width: 100%; height: 12px; accent-color: var(--accent-bottom); margin: 8px 0; }
+.controller-page .range-label { display: flex; justify-content: space-between; gap: 10px; font-weight: 800; margin-top: 18px; }
+.controller-page .range-label output { color: var(--accent-ink); font-weight: 600; }
+.controller-page input[type="range"] { width: 100%; min-height: 42px; accent-color: var(--accent-bottom); touch-action: pan-y; }
+.controller-page #tennis-settings label { display: grid; gap: 8px; margin: 12px 0; }
+.controller-page #tennis-settings p label { display: block; }
+.controller-page .play-state { text-align: center; padding: 24px 20px 18px; margin-top: 4px; }
+.controller-page .play-state h2 { font-size: clamp(1.7rem, 8vw, 2.25rem); line-height: 1.15; margin: 18px 0 12px; letter-spacing: -.03em; }
+.controller-page .play-state #play-help { max-width: 30ch; margin: 0 auto 16px; }
+.controller-page .play-state #latest { overflow-wrap: anywhere; color: var(--accent-ink); font-size: 1rem; font-weight: 800; margin: 12px 0; }
+.controller-page #play-notice { padding: 12px; border-radius: var(--radius-sm); color: var(--warn-ink); background: var(--warn-soft); }
+.controller-page .controller-toolbar { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; }
+.controller-page .settings-toggle { background: transparent; border-color: transparent; color: var(--text-muted); padding: 8px 4px; font-size: .85rem; }
+.controller-page #bowling-controls { text-align: left; border-top: 1px solid var(--border); margin-top: 18px; }
+.controller-page #arm-roll, .controller-page #roll, .controller-page #record { width: 100%; margin-top: 14px; }
+.controller-page #bowling-buttons { margin: 0; }
+.controller-page #bowling-buttons > summary { display: none; }
+.controller-page .shot-options { margin-top: 4px; color: var(--text-muted); font-size: .85rem; }
+.controller-page #cancel-roll { display: block; margin: 0 auto; }
+.controller-page #stop { margin-bottom: 12px; }
+.controller-page .strength-rehearsal h2 { font-size: 1.05rem; margin-bottom: 8px; }
+.controller-page .strength-rehearsal #strength-status { font-weight: 700; }
+.controller-page .strength-rehearsal .buttons { flex-wrap: wrap; }
+.controller-page .motion-readout { text-align: left; padding: 14px 16px; border-radius: var(--radius-sm); background: var(--accent-soft); margin: 16px 0; }
+.controller-page .motion-readout label, .controller-page .motion-readout p { display: flex; justify-content: space-between; gap: 12px; font-size: .9rem; }
+.controller-page .motion-readout meter { width: 100%; height: 18px; accent-color: var(--accent-bottom); }
+.controller-page #tilt-help { font-size: .8rem; }
+.controller-page .play-state[data-state="paused"] .play-pill { background: var(--warn-soft); color: var(--warn-ink); }
+.controller-page .motion-visual { position: relative; width: 200px; max-width: 100%; height: 150px; margin: 20px auto 12px; border-radius: var(--radius-lg); }
+.controller-page .motion-object { position: absolute; bottom: 0; left: calc(50% - 57.5px); width: 115px; height: 148px; transform-origin: 50% 80%; transform: translateX(var(--motion-shift, 0px)) rotate(var(--motion-angle, 0deg)); transition: transform 55ms linear; }
+.controller-page .motion-ball, .controller-page .motion-tv { display: none; }
+.controller-page .motion-visual[data-sport="bowling"] { height: 184px; }
+.controller-page .motion-visual[data-sport="bowling"] .motion-racket { display: none; }
+.controller-page .motion-visual[data-sport="bowling"] .motion-ball { display: block; }
+.controller-page .motion-visual[data-sport="bowling"] .motion-tv { display: block; }
+.controller-page .motion-tv { position: absolute; top: 0; left: calc(50% - 24px); width: 48px; height: 31px; border: 3px solid var(--border-strong); border-radius: 5px; background: var(--surface); }
+.controller-page .motion-tv span { position: absolute; inset: 4px; border-radius: 2px; background: var(--accent-soft); }
+.controller-page .motion-tv i { position: absolute; width: 22px; height: 3px; bottom: -9px; left: 10px; background: var(--border-strong); border-radius: 2px; }
+.controller-page .play-state[data-state="paused"] .motion-visual { opacity: .5; }
+@media (prefers-reduced-motion: reduce) {
+  .controller-page .motion-object { transition: none; transform: none; }
+}

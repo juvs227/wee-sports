@@ -13,7 +13,8 @@ function onLocalhost() {
   return LOCAL_HOSTS.has(window.location.hostname);
 }
 
-export function joinOrigin() {
+export function joinOrigin(runtimeOrigin) {
+  if (runtimeOrigin) return runtimeOrigin.replace(/\/$/, '');
   const configured = import.meta.env.VITE_PUBLIC_URL;
   if (configured) return configured.replace(/\/$/, '');
   const { protocol, port, origin } = window.location;
@@ -21,8 +22,8 @@ export function joinOrigin() {
   return origin;
 }
 
-export function joinUrl(code) {
-  return `${joinOrigin()}/join?code=${code}`;
+export function joinUrl(code, runtimeOrigin) {
+  return `${joinOrigin(runtimeOrigin)}/join?code=${code}`;
 }
 
 /** False only when the QR would point at localhost, which no phone can open. */

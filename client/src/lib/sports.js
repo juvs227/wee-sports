@@ -10,8 +10,8 @@ const CATALOG = [
   {
     id: 'tennis',
     name: 'Tennis',
-    blurb: 'Serve, rally, and smash. Swing your phone like a racket.',
-    players: { min: 1, max: 4 },
+    blurb: 'Rally with a friend using two phones, or play solo against the bot.',
+    players: { min: 1, max: 2 },
     Icon: RacketIcon,
     tint: ['#f1fbdc', '#c6eb86'],
   },
@@ -40,5 +40,5 @@ export function sportName(id) {
 }
 
 export function playerRange({ min, max }) {
-  return min === max ? `${max} players` : `${min}–${max} players`;
+  return min === max ? `${max} ${max === 1 ? 'player' : 'players'}` : `${min}–${max} players`;
 }
