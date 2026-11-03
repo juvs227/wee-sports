@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { Server } from 'socket.io';
-import { ERRORS, EVENTS } from '@wee/shared/protocol.js';
+import { ERRORS, EVENTS } from '../../shared/protocol.js';
 import { RoomStore } from './RoomStore.js';
 
 /** Importable server for tests. index.js owns the listening port. */
