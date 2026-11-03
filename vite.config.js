@@ -6,12 +6,18 @@ import react from '@vitejs/plugin-react';
 const addresses = Object.values(os.networkInterfaces()).flat()
   .filter(address => address?.family === 'IPv4' && !address.internal).map(address => address.address);
 const lanHost = addresses.find(ip => /^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ip)) ?? addresses[0] ?? null;
+const sharedPackage = fileURLToPath(new URL('./shared', import.meta.url));
 
 export default defineConfig(({ mode }) => {
   const env = { ...loadEnv(mode, process.cwd(), ''), ...process.env };
   const publicOrigin = env.VITE_PUBLIC_URL || (env.NGROK_HOST ? `https://${env.NGROK_HOST}` : '');
   return {
     plugins: [react()],
+    resolve: {
+      alias: {
+        '@wee/shared': sharedPackage,
+      },
+    },
     define: {
       '__LAN_HOST__': JSON.stringify(lanHost),
       'import.meta.env.VITE_PUBLIC_URL': JSON.stringify(publicOrigin),
