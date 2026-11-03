@@ -30,7 +30,9 @@ async function main(): Promise<void> {
     const menu = new Menu(world, paused => {
         menuPaused = paused;
         syncWorldState();
-    });
+    }, embedded ? () => {
+        window.parent.postMessage({ type: 'wee:return-to-lobby' }, location.origin);
+    } : undefined);
     syncWorldState();
     new InputController(input => world.setPlayerInput(isPaused() ? { moveX: 0, moveZ: 0 } : input, 1));
 

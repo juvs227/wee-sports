@@ -293,6 +293,33 @@ test('Play before everyone is ready is rejected', () => {
   assert.equal(store.lobby(code).phase, PHASES.LOBBY);
 });
 
+test('the TV can return an active match to the ready check without closing the room', () => {
+  const { store, code, clock } = startReadyCheck('tennis');
+  everyoneReady(store);
+  store.start('tv');
+  clock.t += COUNTDOWN_MS;
+  store.finishCountdown(code);
+  store.setGameState('tv', { gameId: store.lobby(code).gameId, phase: 'rolling', currentPlayer: 1, frame: 1 });
+  assert.equal(store.lobby(code).phase, PHASES.TUTORIAL);
+
+  assert.deepEqual(store.returnToLobby('tv'), { ok: true, code });
+  const lobby = store.lobby(code);
+  assert.equal(lobby.phase, PHASES.READY);
+  assert.equal(lobby.gameId, null);
+  assert.equal(lobby.gameState, null);
+  assert.equal(lobby.countdown, null);
+  assert.equal(lobby.players.length, 2);
+  assert.ok(lobby.players.every(player => !player.ready));
+  assert.equal(store.start('tv').error, ERRORS.NOT_ALL_READY);
+});
+
+test('returning to the lobby is host-only and cannot interrupt a waiting lobby', () => {
+  const { store, code } = startReadyCheck();
+  assert.deepEqual(store.returnToLobby('p0'), { ok: false, error: ERRORS.NOT_HOST });
+  assert.deepEqual(store.returnToLobby('tv'), { ok: false, error: 'not-playing' });
+  assert.equal(store.lobby(code).phase, PHASES.READY);
+});
+
 test('only the TV can press Play, and only once', () => {
   const { store } = startReadyCheck();
   everyoneReady(store);

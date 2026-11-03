@@ -61,6 +61,11 @@ export function createGameServer({ store = new RoomStore(), origins = [], tickMs
       reply(ack, result);
       if (result.ok) broadcast(result.code);
     });
+    socket.on(EVENTS.HOST_RETURN_TO_LOBBY, (_payload, ack) => {
+      const result = store.returnToLobby(socket.id);
+      reply(ack, result);
+      if (result.ok) broadcast(result.code);
+    });
     socket.on(EVENTS.HOST_GAME_STATE, (payload, ack) => {
       const result = store.setGameState(socket.id, payload);
       reply(ack, result);

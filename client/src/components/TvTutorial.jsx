@@ -2,7 +2,7 @@
 import { sportName } from '../lib/sports.js';
 import { PrototypeFrame } from './PrototypeFrame.jsx';
 
-export function TvTutorial({ lobby, paused, onClose, error, immersive = true, fullscreen = false, onToggleView }) {
+export function TvTutorial({ lobby, paused, onClose, error, immersive = true, fullscreen = false, onToggleView, onReturnToLobby }) {
   const bowling = lobby.sport === 'bowling';
   return (
     <main className={`game-session${immersive ? ' game-session--immersive' : ''}`}>
@@ -25,6 +25,7 @@ export function TvTutorial({ lobby, paused, onClose, error, immersive = true, fu
       </header>
       {error ? <p className="game-session__error" role="alert">{error}</p> : null}
       <PrototypeFrame code={lobby.code} players={lobby.players} paused={paused} sport={lobby.sport} gameId={lobby.gameId} gameState={lobby.gameState}
+        onReturnToLobby={onReturnToLobby}
         pauseMessage={lobby.reconnecting?.length ? `Waiting for ${lobby.reconnecting.map(member => member.name).join(', ')} to reconnect.`
           : lobby.setupPending?.length ? `Waiting for ${lobby.setupPending.join(', ')} to finish controller setup.` : undefined} />
     </main>

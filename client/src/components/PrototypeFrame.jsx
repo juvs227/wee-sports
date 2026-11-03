@@ -5,7 +5,7 @@ import { createInputId } from '../../../src/network/inputId.js';
 
 const NO_PLAYERS = [];
 /** Keep the game/controller alive while the outer page owns the lobby session. */
-export function PrototypeFrame({ code, controller = false, player = 1, players = NO_PLAYERS, sport = 'tennis', gameId, gameState, playing = true, paused = false, showPause = paused, pauseMessage }) {
+export function PrototypeFrame({ code, controller = false, player = 1, players = NO_PLAYERS, sport = 'tennis', gameId, gameState, playing = true, paused = false, showPause = paused, pauseMessage, onReturnToLobby }) {
   const frame = useRef(null);
   const ready = useRef(false);
   const pending = useRef(new Map());
@@ -39,6 +39,8 @@ export function PrototypeFrame({ code, controller = false, player = 1, players =
       const data = event.data;
       if (data?.type === 'wee:bridge-ready') {
         ready.current = true; setLoading(false); setFailed(false); publishState();
+      } else if (!controller && data?.type === 'wee:return-to-lobby') {
+        await onReturnToLobby?.();
       } else if (controller && data?.type === 'wee:player-swing' && isSwing(data.event)) {
         const result = paused || connection !== 'online' ? { ok: false, error: 'paused' }
           : await request(EVENTS.PLAYER_SWING, data.event);
@@ -92,7 +94,7 @@ export function PrototypeFrame({ code, controller = false, player = 1, players =
       socket.off(EVENTS.GAME_SWING, swing); socket.off(EVENTS.GAME_ROLL, roll);
       socket.off(EVENTS.GAME_HIT, hit);
     };
-  }, [paused, connection, src, controller, attempt, players, playing, sport, gameId, gameState, player]);
+  }, [paused, connection, src, controller, attempt, players, playing, sport, gameId, gameState, player, onReturnToLobby]);
   return (
     <div className={`prototype-frame ${controller ? 'prototype-frame--phone' : ''}`}>
       {loading ? <p role="status">{failed ? 'Taking too long to load.' : `Loading ${controller ? 'controller' : sport}…`}

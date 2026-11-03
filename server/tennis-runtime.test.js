@@ -15,20 +15,28 @@ vi.mock('../src/network/swingConnection.js', () => ({ connectSwings: () => ({ cl
 
 let listeners;
 let parent;
+let createdElements;
 beforeEach(() => {
   vi.resetModules(); vi.useFakeTimers();
   listeners = new Map();
+  createdElements = [];
   parent = { postMessage: vi.fn() };
   const elements = new Map();
-  const createElement = () => ({
+  const createElement = (id = '') => {
+    const element = {
+      id,
+      listeners: {},
     setAttribute: vi.fn(),
     classList: { toggle: vi.fn() },
-    addEventListener: vi.fn(),
+    addEventListener(type, callback) { this.listeners[type] = callback; },
     removeEventListener: vi.fn(),
     appendChild: vi.fn(),
     remove: vi.fn(),
-    querySelector: () => createElement(),
-  });
+      querySelector: selector => createElement(selector),
+    };
+    createdElements.push(element);
+    return element;
+  };
   vi.stubGlobal('window', { parent,
     addEventListener(type, callback) { listeners.set(type, callback); },
     removeEventListener(type) { listeners.delete(type); },
@@ -86,4 +94,12 @@ test('restoring a solo game from browser history asks the lobby for fresh state 
   expect(runtime.world.start).not.toHaveBeenCalled();
   state({});
   expect(runtime.world.start).toHaveBeenCalledOnce();
+});
+
+test('return-to-lobby menu action asks the parent to leave the immersive game view', async () => {
+  await import('../src/main.ts');
+  const quitButton = createdElements.find(element => element.id === '#quit');
+  quitButton.listeners.click();
+  expect(parent.postMessage).toHaveBeenCalledWith(
+    { type: 'wee:return-to-lobby' }, location.origin);
 });

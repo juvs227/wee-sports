@@ -181,6 +181,22 @@ export class RoomStore {
     return { ok: true, code: room.code, msLeft: COUNTDOWN_SECONDS * 1000 };
   }
 
+  /** The TV can abandon an active match without closing the room or removing players. */
+  returnToLobby(hostId) {
+    hostId = this.#sockets.get(hostId);
+    const member = this.#members.get(hostId);
+    if (member?.role !== 'host') return { ok: false, error: ERRORS.NOT_HOST };
+    const room = this.#rooms.get(member.code);
+    if (![PHASES.COUNTDOWN, PHASES.TUTORIAL].includes(room?.phase)) {
+      return { ok: false, error: 'not-playing' };
+    }
+
+    room.deadline = null;
+    this.#resetReady(room);
+    this.#updatePause(room);
+    return { ok: true, code: room.code };
+  }
+
   setSetup(socketId, payload) {
     const member = this.#members.get(this.#sockets.get(socketId));
     const room = member && this.#rooms.get(member.code);

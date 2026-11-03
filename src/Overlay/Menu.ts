@@ -8,9 +8,14 @@ export class Menu {
     private menu: HTMLDivElement = document.createElement('div');
     private resumeButton: HTMLButtonElement;
     private resetButton: HTMLButtonElement;
+    private quitButton: HTMLButtonElement;
     private pauseButton: HTMLButtonElement = document.createElement('button');
 
-    constructor(world: World, private onPauseChange: (paused: boolean) => void) {
+    constructor(
+        world: World,
+        private onPauseChange: (paused: boolean) => void,
+        private onQuit?: () => void,
+    ) {
         // Set the world instance
         this.world = world;
 
@@ -32,6 +37,8 @@ export class Menu {
         // Get references to the buttons
         this.resumeButton = this.menu.querySelector('#resume')!;
         this.resetButton = this.menu.querySelector('#reset')!;
+        this.quitButton = this.menu.querySelector('#quit')!;
+        this.quitButton.hidden = !this.onQuit;
 
         // Set up pause button
         this.pauseButton.id = 'pause-btn';
@@ -52,6 +59,7 @@ export class Menu {
         window.addEventListener('keydown', this.handleKeyDown);
         this.resumeButton.addEventListener('click', this.handleResume);
         this.resetButton.addEventListener('click', this.handleReset);
+        this.quitButton.addEventListener('click', this.handleQuit);
         this.pauseButton.addEventListener('click', this.handlePauseButton);
     }
 
@@ -66,6 +74,10 @@ export class Menu {
     private readonly handleReset = (): void => {
         this.toggle();
         this.world.reset();
+    };
+
+    private readonly handleQuit = (): void => {
+        this.onQuit?.();
     };
 
     private readonly handlePauseButton = (): void => {
@@ -89,6 +101,7 @@ export class Menu {
         window.removeEventListener('keydown', this.handleKeyDown);
         this.resumeButton.removeEventListener('click', this.handleResume);
         this.resetButton.removeEventListener('click', this.handleReset);
+        this.quitButton.removeEventListener('click', this.handleQuit);
         this.pauseButton.removeEventListener('click', this.handlePauseButton);
         this.menu.remove();
         this.pauseButton.remove();

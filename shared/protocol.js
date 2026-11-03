@@ -81,6 +81,8 @@ export const EVENTS = {
   PLAYER_JOIN: 'player:join',
   /** TV -> server: Play, once everyone is ready. Starts the countdown. Ack: { ok }. */
   HOST_START: 'host:start',
+  /** TV -> server: abandon the current match and return everyone to the lobby ready check. */
+  HOST_RETURN_TO_LOBBY: 'host:return-to-lobby',
   /** Phone -> server: give the seat back. */
   PLAYER_LEAVE: 'player:leave',
   /** Phone -> server: { ready: boolean }. Can be toggled until everyone is ready. Ack: { ok }. */

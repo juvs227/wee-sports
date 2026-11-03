@@ -108,6 +108,11 @@ export default function HostStub() {
   // Keep the game mounted through a temporary drop, so its local state survives.
   if (lobby?.phase === PHASES.TUTORIAL) return <TvTutorial lobby={lobby}
     immersive={immersive} fullscreen={fullscreen} onToggleView={immersive ? leaveGameView : enterGameView}
+    onReturnToLobby={async () => {
+      const result = await request(EVENTS.HOST_RETURN_TO_LOBBY, {});
+      if (result.ok) leaveGameView();
+      else setStartError(errorText(result.error));
+    }}
     paused={reconnecting || lobby.paused} error={startError ? errorText(startError) : null} onClose={async () => {
       if (await leave()) navigate('/');
       else setStartError('disconnected');

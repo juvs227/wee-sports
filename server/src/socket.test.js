@@ -61,6 +61,28 @@ test('real sockets: timeout sweep releases a seat without incoming messages', as
   phone.disconnect(); await expired;
 });
 
+test('TV can return an active match to the ready check while keeping the lobby open', async t => {
+  let now = 0;
+  const store = new RoomStore({ now: () => now });
+  const { client } = await fixture(t, { store });
+  const host = await client(), phone = await client();
+  const room = await send(host, EVENTS.HOST_CREATE, { v, sport: 'tennis' });
+  await send(phone, EVENTS.PLAYER_JOIN, { v, code: room.code, name: 'Yit' });
+  await send(phone, EVENTS.PLAYER_SETUP, { setup: 'buttons' });
+  await send(phone, EVENTS.PLAYER_READY, { ready: true });
+  await send(host, EVENTS.HOST_START);
+  now += 5000;
+  store.finishCountdown(room.code);
+
+  const returned = nextSnapshot(phone, state => state.phase === PHASES.READY);
+  assert.deepEqual(await send(host, EVENTS.HOST_RETURN_TO_LOBBY), { ok: true, code: room.code });
+  const lobby = await returned;
+  assert.equal(lobby.players.length, 1);
+  assert.equal(lobby.players[0].ready, false);
+  assert.equal(lobby.gameId, null);
+  assert.equal((await send(phone, EVENTS.PLAYER_READY, { ready: true })).advanced, true);
+});
+
 test('lobby swings reach only their TV, reject extra phones and stale sessions, and resume with P1', async t => {
   let now = 0;
   const store = new RoomStore({ now: () => now });
