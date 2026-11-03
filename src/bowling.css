@@ -3,37 +3,38 @@ html, body { width: 100%; height: 100%; overflow: hidden; }
 body { margin: 0; background: #203a32; color: var(--text); font-family: var(--font); }
 #bowling-app { position: relative; width: 100%; height: 100dvh; min-height: 0; overflow: hidden; }
 #lane { position: absolute; inset: 0; overflow: hidden; }
-.bowling-hud { width: min(720px, calc(100% - 24px)); border-radius: 14px; padding: 10px 14px 8px; }
-.bowling-heading { gap: 8px; margin-bottom: 4px; }
-.bowling-heading h1 { margin: 0; color: var(--accent-ink); font-size: 12px; line-height: 1.3; font-weight: 900; }
-.bowling-pill { color: var(--text-muted); font-weight: 700; white-space: nowrap; font-size: 11px; font-variant-numeric: tabular-nums; }
-.bowling-players { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 4px 14px; }
-.bowling-player { --seat-color: var(--p1); display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; min-height: 40px; padding: 4px 0 4px 9px; border-left: 3px solid var(--border); }
-.bowling-player[data-player='2'] { --seat-color: var(--p2); }
-.bowling-player[data-player='3'] { --seat-color: var(--p3); }
-.bowling-player[data-player='4'] { --seat-color: var(--p4); }
-.bowling-player[data-active='true'] { border-left-color: var(--seat-color); }
-.bowling-player__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 800; }
-.bowling-player__total { display: flex; flex: 0 0 auto; align-items: flex-start; gap: 2px; font-variant-numeric: tabular-nums; }
-.bowling-player__total strong { font-size: 23px; line-height: 1.2; font-weight: 900; }
-.bowling-player__total abbr { color: var(--accent-ink); font-weight: 800; text-decoration: none; }
-.bowling-hud__footer { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 0 14px; margin-top: 4px; border-top: 1px solid var(--border); padding-top: 4px; }
-.bowling-hud #roll-status { flex: 1 1 250px; margin: 0; font-size: 11px; font-weight: 700; overflow-wrap: anywhere; }
-.bowling-score-details { flex: 0 0 auto; }
-.bowling-score-details[open] { flex-basis: 100%; }
-.bowling-hud .bowling-score-details > summary { padding: 3px 0; }
-.bowling-scores { overflow-x: auto; margin-top: 8px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); }
-.bowling-scores table { border-collapse: collapse; width: 100%; text-align: center; min-width: 690px; font-size: 12px; }
-.bowling-scores th { padding: 7px 9px; }
-.bowling-scores thead { background: var(--surface-sunk); color: var(--text-muted); }
-.bowling-scores tbody th { min-width: 135px; text-align: left; border-left: 4px solid var(--player-color); }
-.bowling-scores td { border-left: 1px solid var(--border); padding: 4px 6px; min-width: 41px; height: 44px; }
-.bowling-scores td strong { display: block; height: 18px; }
-.bowling-scores tbody tr + tr { border-top: 1px solid var(--border); }
-.bowling-scores tr[data-active='true'] { background: var(--accent-soft); }
-.bowling-marks { display: block; min-height: 17px; font-size: 11px; letter-spacing: .05em; }
-.bowling-total { font-size: 20px; font-weight: 900; }
-.bowling-hud .scorecard-help { margin-top: 7px; color: var(--text-muted); font-size: 10px; }
+.bowling-hud { width: min(1040px, calc(100% - 32px)); border-radius: 15px; padding: 9px 12px 8px; backdrop-filter: blur(12px); }
+.bowling-embedded .bowling-hud { top: max(54px, calc(env(safe-area-inset-top) + 48px)); }
+.bowling-heading { gap: 8px; margin-bottom: 7px; }
+.bowling-heading h1 { margin: 0; color: var(--accent-ink); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; line-height: 1.3; font-weight: 900; }
+.bowling-pill { color: var(--text-muted); font-weight: 800; white-space: nowrap; font-size: 11px; font-variant-numeric: tabular-nums; }
+.bowling-hud__footer { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 2px 16px; margin-top: 5px; }
+.bowling-hud #roll-status { margin: 0; font-size: 11px; font-weight: 800; overflow-wrap: anywhere; }
+.bowling-hud .scorecard-help { margin: 0; color: var(--text-muted); font-size: 9px; }
+.bowling-scores { overflow: auto; max-height: min(280px, 33dvh); border-radius: 7px; border: 1px solid var(--border-strong); background: var(--surface); scrollbar-width: thin; overscroll-behavior: contain; }
+.bowling-scores table { border-collapse: separate; border-spacing: 0; table-layout: fixed; width: 100%; min-width: 730px; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; }
+.bowling-scores thead th { position: sticky; top: 0; z-index: 2; padding: 4px; height: 24px; background: var(--surface-sunk); color: var(--text-muted); font-size: 10px; }
+.bowling-scores thead th:first-child { width: 132px; left: 0; z-index: 3; text-align: left; padding-left: 10px; }
+.bowling-scores thead th:nth-last-child(2) { width: 74px; }
+.bowling-scores thead th:last-child { width: 64px; right: 0; z-index: 3; }
+.bowling-scores tbody th { position: sticky; left: 0; z-index: 1; padding: 5px 9px; background: var(--surface); color: var(--text); border-left: 3px solid var(--player-color); text-align: left; font-size: 12px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bowling-scores td { border-left: 1px solid var(--border-strong); padding: 0; height: 48px; vertical-align: top; }
+.bowling-scores td strong { display: block; height: 25px; padding: 1px 3px; font-size: 16px; line-height: 23px; font-weight: 900; }
+.bowling-scores tbody tr + tr > * { border-top: 1px solid var(--border-strong); }
+.bowling-scores tr[data-active='true'] th, .bowling-scores tr[data-active='true'] .bowling-total { background: var(--accent-soft); }
+.bowling-scores td[data-current='true'] { box-shadow: inset 0 0 0 2px var(--accent-ink); background: var(--accent-soft); }
+.bowling-marks { display: grid; grid-template-columns: repeat(var(--rolls, 2), minmax(0, 1fr)); height: 22px; font-size: 13px; font-weight: 800; line-height: 21px; }
+.bowling-marks > span + span { border-left: 1px solid var(--border-strong); border-bottom: 1px solid var(--border-strong); }
+.bowling-marks .bowling-mark--strike, .bowling-marks .bowling-mark--spare { color: var(--accent-ink); background: var(--accent-soft); font-weight: 900; }
+.bowling-scores .bowling-total { position: sticky; right: 0; z-index: 1; background: var(--surface); font-size: 21px; font-weight: 900; vertical-align: middle; }
+.bowling-callout { position: absolute; z-index: 5; left: 50%; top: 49%; transform: translate(-50%, -50%); min-width: 260px; max-width: calc(100% - 32px); padding: 17px 36px 21px; border: 1px solid #d2f78b; border-radius: 23px; background: #132e27ed; box-shadow: 0 12px 50px #00170c55; text-align: center; color: #f1ffe8; pointer-events: none; animation: bowling-call-in 240ms ease-out; }
+.bowling-callout[hidden] { display: none; }
+.bowling-callout > span { display: block; max-width: 290px; overflow-wrap: anywhere; color: #d8ebd6; font-size: 13px; font-weight: 800; }
+.bowling-callout strong { display: block; color: #dcff91; font-size: clamp(38px, 5vw, 68px); font-weight: 900; letter-spacing: -.04em; line-height: 1.2; }
+.bowling-callout p { margin: 5px 0 0; font-size: 12px; color: #e2eddf; }
+.bowling-callout[data-kind='spare'] { border-color: #9fd6e9; }
+.bowling-callout[data-kind='spare'] strong { color: #b4e9f5; }
+@keyframes bowling-call-in { from { opacity: 0; translate: 0 10px; scale: .96; } to { opacity: 1; translate: 0 0; scale: 1; } }
 .bowling-help { position: absolute; bottom: max(10px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100% - 28px); padding: 6px 12px; border-radius: 20px; color: #fff; background: #142c2ac7; font-size: 11px; text-align: center; margin: 0; }
 #bowling-app button { border: 1px solid var(--accent-bottom); border-radius: var(--radius-sm); background: linear-gradient(var(--accent-top), var(--accent-bottom)); color: white; padding: 10px 18px; font: 800 13px var(--font); cursor: pointer; }
 #bowling-app button:disabled { opacity: .45; cursor: default; }
@@ -48,4 +49,14 @@ body { margin: 0; background: #203a32; color: var(--text); font-family: var(--fo
 .bowling-results h2 { margin: 0 0 8px; font-size: 22px; }
 .bowling-results ol { padding: 0; list-style: none; }
 .bowling-results li { margin: 6px; font-size: 14px; font-weight: 800; }
-@media (max-width: 540px) { .bowling-hud { width: calc(100% - 14px); padding: 8px 10px; } .bowling-players { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 10px; } .bowling-players > :only-child { grid-column: 1 / -1; } .bowling-player__name { font-size: 11px; } .bowling-player__total strong { font-size: 21px; } .bowling-pill, .bowling-help { font-size: 10px; } }
+@media (max-width: 540px) {
+  .bowling-hud { width: calc(100% - 14px); padding: 7px 8px; }
+  .bowling-embedded .bowling-hud { top: max(48px, calc(env(safe-area-inset-top) + 44px)); }
+  .bowling-heading { margin-bottom: 5px; }
+  .bowling-pill, .bowling-help { font-size: 10px; }
+  .bowling-scores thead th:first-child { width: 98px; }
+  .bowling-scores table { min-width: 680px; }
+  .bowling-scores tbody th { font-size: 10px; }
+  .bowling-hud .scorecard-help { font-size: 8px; }
+}
+@media (prefers-reduced-motion: reduce) { .bowling-callout { animation: none; } }

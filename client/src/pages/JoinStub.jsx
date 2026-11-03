@@ -27,6 +27,7 @@ import { PrototypeFrame } from '../components/PrototypeFrame.jsx';
 import { usePhoneLink } from '../lib/usePhoneLink.js';
 import { PhoneSoundToggle } from '../components/PhoneSoundToggle.jsx';
 import { ThemeToggle } from '../components/ThemeToggle.jsx';
+import { PhoneGameOptions } from '../components/PhoneGameOptions.jsx';
 
 const NAME_KEY = 'wee:name';
 
@@ -136,7 +137,7 @@ export default function JoinStub() {
             </p>
           </div>
           <PhoneSoundToggle lobby={lobby} disabled={reconnecting} />
-          <ThemeToggle />
+          <PhoneGameOptions lobby={lobby} slot={seat.slot} disabled={reconnecting} />
         </div>
         {playing ? null : phase === PHASES.LOBBY ? (
           <p className="stub__status">Waiting for a player to join the P1 controller seat…</p>

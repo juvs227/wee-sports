@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
-import { createGround } from './components/ground';
+import { createParkClub } from './components/parkClub';
 import { createNet } from './components/net';
 import { createCourt } from './components/court';
 import {
@@ -41,6 +41,7 @@ export class World {
     private readonly shotTargetMarker: THREE.Mesh;
     private readonly gameLogic: GameLogic;
     private readonly worldCamera: WorldCamera;
+    private readonly parkClub = createParkClub();
     private clock = new THREE.Clock();
     private animationFrameId: number | null = null;
 
@@ -66,7 +67,8 @@ export class World {
 
     constructor(container: HTMLElement) {
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x87ceeb);
+        this.scene.background = new THREE.Color(0xc4d9d3);
+        this.scene.fog = new THREE.Fog(0xc4d9d3, 45, 110);
 
         this.worldCamera = new WorldCamera();
         this.camera = this.worldCamera.primary;
@@ -75,24 +77,29 @@ export class World {
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.shadowMap.enabled = true;
-        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        this.renderer.shadowMap.type = THREE.PCFShadowMap;
+        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        this.renderer.toneMappingExposure = 1;
 
         container.appendChild(this.renderer.domElement);
 
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
         this.controls.enableDamping = true;
-        this.controls.target.set(0, 0, 0);
+        this.controls.target.set(0, 0, 1);
 
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        const ambientLight = new THREE.HemisphereLight(0xffffff, 0x445547, 2.3);
         this.scene.add(ambientLight);
 
-        const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
-        dirLight.position.set(5, 10, 7);
+        const dirLight = new THREE.DirectionalLight(0xfff4db, 2.4);
+        dirLight.position.set(-14, 25, 12);
         dirLight.castShadow = true;
-        dirLight.shadow.mapSize.set(2048, 2048);
+        dirLight.shadow.mapSize.set(1024, 1024);
+        Object.assign(dirLight.shadow.camera, {left: -18, right: 18, top: 22, bottom: -22, near: 1, far: 70});
+        dirLight.shadow.camera.updateProjectionMatrix();
+        dirLight.shadow.normalBias = .03;
         this.scene.add(dirLight);
 
-        this.scene.add(createGround());
+        this.scene.add(this.parkClub.group);
         this.scene.add(createNet());
         this.scene.add(createCourt());
 
@@ -230,6 +237,7 @@ export class World {
 
     public dispose(): void {
         this.stop();
+        this.parkClub.dispose();
         this.shotTargetMarker.geometry.dispose();
         (this.shotTargetMarker.material as THREE.Material).dispose();
         this.shotTargetMarker.removeFromParent();

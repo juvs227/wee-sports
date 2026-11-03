@@ -3,7 +3,61 @@
 Implemented on `update-homepage`. The team's models, stroke classifier, racket
 hitboxes and gravity remain in place. No changes were merged into `main`.
 
-## Final follow-up: setup, direction and appearance
+## Park Club selected — implemented
+
+- **Tennis:** the selected Park Club design is now in the game. Low-detail trees,
+  hedges and a path replace the debug grid; a higher camera frames the whole
+  court with less empty sky. Both views remain on by default in solo play.
+  The team's court, net, player models, motion classifier, hitboxes, scoring and
+  ball physics are unchanged. Lighting and camera changes are cosmetic.
+- **TV display:** only the Wee brand, sport and room code stay in the header.
+  Tennis has one compact strip for names, points, games, sets and the serving
+  indicator, plus one coach cue. Fullscreen/windowed controls and Close lobby
+  remain in a small TV display menu, available on hover, keyboard focus or touch.
+- **Phone controls:** the speaker button controls TV sound; the adjacent options
+  button opens appearance and live match controls. Player 1 can change assistance,
+  bot challenge, timing, solo views, practice and match length, or start a new
+  game. Other players keep their own appearance controls and shared sound toggle.
+  New-game actions ask for a second tap because they reset everyone's score.
+- **Command delivery:** settings use an authenticated, allowlisted route scoped
+  to the active lobby game. The phone shows success only after the TV game applies
+  the change. Stale, paused, duplicate and unauthorized requests are rejected;
+  resets and bowling releases cannot cross while awaiting acknowledgement.
+  Two-human tennis cannot enable solo practice, bot settings or hide a view.
+- **Bowling:** the ten-frame table is always visible above the full-height lane.
+  It includes individual roll boxes, three boxes for the tenth frame, cumulative
+  totals, X for a strike and / for a spare. An ellipsis marks an unresolved bonus;
+  the total waits for the required later rolls. Strike! and Spare! appear briefly
+  after a completed delivery, without repeating on polling or reconnect. The
+  final callout finishes before rankings appear. Existing result sounds remain.
+  The scoring engine and rigid-body simulation are unchanged.
+
+This section supersedes the earlier collapsed bowling table, TV sound button and
+pending tennis design notes below. The four original design previews remain for
+reference at `/docs/previews/tennis-designs.html` in development.
+
+### Park Club validation
+
+- **315 game tests + 81 platform tests passed (396 total)**, including command
+  authentication, duplicate/lifecycle handling, actual Socket.IO acknowledgements,
+  reset/roll ordering, scoring marks and final-frame callouts. An initial physics
+  test hit its five-second timeout while the build and live games were running;
+  the unchanged full suite passed with those competing tasks stopped.
+- TypeScript, lint, diff checks and the production build passed. Build verification
+  checked all four pages and both models. The existing Three.js bundle-size warning
+  remains.
+- Live solo tennis: homepage join/start, both views, phone assistance update,
+  practice and return to match, quick-match reset, mute, and a successful serve.
+  The phone options dialog fits a 390 × 844 viewport with no horizontal overflow.
+- Live solo bowling: homepage join/start, six pins recorded in the first roll,
+  ball-two progression, and phone-driven reset to an empty first frame. No console
+  errors were captured. A development module load stalled during the first run;
+  a clean server restart restored both standalone and homepage bowling.
+- Live input used desktop button fallback. Strike/spare edge cases used automated
+  scoring/runtime tests; real-phone sensor feel and sound balance still need device
+  testing. No live two-human match was run. Temporary test server/tabs were stopped.
+
+## Earlier follow-up: setup, direction and appearance
 
 - **Switching games:** recent same-address calibration now reuses the already
   measured gyro zero after at least ten fresh finite readings over 150 ms. The
@@ -37,7 +91,7 @@ hitboxes and gravity remain in place. No changes were merged into `main`.
   that device/address. Same-origin frames synchronize even when browser storage
   is blocked. Theme changes do not alter the 3D arena or gameplay.
 
-### Tennis design review — not applied to the game
+### Original tennis design review — A selected above
 
 Four isolated previews are in [the design review](previews/tennis-designs.html).
 With the development server running, open `/docs/previews/tennis-designs.html`.
@@ -52,8 +106,9 @@ They reuse the team's court, net and player modules without live game logic.
 
 Every concept keeps both solo cameras, frames more of the court, and shows only
 the brand/sport/code, score and one coach cue. Tennis's current environment,
-scoreboard layout and shared TV header are intentionally awaiting the user's
-choice. Moving tennis options to the phone needs allowlisted, authenticated
+scoreboard layout and shared TV header were initially awaiting the user's
+choice. The selected design and authenticated phone controls are now implemented
+as described above. Moving tennis options to the phone uses allowlisted, authenticated
 commands scoped to the active match; it must not expose arbitrary iframe commands
 or grant players the host's close-lobby authority. Native fullscreen entry still
 uses the TV's direct Play gesture.

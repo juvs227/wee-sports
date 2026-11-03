@@ -10,13 +10,13 @@ export class WorldCamera {
     }
 
     public constructor() {
-        this.primary = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
-        this.primary.position.set(0, 4, 15);
-        this.primary.lookAt(0, 0, 0);
+        this.primary = new THREE.PerspectiveCamera(51, 1, 0.1, 180);
+        this.primary.position.set(0, 12, 22);
+        this.primary.lookAt(0, 0, 1);
 
-        this.secondary = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
-        this.secondary.position.set(0, 4, -15);
-        this.secondary.lookAt(0, 0, 0);
+        this.secondary = new THREE.PerspectiveCamera(51, 1, 0.1, 180);
+        this.secondary.position.set(0, 12, -22);
+        this.secondary.lookAt(0, 0, -1);
     }
 
     public setSplitScreen(enabled: boolean, width: number, height: number): void {

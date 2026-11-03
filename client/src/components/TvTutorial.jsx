@@ -2,26 +2,26 @@
 import { sportName } from '../lib/sports.js';
 import { PrototypeFrame } from './PrototypeFrame.jsx';
 
-export function TvTutorial({ lobby, paused, onClose, error, immersive = true, fullscreen = false, onToggleView, soundControls, onAudio }) {
-  const bowling = lobby.sport === 'bowling';
+export function TvTutorial({ lobby, paused, onClose, error, immersive = true, fullscreen = false, onToggleView, onAudio }) {
   return (
     <main className={`game-session${immersive ? ' game-session--immersive' : ''}`}>
       <header className="game-session__bar">
         <div className="game-session__identity"><span className="game-session__brand">wee.</span>
-          <h1>{sportName(lobby.sport)}</h1><span className="game-session__room">{lobby.code}</span></div>
+          <h1>{sportName(lobby.sport)}</h1></div>
         <div className="game-session__actions">
-          {soundControls}
-          <span className="game-session__mode">{bowling ? `${lobby.players.length} ${lobby.players.length === 1 ? 'player' : 'players'} · 10 frames` : lobby.players.some(player => player.slot === 1) ? '2 players · head to head' : 'Solo · vs bot'}</span>
-          <details className="game-session__menu">
-            <summary>Game options</summary>
+          <span className="game-session__room" aria-label={`Room ${lobby.code}`}>{lobby.code}</span>
+          <details className="game-session__menu game-session__display">
+            <summary aria-label="TV display controls" title="TV display controls">
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M4 9V4h5m6 0h5v5M4 15v5h5m6 0h5v-5" /></svg>
+            </summary>
             <div className="game-session__menu-panel">
-              <p>{bowling ? 'Hold your phone securely. When it’s your turn, make an underhand swing. Watch your release on the lane.' : 'P1 is blue. P2 is red. Swing to serve, then swing as the ball approaches your side.'}</p>
+              <p>Sound and match settings are on your phone.</p>
+              <button type="button" className="game-session__view" onClick={onToggleView}>
+                {immersive ? fullscreen ? 'Exit full screen' : 'Windowed view' : 'Full screen'}
+              </button>
               <button type="button" onClick={onClose}>Close lobby</button>
             </div>
           </details>
-          <button type="button" className="game-session__view" onClick={onToggleView}>
-            {immersive ? fullscreen ? 'Exit full screen' : 'Windowed view' : 'Full screen'}
-          </button>
         </div>
       </header>
       {error ? <p className="game-session__error" role="alert">{error}</p> : null}

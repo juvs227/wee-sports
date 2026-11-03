@@ -37,6 +37,8 @@ import {
   isTennisState,
   isStrokeResult,
   isController,
+  isGameCommand,
+  isGameOptions,
   playerCapacity,
 } from '@wee/shared/protocol.js';
 
@@ -109,7 +111,8 @@ export class RoomStore {
 
     this.#rooms.set(code, { code, sport, hostId, phase: PHASES.LOBBY, players: new Map(), deadline: null, pausedAt: null,
       gameId: null, gameState: null, pendingRoll: null, seenRolls: new Set(),
-      seenHits: new Set(), lastHitAt: new Map(), pendingStrokes: new Map(), soundMuted: null });
+      seenHits: new Set(), lastHitAt: new Map(), pendingStrokes: new Map(), soundMuted: null,
+      gameOptions: null, seenCommands: new Set(), pendingGameCommand: null });
     const memberId = this.#addSession(hostId, code, 'host');
     this.#rooms.get(code).hostId = memberId;
     return this.#sessionView(memberId);
@@ -180,6 +183,63 @@ export class RoomStore {
     const changed = (!payload.initialize || room.soundMuted === null) && room.soundMuted !== payload.muted;
     if (changed) room.soundMuted = payload.muted;
     return { ok: true, code: room.code, muted: room.soundMuted, changed };
+  }
+
+  /** Only P1 can change the active match. The authenticated seat chooses its TV. */
+  gameCommandTarget(socketId, event) {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    const room = member && this.#rooms.get(member.code);
+    const player = room?.players.get(member.id);
+    if (member?.role !== 'player' || player?.slot !== 0) return { ok: false, error: 'not-game-leader' };
+    if (!isGameCommand(event, room.sport)) return { ok: false, error: 'bad-game-command' };
+    if (room.phase !== PHASES.TUTORIAL || event.gameId !== room.gameId) return { ok: false, error: 'not-playing' };
+    if (room.pausedAt !== null) return { ok: false, error: ERRORS.PAUSED };
+    if (!room.gameOptions) return { ok: false, error: 'game-loading' };
+    if (room.seenCommands.has(event.id)) return { ok: false, error: 'duplicate-command' };
+    if (room.pendingGameCommand) return { ok: false, error: 'game-command-pending' };
+    if (room.sport === 'bowling' && (room.gameState?.phase === 'rolling' || room.pendingRoll)) {
+      return { ok: false, error: 'ball-in-play' };
+    }
+    const humanOpponent = [...room.players.values()].some(seat => seat.slot === 1);
+    if (room.sport === 'tennis' && humanOpponent &&
+        (event.action.startsWith('practice-') || event.action === 'configure' &&
+          ('botDifficulty' in event.settings || 'splitView' in event.settings))) {
+      return { ok: false, error: 'solo-only' };
+    }
+    // Retain IDs for this whole lobby match, including timed-out requests: a
+    // delayed retry must never reset a match twice. Bound memory without eviction.
+    if (room.seenCommands.size >= 1024) return { ok: false, error: 'game-command-limit' };
+    room.seenCommands.add(event.id);
+    room.pendingGameCommand = event.id;
+    const command = { id: event.id, gameId: room.gameId, action: event.action };
+    if (event.settings) command.settings = { ...event.settings };
+    if (event.format) command.format = event.format;
+    if (event.stroke) { command.stroke = event.stroke; command.hand = event.hand; }
+    return { ok: true, code: room.code, hostSocketId: this.#members.get(room.hostId)?.socketId, event: command };
+  }
+
+  finishGameCommand(code, id) {
+    const room = this.#rooms.get(code);
+    if (room?.pendingGameCommand === id) room.pendingGameCommand = null;
+  }
+
+  setGameOptions(socketId, payload) {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    const room = member && this.#rooms.get(member.code);
+    if (member?.role !== 'host' || room?.hostId !== member.id) return { ok: false, error: ERRORS.NOT_HOST };
+    if (room.phase !== PHASES.TUTORIAL || payload?.gameId !== room.gameId) return { ok: false, error: 'not-playing' };
+    if (!isGameOptions(payload, room.sport)) return { ok: false, error: 'bad-game-options' };
+    const snapshot = { gameId: room.gameId, sport: room.sport };
+    if (room.sport === 'tennis') {
+      snapshot.settings = Object.fromEntries(['assistance', 'botDifficulty', 'autoMove', 'timingAssist', 'splitView', 'format']
+        .map(key => [key, payload.settings[key]]));
+      snapshot.practice = { active: payload.practice.active, stroke: payload.practice.stroke, hand: payload.practice.hand };
+      // Roster, not client data, decides whether solo-only controls are available.
+      snapshot.humanOpponent = [...room.players.values()].some(player => player.slot === 1);
+    }
+    const changed = JSON.stringify(room.gameOptions) !== JSON.stringify(snapshot);
+    room.gameOptions = snapshot;
+    return { ok: true, code: room.code, changed };
   }
 
   /** The TV's Play button. Only the room's TV, and only once everyone is ready. */
@@ -324,6 +384,9 @@ export class RoomStore {
     if (room.pausedAt !== null) return { ok: false, error: ERRORS.PAUSED };
     if (room.phase !== PHASES.TUTORIAL) return { ok: false, error: 'not-playing' };
     if (room.seenRolls.has(event.id)) return { ok: false, error: 'duplicate-roll' };
+    // A reset and a release must never cross in flight. The game command owns
+    // the lane until its acknowledgement (or timeout) releases this lock.
+    if (room.pendingGameCommand) return { ok: false, error: 'game-command-pending' };
     if (!room.gameState) return { ok: false, error: 'game-loading' };
     if (room.gameState.phase !== 'ready' || room.pendingRoll) return { ok: false, error: 'not-ready-to-roll' };
     if (room.gameState.currentPlayer !== player.slot + 1) return { ok: false, error: 'not-your-turn' };
@@ -369,7 +432,7 @@ export class RoomStore {
     return { code: room.code, sport: room.sport, phase: room.phase, players, countdown,
       paused: room.pausedAt !== null, reconnecting,
       setupPending: players.filter(player => isController(room.sport, player.slot) && !player.setup).map(player => player.name),
-      gameId: room.gameId, gameState: room.gameState, soundMuted: room.soundMuted };
+      gameId: room.gameId, gameState: room.gameState, soundMuted: room.soundMuted, gameOptions: room.gameOptions };
   }
 
   /** The code this id is hosting, or null. */
@@ -522,6 +585,7 @@ export class RoomStore {
     room.gameId = null; room.gameState = null; room.pendingRoll = null; room.seenRolls.clear();
     room.seenHits.clear(); room.lastHitAt.clear();
     room.pendingStrokes.clear();
+    room.gameOptions = null; room.seenCommands.clear(); room.pendingGameCommand = null;
     room.phase = room.players.size >= READY_AT_PLAYERS &&
       (room.sport === 'bowling' || [...room.players.values()].some(player => player.slot === 0)) ? PHASES.READY : PHASES.LOBBY;
   }

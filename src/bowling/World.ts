@@ -106,7 +106,7 @@ export class BowlingWorld {
   roll(roll: BowlingRoll): {ok: boolean; error?: string} {
     if (this.disposed || !this.running) return {ok: false, error: 'The game is paused. Reconnect all players to continue.'};
     const state = this.getState();
-    if (state.complete) return {ok: false, error: 'This match is finished. Start a new match on the TV.'};
+    if (state.complete) return {ok: false, error: 'This match is finished. Start a new match in game options.'};
     if (state.currentPlayer !== roll.player) return {ok: false, error: 'Wait for your turn.'};
     if (this.rolling) return {ok: false, error: 'Wait for the ball and pins to settle.'};
     if (!validRoll(roll)) return {ok: false, error: 'Choose a valid aim, power, and spin.'};

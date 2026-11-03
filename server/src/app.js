@@ -66,6 +66,27 @@ export function createGameServer({ store = new RoomStore(), origins = [], tickMs
       reply(ack, result);
       if (result.ok && result.changed) broadcast(result.code);
     });
+    socket.on(EVENTS.HOST_GAME_OPTIONS, (payload, ack) => {
+      const result = store.setGameOptions(socket.id, payload);
+      reply(ack, result);
+      if (result.ok && result.changed) broadcast(result.code);
+    });
+    socket.on(EVENTS.PLAYER_GAME_COMMAND, (event, ack) => {
+      const result = store.gameCommandTarget(socket.id, event);
+      if (!result.ok) return reply(ack, result);
+      const host = io.sockets.sockets.get(result.hostSocketId);
+      if (!host?.connected) {
+        store.finishGameCommand(result.code, result.event.id);
+        return reply(ack, { ok: false, error: 'disconnected' });
+      }
+      // The phone waits for the game to apply the change, not just relay delivery.
+      host.timeout(2500).emit(EVENTS.GAME_COMMAND, result.event, (error, received) => {
+        store.finishGameCommand(result.code, result.event.id);
+        reply(ack, !error && received?.ok === true ? { ok: true, id: result.event.id }
+          : { ok: false, error: !error && typeof received?.error === 'string' && received.error.length <= 160
+            ? received.error : 'game-loading' });
+      });
+    });
     socket.on(EVENTS.HOST_GAME_STATE, (payload, ack) => {
       const result = store.setGameState(socket.id, payload);
       reply(ack, result);

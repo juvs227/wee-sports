@@ -1,0 +1,35 @@
+/* Park Club: one score strip and one next-action cue, above the existing court. */
+.game-panel.tennis-hud { position: fixed; inset: 0; z-index: 3; pointer-events: none; color: #f5fff6; font-size: 13px; }
+.tennis-scorestrip { position: absolute; top: max(14px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: min(620px, calc(100% - 28px)); display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 15px; padding: 12px 20px; border-radius: 42px; border: 1px solid #a7c6ae40; background: #15392ff2; box-shadow: 0 6px 22px #0a201d24; }
+.tennis-hud[data-embedded='true'] .tennis-scorestrip { top: max(54px, calc(env(safe-area-inset-top) + 44px)); }
+.tennis-seat { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.tennis-seat[data-player='2'] { justify-content: flex-end; }
+.tennis-player-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 15px; font-weight: 800; }
+.tennis-seat strong { font-size: 30px; line-height: 1; font-weight: 900; font-variant-numeric: tabular-nums; }
+.tennis-seat[data-player='1'] .tennis-player-name { border-left: 5px solid #85b7ff; padding-left: 10px; }
+.tennis-seat[data-player='2'] .tennis-player-name { border-right: 5px solid #ff9fa6; padding-right: 10px; }
+.tennis-serving { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: #e1f792; box-shadow: 0 0 0 3px #e1f79219; }
+.tennis-serving[hidden] { display: none; }
+.tennis-score-context { text-align: center; display: grid; gap: 1px; min-width: 94px; font-variant-numeric: tabular-nums; }
+.tennis-score-context strong { color: #e4f5ce; text-transform: uppercase; letter-spacing: .1em; font-size: 10px; font-weight: 900; }
+.tennis-score-context span { color: #d1e1d7; font-size: 10px; white-space: nowrap; }
+.tennis-score-context span:empty { display: none; }
+.tennis-coach { position: absolute; bottom: max(20px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px); margin: 0; border: 1px solid #b3d4bd30; border-radius: 24px; padding: 10px 18px; background: #15392ff2; color: #f5fff6; font-size: 13px; line-height: 1.4; font-weight: 750; text-align: center; box-shadow: 0 4px 18px #10251d20; }
+.game-panel .tennis-local-options { position: absolute; top: 100px; left: 14px; width: min(420px, calc(100% - 28px)); max-height: calc(100dvh - 170px); overflow-y: auto; overscroll-behavior: contain; padding: 6px 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-overlay); color: var(--text); pointer-events: auto; }
+.game-panel .tennis-local-options > summary { font-size: 12px; color: var(--accent-ink); }
+.game-panel .tennis-result { position: absolute; left: 50%; top: 35%; transform: translateX(-50%); padding: 18px 24px; border-radius: 20px; background: #15392ff2; text-align: center; pointer-events: auto; }
+.game-panel .tennis-result button { background: #d5ef9e; color: #193b2c; border-color: #d5ef9e; }
+.tennis-hud [hidden] { display: none !important; }
+@media (max-width: 600px) {
+  .tennis-scorestrip { width: calc(100% - 16px); gap: 9px; padding: 10px 12px; }
+  .tennis-seat { gap: 6px; }
+  .tennis-player-name { font-size: 12px; }
+  .tennis-seat strong { font-size: 25px; }
+  .tennis-score-context { min-width: 78px; }
+  .tennis-score-context strong, .tennis-score-context span { font-size: 8px; }
+  .tennis-seat[data-player='1'] .tennis-player-name { border-left-width: 3px; padding-left: 5px; }
+  .tennis-seat[data-player='2'] .tennis-player-name { border-right-width: 3px; padding-right: 5px; }
+  .tennis-serving { width: 5px; height: 5px; }
+  .tennis-coach { font-size: 11px; padding: 8px 12px; }
+}
+@media (max-height: 480px) { .tennis-scorestrip { padding-top: 8px; padding-bottom: 8px; } .tennis-coach { bottom: 10px; padding-top: 7px; padding-bottom: 7px; } }

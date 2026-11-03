@@ -23,6 +23,15 @@ const TEXT = {
   paused: 'Waiting for everyone to reconnect.',
   'bad-session': 'Your reconnect window expired. Join again.',
   'already-in-room': 'Leave your current lobby before joining another.',
+  'not-game-leader': 'Player 1 manages shared game options.',
+  'not-playing': 'That match changed. Wait for the current game to be ready.',
+  'bad-game-command': 'That option is not available for this game.',
+  'duplicate-command': 'That change was already sent. Check the current game settings.',
+  'game-command-pending': 'Wait for the previous change to finish.',
+  'ball-in-play': 'Let the ball and pins settle before starting a new game.',
+  'solo-only': 'That option is available in solo play.',
+  'game-loading': 'Waiting for the TV game. Try again in a moment.',
+  'game-command-limit': 'This session has reached its settings limit. Start a new lobby.',
 };
 
 export function errorText(code) {

@@ -963,6 +963,27 @@
 .phone-session__options summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; border-radius: var(--radius-sm); }
 .phone-session__options[open] { padding-bottom: 16px; }
 .phone-session__options h2 { margin-top: 0.5rem; }
+.phone-options-toggle { display: grid; place-items: center; flex: 0 0 44px; width: 44px; height: 44px; padding: 0; border: 1px solid var(--border-strong); border-radius: 50%; color: var(--accent-ink); background: var(--surface-sunk); cursor: pointer; }
+.phone-game-options { width: min(440px, calc(100% - 24px)); max-height: min(88dvh, 850px); padding: 0; border: 1px solid var(--border-strong); border-radius: 24px; color: var(--text); background: var(--surface); box-shadow: var(--shadow-lift); overscroll-behavior: contain; }
+.phone-game-options::backdrop { background: #081c24aa; }
+.phone-game-options__content { padding: 22px; }
+.phone-game-options header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.phone-game-options h2 { font-size: 1.4rem; margin-top: 3px; }
+.phone-options-close { width: 44px; height: 44px; flex: 0 0 auto; border: 1px solid var(--border); border-radius: 50%; background: var(--surface-sunk); font-size: 24px; cursor: pointer; }
+.phone-game-options__appearance { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 0; margin-bottom: 14px; border-bottom: 1px solid var(--border); font-weight: 700; }
+.phone-game-options fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.phone-game-options fieldset:disabled { opacity: .65; }
+.phone-game-options label { display: grid; gap: 7px; margin-bottom: 14px; font-size: .9rem; font-weight: 800; }
+.phone-game-options select { width: 100%; min-height: 46px; border: 1px solid var(--border-strong); border-radius: 10px; padding: 10px; font: inherit; background: var(--surface-sunk); color: var(--text); }
+.phone-game-options .phone-options-check { display: flex; align-items: center; gap: 10px; min-height: 40px; margin-bottom: 4px; }
+.phone-options-check input { width: 20px; height: 20px; accent-color: var(--accent-ink); flex-shrink: 0; }
+.phone-options-section { padding: 4px 0; border-top: 1px solid var(--border); margin-top: 12px; }
+.phone-options-section summary { font-weight: 800; cursor: pointer; padding: 12px 0; }
+.phone-options-section p { margin-bottom: 14px; font-size: .85rem; }
+.phone-options-section .btn { min-height: 44px; padding: 10px 14px; font-size: .85rem; }
+.phone-options-confirm { display: flex; flex-wrap: wrap; gap: 8px; }
+.phone-options-message { font-size: .85rem; color: var(--accent-ink); margin: 12px 0; min-height: 1.5em; }
+.phone-options-done { width: 100%; }
 .tennis-session { max-width: 1440px; margin: auto; padding: 24px var(--gutter); }
 .match-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
 .match-heading h1 { font-size: clamp(1.6rem, 4vw, 2.4rem); font-weight: 900; }

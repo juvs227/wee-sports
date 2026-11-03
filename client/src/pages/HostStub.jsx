@@ -111,7 +111,7 @@ export default function HostStub() {
 
   // Keep the game mounted through a temporary drop, so its local state survives.
   if (lobby?.phase === PHASES.TUTORIAL) return <TvTutorial lobby={lobby}
-    soundControls={audio.controls} onAudio={audio.onAudio}
+    onAudio={audio.onAudio}
     immersive={immersive} fullscreen={fullscreen} onToggleView={immersive ? leaveGameView : enterGameView}
     paused={reconnecting || lobby.paused} error={startError ? errorText(startError) : null} onClose={async () => {
       if (await leave()) navigate('/');
@@ -129,7 +129,6 @@ export default function HostStub() {
   }
 
   if (lobby.phase === PHASES.COUNTDOWN) return <div className={`game-countdown${immersive ? ' game-countdown--immersive' : ''}`}>
-    <div className="game-countdown__sound">{audio.controls}</div>
     <button type="button" className="game-countdown__view" onClick={immersive ? leaveGameView : enterGameView}>
       {immersive ? fullscreen ? 'Exit full screen' : 'Windowed view' : 'Full screen'}
     </button>
@@ -198,7 +197,6 @@ export default function HostStub() {
       ) : null}
 
       <div className="stub__actions">
-        {audio.controls}
         <button
           type="button"
           className="btn btn--primary btn--play"

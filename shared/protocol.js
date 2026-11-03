@@ -89,6 +89,11 @@ export const EVENTS = {
   PLAYER_SETUP: 'player:setup',
   /** Current TV or seated phone -> shared TV sound preference for this lobby. */
   SOUND_SET: 'sound:set',
+  /** P1 phone -> its TV: validated match options, with an actual game acknowledgement. */
+  PLAYER_GAME_COMMAND: 'player:game-command',
+  GAME_COMMAND: 'game:command',
+  /** TV -> server: applied options, shared back to the phones in lobby snapshots. */
+  HOST_GAME_OPTIONS: 'host:game-options',
   /** Joined P1/P2 -> server -> its TV. The server assigns the player number. */
   PLAYER_SWING: 'player:swing',
   GAME_SWING: 'game:swing',
@@ -111,6 +116,49 @@ export function isSwing(event) {
     event.id.length <= 100 && ['Forehand', 'Backhand'].includes(event.label) &&
     ['Left', 'Right'].includes(event.hand) &&
     (event.power === undefined || (Number.isFinite(event.power) && event.power >= 0 && event.power <= 1));
+}
+
+const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+const isIdentifier = value => typeof value === 'string' && value.length > 0 && value.length <= 100;
+const optionValidators = {
+  assistance: value => ['beginner', 'standard'].includes(value),
+  botDifficulty: value => ['beginner', 'standard'].includes(value),
+  autoMove: value => typeof value === 'boolean',
+  timingAssist: value => typeof value === 'boolean',
+  splitView: value => typeof value === 'boolean',
+};
+const validPractice = practice => isRecord(practice) && typeof practice.active === 'boolean' &&
+  ['alternate', 'forehand', 'backhand'].includes(practice.stroke) && ['Right', 'Left'].includes(practice.hand);
+
+/** Commands intentionally expose game settings, never arbitrary methods or DOM selectors. */
+export function isGameCommand(event, sport) {
+  if (!isRecord(event) || !isIdentifier(event.id) || !isIdentifier(event.gameId)) return false;
+  let fields = ['id', 'gameId', 'action'];
+  let valid = false;
+  if (sport === 'bowling') valid = event.action === 'new-match';
+  else if (sport === 'tennis') {
+    if (event.action === 'configure') {
+      fields.push('settings');
+      valid = isRecord(event.settings) && Object.keys(event.settings).length > 0 &&
+        Object.entries(event.settings).every(([key, value]) => Object.hasOwn(optionValidators, key) && optionValidators[key](value));
+    } else if (event.action === 'new-match') {
+      fields.push('format'); valid = ['full', 'quick'].includes(event.format);
+    } else if (event.action === 'practice-start') {
+      fields.push('stroke', 'hand');
+      valid = ['alternate', 'forehand', 'backhand'].includes(event.stroke) && ['Right', 'Left'].includes(event.hand);
+    } else valid = event.action === 'practice-stop';
+  }
+  return valid && Object.keys(event).every(key => fields.includes(key));
+}
+
+/** The host reports actual applied options; phones do not optimistically own simulation state. */
+export function isGameOptions(snapshot, sport) {
+  if (!isRecord(snapshot) || !isIdentifier(snapshot.gameId) || snapshot.sport !== sport) return false;
+  if (sport === 'bowling') return true;
+  return sport === 'tennis' && isRecord(snapshot.settings) &&
+    Object.entries(optionValidators).every(([key, validate]) => validate(snapshot.settings[key])) &&
+    ['full', 'quick'].includes(snapshot.settings.format) &&
+    validPractice(snapshot.practice) && typeof snapshot.humanOpponent === 'boolean';
 }
 
 /** TV-published tennis status; scoring/physics remain on the TV. */

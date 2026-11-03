@@ -1,5 +1,6 @@
 import {BowlingWorld, BowlingState} from './bowling/World';
-import {formatFrame} from './bowling/match';
+import {awaitingBonus, createRollCallouts, frameMarks} from './bowling/scoreboard';
+import {isGameCommand} from '../shared/protocol.js';
 import {createSportsAudio} from './audio/sportsAudio';
 import '../client/src/styles/tokens.css';
 import './gameHud.css';
@@ -16,7 +17,34 @@ const sound = embedded ? null : createSportsAudio('bowling');
 sound?.mountButton(document.querySelector('.bowling-heading') as HTMLElement);
 sound?.setActive(!paused);
 const delivered = new Set<string>();
+const commands = new Set<string>();
+const callouts = createRollCallouts();
+let calloutTimer: ReturnType<typeof setTimeout> | null = null;
+let complete = false;
 const post = (message: object): void => { if (embedded) window.parent.postMessage(message, location.origin); };
+document.body.classList.toggle('bowling-embedded', embedded);
+el('replay').hidden = embedded;
+function publishOptions(): void {
+  if (gameId) post({type: 'wee:game-options', gameId, sport: 'bowling'});
+}
+function clearCallout(): void {
+  if (calloutTimer !== null) clearTimeout(calloutTimer);
+  calloutTimer = null;
+  el('roll-callout').hidden = true;
+  el('callout-title').textContent = '';
+  el('results').hidden = !complete;
+}
+function showCallout(call: {kind: 'strike' | 'spare'; player: string}): void {
+  clearCallout();
+  el('roll-callout').dataset.kind = call.kind;
+  el('callout-player').textContent = call.player;
+  el('callout-title').textContent = call.kind === 'strike' ? 'Strike!' : 'Spare!';
+  el('callout-detail').textContent = call.kind === 'strike' ? 'All ten. One roll.' : 'Every pin cleared.';
+  el('roll-callout').hidden = false;
+  // Let the final delivery have its moment before showing the ranking card.
+  if (complete) el('results').hidden = true;
+  calloutTimer = setTimeout(clearCallout, 2400);
+}
 function audioEvent(event: string): void {
   if (embedded) {
     if (gameId) post({type: 'wee:game-audio', sport: 'bowling', gameId, event});
@@ -25,6 +53,9 @@ function audioEvent(event: string): void {
 }
 
 function render(state: BowlingState): void {
+  complete = state.complete;
+  const call = callouts.observe(state, paused);
+  if (paused || state.phase === 'rolling' || !state.lastRoll) clearCallout();
   if (state.phase !== 'rolling') audioEvent('roll-end');
   const player = state.players.find(p => p.player === state.currentPlayer);
   el('frame-label').textContent = state.complete ? 'Final · 10 frames' : `Frame ${state.frame} / 10 · Ball ${state.ball}`;
@@ -33,43 +64,42 @@ function render(state: BowlingState): void {
   const cue = paused ? 'Paused · waiting for controllers' : state.complete ? 'Final scores' : state.phase === 'rolling' ? `${player?.name} · ball in play` :
     `${result ? `${result} · ` : ''}${player?.name}, ${last?.player === state.currentPlayer ? 'roll again' : 'your turn'}`;
   if (el('roll-status').textContent !== cue) el('roll-status').textContent = cue;
-  const summary = el('score-summary'); summary.replaceChildren();
   const body = el('score-body'); body.replaceChildren();
   for (const score of state.players) {
-    const card = document.createElement('div'); card.className = 'bowling-player'; card.setAttribute('role', 'listitem');
-    card.dataset.player = String(score.player); card.dataset.active = String(!state.complete && score.player === state.currentPlayer);
-    if (!state.complete && score.player === state.currentPlayer) card.setAttribute('aria-current', 'true');
-    const cardName = document.createElement('span'); cardName.className = 'bowling-player__name'; cardName.textContent = `P${score.player} · ${score.name}`;
-    const points = document.createElement('span'); points.className = 'bowling-player__total';
-    const value = document.createElement('strong'); value.textContent = String(score.total);
-    const bonusPending = score.frames.some((rolls, index) => score.frameScores[index] === null &&
-      (rolls[0] === 10 || (rolls.length >= 2 && rolls[0] + rolls[1] === 10)));
-    points.setAttribute('aria-label', `${score.total} points${bonusPending ? ', bonus rolls pending' : ''}`);
-    points.append(value);
-    if (bonusPending) {
-      const pending = document.createElement('abbr'); pending.textContent = '*'; pending.title = 'Bonus rolls pending'; pending.setAttribute('aria-hidden', 'true'); points.append(pending);
-    }
-    card.append(cardName, points); summary.append(card);
     const row = document.createElement('tr');
-    row.dataset.active = String(score.player === state.currentPlayer);
+    row.dataset.active = String(!state.complete && score.player === state.currentPlayer);
     row.style.setProperty('--player-color', `var(--p${score.player})`);
     const name = document.createElement('th'); name.scope = 'row'; name.textContent = `P${score.player} · ${score.name}`; row.append(name);
     score.frames.forEach((rolls, index) => {
       const cell = document.createElement('td');
-      const deliveries = document.createElement('span'); deliveries.className = 'bowling-marks'; deliveries.textContent = formatFrame(rolls, index) || '·';
-      const total = document.createElement('strong'); total.textContent = score.frameScores[index] === null ? '' : String(score.frameScores[index]);
+      cell.dataset.current = String(!state.complete && score.player === state.currentPlayer && index + 1 === state.frame);
+      const deliveries = document.createElement('span'); deliveries.className = 'bowling-marks';
+      const marks = frameMarks(rolls, index);
+      deliveries.style.setProperty('--rolls', String(marks.length));
+      for (const mark of marks) {
+        const box = document.createElement('span'); box.textContent = mark;
+        box.className = mark === 'X' ? 'bowling-mark--strike' : mark === '/' ? 'bowling-mark--spare' : '';
+        deliveries.append(box);
+      }
+      const pending = awaitingBonus(rolls, index, score.frameScores[index]);
+      const total = document.createElement('strong');
+      total.textContent = score.frameScores[index] === null ? pending ? '…' : '' : String(score.frameScores[index]);
+      const readable = marks.map(mark => mark === 'X' ? 'strike' : mark === '/' ? 'spare' : mark === '–' ? 'zero' : mark).filter(Boolean).join(', ');
+      cell.setAttribute('aria-label', `Frame ${index + 1}: ${readable || 'not played'}${score.frameScores[index] === null ? pending ? '; bonus rolls pending' : '' : `; total ${score.frameScores[index]}`}`);
       cell.append(deliveries, total); row.append(cell);
     });
     const total = document.createElement('td'); total.className = 'bowling-total'; total.textContent = String(score.total); row.append(total); body.append(row);
   }
-  el('results').hidden = !state.complete;
+  el('results').hidden = !state.complete || !el('roll-callout').hidden;
   el('ranking').replaceChildren(...state.ranking.map(p => {
     const item = document.createElement('li'); item.textContent = `${p.rank}. ${p.name} · ${p.total} points`; return item;
   }));
   (el('roll') as HTMLButtonElement).disabled = paused || state.phase !== 'ready';
+  if (call) showCallout(call);
   post({type: 'wee:bowling-state', gameId, phase: state.phase, currentPlayer: state.currentPlayer, frame: state.frame});
 }
 function create(players: Array<{player: number; name: string}>): void {
+  callouts.reset(); complete = false; clearCallout();
   world = new BowlingWorld(el('lane'), players);
   world.onState = render;
   world.onSoundEvent = event => {
@@ -80,6 +110,13 @@ function create(players: Array<{player: number; name: string}>): void {
   };
   if (!paused) world.start();
   render(world.getState());
+  publishOptions();
+}
+function newMatch(): void {
+  audioEvent('stop');
+  clearCallout(); callouts.reset();
+  delivered.clear(); world?.reset();
+  audioEvent('start'); publishOptions();
 }
 function receive(event: MessageEvent): void {
   if (!embedded || event.source !== window.parent || event.origin !== location.origin) return;
@@ -95,7 +132,7 @@ function receive(event: MessageEvent): void {
       const players = (Array.isArray(data.players) ? data.players : []).map((p: {slot: number; name: string}) => ({player: p.slot + 1, name: p.name}));
       if (!players.length) return;
       audioEvent('roll-end');
-      world?.dispose(); world = null; gameId = data.gameId; delivered.clear();
+      world?.dispose(); world = null; gameId = data.gameId; delivered.clear(); commands.clear();
       try { create(players); }
       catch (error) {
         el('frame-label').textContent = 'Lane unavailable';
@@ -106,6 +143,22 @@ function receive(event: MessageEvent): void {
     if (paused) world!.stop(); else world!.start();
     // Publish after reconnect even when pinfall did not change, without a snapshot feedback loop.
     if (wasPaused !== paused || wasConnected !== connected) render(world!.getState());
+    if (wasConnected !== connected) publishOptions();
+  } else if (data?.type === 'wee:game-command') {
+    const command = data.command;
+    if (!command || typeof command.id !== 'string') return;
+    let result: {ok: boolean; error?: string};
+    if (!world || command.gameId !== gameId) result = {ok: false, error: 'game-loading'};
+    else if (!isGameCommand(command, 'bowling')) result = {ok: false, error: 'invalid-command'};
+    else if (paused || !connected) result = {ok: false, error: 'paused'};
+    else if (commands.has(command.id)) result = {ok: false, error: 'duplicate-command'};
+    else if (world.getState().phase === 'rolling') result = {ok: false, error: 'ball-in-play'};
+    else {
+      commands.add(command.id);
+      if (commands.size > 256) commands.delete(commands.values().next().value!);
+      newMatch(); result = {ok: true};
+    }
+    post({type: 'wee:game-command-result', id: command.id, gameId, result});
   } else if (data?.type === 'wee:game-roll') {
     const roll = data.event;
     if (!roll || typeof roll.id !== 'string') return;
@@ -124,7 +177,7 @@ function receive(event: MessageEvent): void {
 for (const label of [...Array.from({length: 10}, (_, i) => String(i + 1)), 'Total']) {
   const th = document.createElement('th'); th.scope = 'col'; th.textContent = label; el('score-head').append(th);
 }
-el('replay').onclick = () => { if (!paused) { audioEvent('stop'); delivered.clear(); world?.reset(); audioEvent('start'); } };
+el('replay').onclick = () => { if (!paused) newMatch(); };
 el('roll').onclick = () => {
   const player = world?.getState().currentPlayer;
   if (!world || !player) return;
@@ -142,6 +195,7 @@ try {
   console.error(error);
 }
 window.addEventListener('pagehide', event => {
+  clearCallout();
   audioEvent('stop'); sound?.setActive(false);
   if (event.persisted) world?.stop();
   else { window.removeEventListener('message', receive); world?.dispose(); sound?.dispose(); }

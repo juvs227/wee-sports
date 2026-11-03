@@ -1,14 +1,22 @@
-import { World } from './World/World';
+import { World, type TennisSettings, type PracticeState } from './World/World';
 import { InputController } from './Controllers/inputController';
 import type { BallUserData } from './World/components/ball';
 import { pointReasonLabel } from './World/tennisRules';
 import { connectSwings } from './network/swingConnection.js';
 import { createInputId } from './network/inputId.js';
 import { createSportsAudio } from './audio/sportsAudio';
+import { isGameCommand } from '../shared/protocol.js';
 import '../client/src/styles/tokens.css';
-import './gameHud.css';
 import './play.css';
+import './tennisHud.css';
 import './theme.js';
+
+type TennisCommand = {id: string; gameId: string} & (
+    {action: 'configure'; settings: Partial<Omit<TennisSettings, 'format'>> & {splitView?: boolean}} |
+    {action: 'new-match'; format: 'full' | 'quick'} |
+    {action: 'practice-start'; stroke: PracticeState['stroke']; hand: PracticeState['hand']} |
+    {action: 'practice-stop'}
+);
 
 async function main(): Promise<void> {
     const container = document.querySelector('#scene-container');
@@ -18,6 +26,12 @@ async function main(): Promise<void> {
     let lobbyPaused = embedded;
     let activeGameId: string | null = null;
     let publishedState = '';
+    let publishedOptions = '';
+    let lastResult = '';
+    let resultUntil = 0;
+    let strokeFeedback = '';
+    let feedbackUntil = 0;
+    const deliveredCommands = new Map<string, {ok: boolean; error?: string}>();
     let names = ['Player 1', 'Bot'];
     let humanOpponent = false;
     world.setSplitScreen(true);
@@ -32,19 +46,18 @@ async function main(): Promise<void> {
     history.replaceState(null, '', url);
 
     const panel = document.createElement('aside');
-    panel.className = 'game-panel match-hud';
+    panel.className = 'game-panel tennis-hud';
     panel.setAttribute('aria-label', 'Tennis scoreboard');
-    panel.innerHTML = `<header class="match-hud__heading"><p class="play-eyebrow" id="match-mode">Tennis · solo</p>
-      <p class="score-format" id="score-format">Best of 3 sets · advantage scoring</p></header>
-      <div class="scoreboard match-hud__players">
-        <div class="score-row match-player" data-player="1"><span class="match-player__name" id="name-1"></span><div class="match-player__score"><strong id="points-1" aria-label="Player 1 points">0</strong><span class="match-player__unit">Points</span></div><div class="match-player__stats"><small id="games-1">Games 0</small><small id="sets-1">Sets 0</small></div></div>
-        <div class="score-row match-player" data-player="2"><span class="match-player__name" id="name-2"></span><div class="match-player__score"><strong id="points-2" aria-label="Player 2 points">0</strong><span class="match-player__unit">Points</span></div><div class="match-player__stats"><small id="games-2">Games 0</small><small id="sets-2">Sets 0</small></div></div>
+    panel.setAttribute('data-embedded', String(embedded));
+    panel.innerHTML = `<div class="tennis-scorestrip"><span class="visually-hidden" id="match-mode">Tennis · solo</span>
+        <div class="tennis-seat" id="seat-1" data-player="1"><span class="tennis-player-name" id="name-1"></span><strong id="points-1" aria-label="Player 1 points">0</strong><span class="tennis-serving" id="server-1" aria-label="Serving"></span></div>
+        <div class="tennis-score-context"><strong id="score-format">Set 1</strong><span id="games-progress">Games 0–0</span><span id="sets-progress">Sets 0–0</span></div>
+        <div class="tennis-seat" id="seat-2" data-player="2"><span class="tennis-serving" id="server-2" aria-label="Serving"></span><strong id="points-2" aria-label="Player 2 points">0</strong><span class="tennis-player-name" id="name-2"></span></div>
       </div>
-      <p id="completed-sets" class="play-muted"></p>
-      <p id="point-result" role="status"></p>
-      <div class="match-hud__status"><p id="serve-status"></p><p id="feedback" role="status">Swing as the ball approaches your side.</p></div>
-      <div id="match-result" hidden><p id="match-winner"></p><button id="play-again" class="primary">Play again</button></div>
-      <details id="court-options"><summary>Play options & practice</summary><p id="connection"></p>
+      <p id="completed-sets" class="visually-hidden"></p>
+      <p id="coach" class="tennis-coach" role="status" aria-live="polite">Swing as the ball approaches your side.</p>
+      <div id="match-result" class="tennis-result" hidden><p id="match-winner"></p><button id="play-again" class="primary">Play again</button></div>
+      <details id="court-options" class="tennis-local-options"><summary>Play options & practice</summary><p id="connection"></p>
       <div class="tennis-options">
       <label>Match <select id="match-format"><option value="full">Full · best of 3 sets</option><option value="quick">Quick · tie-break to 7</option></select></label>
       <button id="new-match" type="button">Start new match</button>
@@ -65,17 +78,19 @@ async function main(): Promise<void> {
       <p>J/K: swing · B: practice feed · N: feed P2 · H: hitboxes. Turn off automatic movement for WASD.</p>
       <a id="phone-link">Open phone controller</a></details>`;
     document.body.append(panel);
+    const el = (id: string): HTMLElement => document.getElementById(id)!;
+    el('court-options').hidden = embedded;
+    el('play-again').hidden = embedded;
     // Homepage audio stays in the TV document that received the Play click.
     // Standalone prototypes retain their own explicit sound control.
     const sound = embedded ? null : createSportsAudio('tennis');
-    sound?.mountButton(panel);
+    sound?.mountButton(el('court-options'));
     sound?.setActive(!lobbyPaused);
     const playSound = (event: string): void => {
         if (lobbyPaused) return;
         if (embedded && activeGameId) window.parent.postMessage({ type: 'wee:game-audio', sport: 'tennis', gameId: activeGameId, event }, location.origin);
         else sound?.play(event);
     };
-    const el = (id: string): HTMLElement => document.getElementById(id)!;
     const auto = el('auto') as HTMLInputElement;
     const bot = el('bot') as HTMLInputElement;
     const timing = el('timing-assist') as HTMLInputElement;
@@ -98,51 +113,67 @@ async function main(): Promise<void> {
     link.href = controllerUrl.href;
     link.hidden = embedded;
     world.onSwingFeedback = message => {
-        el('feedback').textContent = message.replace(/Player ([12])/g, (_, number: string) => names[Number(number) - 1]);
+        strokeFeedback = message.replace(/Player ([12])/g, (_, number: string) => names[Number(number) - 1]);
+        feedbackUntil = performance.now() + 1400;
     };
     world.onBallHit = player => {
         if (embedded && activeGameId && !lobbyPaused) {
             window.parent.postMessage({ type: 'wee:game-hit', player, gameId: activeGameId }, location.origin);
         }
     };
+    const publishOptions = (): void => {
+        if (!embedded || !activeGameId || lobbyPaused) return;
+        const practice = world.getPracticeState();
+        const options = {type: 'wee:game-options', gameId: activeGameId, sport: 'tennis',
+            settings: {...world.getSettings(), splitView: humanOpponent || split.checked},
+            practice: {active: practice.active, stroke: practice.stroke, hand: practice.hand}, humanOpponent};
+        const key = JSON.stringify(options);
+        if (key !== publishedOptions) {
+            publishedOptions = key;
+            window.parent.postMessage(options, location.origin);
+        }
+    };
     const updateScore = (): void => {
         const score = world.getScore();
         const practice = world.getPracticeState();
         const serve = world.getServeState();
-        el('name-1').textContent = `P1 · ${names[0]}`;
-        el('name-2').textContent = `P2 · ${names[1]}`;
+        el('name-1').textContent = names[0];
+        el('name-2').textContent = names[1];
         el('points-1').textContent = String(score.player1);
         el('points-2').textContent = String(score.player2);
-        el('games-1').textContent = `Games ${score.roundsPlayer1}`;
-        el('games-2').textContent = `Games ${score.roundsPlayer2}`;
-        el('sets-1').textContent = `Sets ${score.setsPlayer1}`;
-        el('sets-2').textContent = `Sets ${score.setsPlayer2}`;
-        el('score-format').textContent = practice.active ? 'Practice · match score held'
-            : score.tieBreak ? `${score.format === 'quick' ? 'Quick match' : 'Tie-break'} · first to 7, win by 2`
-            : score.player1 === 40 && score.player2 === 40 ? 'Deuce · win two points in a row'
+        const setNumber = Math.min(3, score.completedSets.length + (score.matchWinner ? 0 : 1));
+        el('score-format').textContent = practice.active ? 'Practice'
+            : score.matchWinner ? 'Final score'
+            : score.tieBreak ? score.format === 'quick' ? 'Quick match' : 'Tie-break'
+            : score.player1 === 40 && score.player2 === 40 ? 'Deuce'
             : score.player1 === 'Adv' || score.player2 === 'Adv'
-                ? `Advantage · ${names[score.player1 === 'Adv' ? 0 : 1]}`
-                : 'Best of 3 sets · advantage scoring';
+                ? 'Advantage' : `Set ${setNumber}`;
+        el('games-progress').textContent = score.format === 'quick' ? 'First to 7 · win by 2'
+            : score.matchWinner ? `Sets ${score.setsPlayer1}–${score.setsPlayer2}`
+                : `Games ${score.roundsPlayer1}–${score.roundsPlayer2}`;
+        el('sets-progress').textContent = score.format === 'quick' ? ''
+            : score.matchWinner ? score.completedSets.map(set => `${set.player1}–${set.player2}`).join(' · ')
+                : `Sets ${score.setsPlayer1}–${score.setsPlayer2}`;
         el('completed-sets').textContent = score.completedSets.map((set, index) => `Set ${index + 1}: ${set.player1}–${set.player2}`).join(' · ');
         const point = score.lastPoint;
         const pointScore = !score.tieBreak && score.player1 === 40 && score.player2 === 40 ? 'Deuce'
             : score.player1 === 'Adv' || score.player2 === 'Adv'
                 ? `Advantage ${names[score.player1 === 'Adv' ? 0 : 1]}` : `${score.player1}–${score.player2}`;
         const result = practice.active ? '' : point ? `${point.kind === 'match' ? score.format === 'quick' ? 'Match' : 'Game, set and match' : point.kind[0].toUpperCase() + point.kind.slice(1)} · ${names[point.player - 1]}${point.kind === 'point' ? ` · ${pointScore}` : ''}${point.reason ? ` · ${pointReasonLabel(point.reason)}` : ''}` : '';
-        // Keep the last scoring call visible independently of stroke feedback.
-        // Only change live-region text on an actual change, not each score poll.
-        if (el('point-result').textContent !== result) el('point-result').textContent = result;
+        if (result !== lastResult) { lastResult = result; resultUntil = performance.now() + 1800; }
         const ballData = world.ball.userData as BallUserData;
         const servingPlayer = score.server === 'player1' ? 0 : 1;
         const waiting = ballData.isWaitingForServe || ballData.waitingForRacketHit;
-        const serveStatus = el('serve-status');
-        const statusClass = lobbyPaused ? 'paused' : waiting && !score.matchWinner
-            ? servingPlayer === 0 ? 'serving-p1' : 'serving-p2' : 'rally';
-        serveStatus.className = statusClass;
-        serveStatus.textContent = lobbyPaused ? 'Paused' : practice.active ? 'Practice · watch the feed' : score.matchWinner ? 'Match complete'
-            : waiting ? `${serve.status === 'let' ? 'Let · replay serve. ' : serve.status === 'first-fault' ? 'Fault · second serve. ' : ''}${names[servingPlayer]} · ${ballData.serveDelayRemaining > 0 ? 'serves next' : 'serve when ready'} · ${serve.side === 'deuce' ? 'right' : 'left'} side · serve ${serve.attempt}`
-                : `Rally · ${names[servingPlayer]} serving`;
-        el('match-result').hidden = practice.active || !score.matchWinner;
+        el('server-1').hidden = Boolean(score.matchWinner) || servingPlayer !== 0;
+        el('server-2').hidden = Boolean(score.matchWinner) || servingPlayer !== 1;
+        const coach = lobbyPaused ? 'Match paused · waiting for controllers'
+            : practice.active ? `Practice · return the feed · ${practice.returns}/${practice.attempts} returned · streak ${practice.streak}`
+            : score.matchWinner ? `${names[score.matchWinner === 'player1' ? 0 : 1]} wins${embedded ? ' · New match on your phone' : ''}`
+            : result && performance.now() < resultUntil ? result
+            : waiting ? `${serve.status === 'let' ? 'Let · replay serve · ' : serve.status === 'first-fault' ? 'Fault · second serve · ' : ''}${names[servingPlayer]}, ${ballData.serveDelayRemaining > 0 ? 'serve next' : 'serve when ready'} · ${serve.side === 'deuce' ? 'right' : 'left'} side`
+            : performance.now() < feedbackUntil && strokeFeedback ? strokeFeedback : 'Rally · watch the ball';
+        if (el('coach').textContent !== coach) el('coach').textContent = coach;
+        el('match-result').hidden = embedded || practice.active || !score.matchWinner;
         el('match-winner').textContent = score.matchWinner
             ? `${names[score.matchWinner === 'player1' ? 0 : 1]} wins · ${score.format === 'quick' ? `${score.player1}–${score.player2}` : `${score.setsPlayer1}–${score.setsPlayer2} sets`}` : '';
         (el('play-again') as HTMLButtonElement).disabled = lobbyPaused;
@@ -163,6 +194,7 @@ async function main(): Promise<void> {
                 window.parent.postMessage(state, location.origin);
             }
         }
+        publishOptions();
     };
     world.onGameEvent = event => {
         playSound(event.kind);
@@ -198,14 +230,66 @@ async function main(): Promise<void> {
         playSound('start');
         updateScore();
     };
+    function runCommand(command: TennisCommand): {ok: boolean; error?: string} {
+        if (!isGameCommand(command, 'tennis')) return {ok: false, error: 'bad-game-command'};
+        if (!activeGameId || command.gameId !== activeGameId) return {ok: false, error: 'stale-game'};
+        if (lobbyPaused) return {ok: false, error: 'paused'};
+        const previous = deliveredCommands.get(command.id);
+        if (previous) return previous;
+        if (humanOpponent && (command.action.startsWith('practice-') ||
+            (command.action === 'configure' && (command.settings.botDifficulty !== undefined || command.settings.splitView !== undefined)))) {
+            return {ok: false, error: 'solo-only'};
+        }
+        if (command.action === 'configure') {
+            const {splitView, ...settings} = command.settings;
+            world.configure(settings);
+            if (typeof splitView === 'boolean') {
+                split.checked = splitView;
+                world.setSplitScreen(splitView);
+            }
+            const current = world.getSettings();
+            auto.checked = current.autoMove;
+            timing.checked = current.timingAssist;
+            (el('assist-level') as HTMLSelectElement).value = current.assistance;
+            (el('bot-level') as HTMLSelectElement).value = current.botDifficulty;
+        } else if (command.action === 'new-match') {
+            playSound('stop');
+            world.stopPractice();
+            const previousFormat = world.getSettings().format;
+            world.configure({format: command.format});
+            // configure already restarts for a changed format.
+            if (previousFormat === command.format) world.startRound();
+            (el('match-format') as HTMLSelectElement).value = command.format;
+            playSound('start');
+        } else if (command.action === 'practice-start') {
+            world.startPractice(command.stroke, command.hand);
+        } else if (command.action === 'practice-stop') {
+            world.stopPractice();
+        }
+        const result = {ok: true};
+        deliveredCommands.set(command.id, result);
+        if (deliveredCommands.size > 256) deliveredCommands.delete(deliveredCommands.keys().next().value!);
+        updateScore();
+        return result;
+    }
     const receiveState = (event: MessageEvent): void => {
-        if (event.source !== window.parent || event.origin !== location.origin ||
-            event.data?.type !== 'wee:lobby-state' || typeof event.data.paused !== 'boolean') return;
+        if (event.source !== window.parent || event.origin !== location.origin) return;
+        if (embedded && event.data?.type === 'wee:game-command') {
+            const command = event.data.command;
+            if (typeof command?.id !== 'string') return;
+            const result = runCommand(command);
+            window.parent.postMessage({type: 'wee:game-command-result', id: command.id,
+                gameId: command.gameId, result}, location.origin);
+            return;
+        }
+        if (event.data?.type !== 'wee:lobby-state' || typeof event.data.paused !== 'boolean') return;
         const players = Array.isArray(event.data.players) ? event.data.players : [];
         const p1 = players.find((player: {slot: number}) => player.slot === 0);
         const p2 = players.find((player: {slot: number}) => player.slot === 1);
         humanOpponent = Boolean(p2);
-        activeGameId = typeof event.data.gameId === 'string' ? event.data.gameId : null;
+        const nextGameId = typeof event.data.gameId === 'string' ? event.data.gameId : null;
+        if (nextGameId !== activeGameId) { deliveredCommands.clear(); publishedOptions = ''; }
+        activeGameId = nextGameId;
         names = [p1?.name ?? 'Player 1', p2?.name ?? 'Bot'];
         world.botEnabled = !p2;
         world.setSplitScreen(humanOpponent || split.checked);
@@ -217,6 +301,7 @@ async function main(): Promise<void> {
         sound?.setActive(!lobbyPaused);
         if (lobbyPaused) {
             publishedState = '';
+            publishedOptions = '';
             world.setPlayerInput({ moveX: 0, moveZ: 0 }, 1);
             world.setPlayerInput({ moveX: 0, moveZ: 0 }, 2);
             world.stop();

@@ -1,12 +1,15 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { EVENTS } from '../shared/protocol.js';
 
-const h = vi.hoisted(() => ({ refs: [], effects: [], socketHandlers: new Map(),
+const h = vi.hoisted(() => ({ refs: [], effects: [], refIndex: 0, reuseRefs: false, socketHandlers: new Map(),
   emit: vi.fn(), request: vi.fn(async () => ({ ok: true })), connection: 'online' }));
 vi.mock('react', async () => ({ ...(await vi.importActual('react')),
-  useRef(value) { const ref = { current: value }; h.refs.push(ref); return ref; },
+  useRef(value) {
+    if (h.reuseRefs) return h.refs[h.refIndex++];
+    const ref = { current: value }; h.refs.push(ref); return ref;
+  },
   useState(value) { return [value, () => {}]; },
-  useEffect(effect) { h.effects.push(effect); },
+  useEffect(effect, deps) { h.effects.push({ effect, deps }); },
 }));
 vi.mock('../client/src/lib/socket.js', () => ({ request: h.request, useConnection: () => h.connection,
   socket: { connected: true, volatile: { emit: h.emit },
@@ -17,7 +20,8 @@ let listener;
 let cleanups;
 beforeEach(() => {
   vi.useFakeTimers(); vi.clearAllMocks();
-  h.refs = []; h.effects = []; h.socketHandlers.clear(); h.connection = 'online'; cleanups = [];
+  h.refs = []; h.effects = []; h.refIndex = 0; h.reuseRefs = false;
+  h.socketHandlers.clear(); h.connection = 'online'; cleanups = [];
   // Vitest's minimal transform uses classic JSX; only effects are under test.
   vi.stubGlobal('React', { createElement: () => null });
   vi.stubGlobal('window', { location: { origin: 'https://wee.test' },
@@ -27,13 +31,28 @@ afterEach(() => { cleanups.forEach(cleanup => cleanup?.()); vi.clearAllTimers();
 
 function mount(overrides = {}) {
   const onAudio = vi.fn();
-  PrototypeFrame({ code: 'ABCD', gameId: 'match-a', sport: 'tennis', onAudio, ...overrides });
+  let props = { code: 'ABCD', gameId: 'match-a', sport: 'tennis', onAudio, ...overrides };
+  PrototypeFrame(props);
   const contentWindow = { postMessage: vi.fn() };
   h.refs[0].current = { contentWindow };
-  cleanups = h.effects.map(effect => effect());
+  let effects = h.effects;
+  cleanups = effects.map(({ effect }) => effect());
   const receive = (data, envelope = {}) => listener({ data, source: contentWindow, origin: window.location.origin, ...envelope });
   receive({ type: 'wee:bridge-ready' });
-  return { onAudio, contentWindow, receive };
+  const rerender = changes => {
+    props = { ...props, ...changes };
+    h.refIndex = 0; h.reuseRefs = true; h.effects = [];
+    PrototypeFrame(props);
+    h.reuseRefs = false;
+    h.effects.forEach(({ effect, deps }, index) => {
+      if (deps.some((dep, depIndex) => !Object.is(dep, effects[index].deps[depIndex]))) {
+        cleanups[index]?.(); cleanups[index] = effect();
+      }
+    });
+    effects = h.effects;
+  };
+  const unmount = () => { cleanups.forEach(cleanup => cleanup?.()); cleanups = []; };
+  return { onAudio, contentWindow, receive, rerender, unmount };
 }
 
 test('homepage audio accepts only the current game frame, sport, session and known event', async () => {
@@ -81,4 +100,87 @@ test('switching sports keeps the same controller document and sends sport throug
   PrototypeFrame({ code: 'ABCD', controller: false, sport: 'tennis' });
   PrototypeFrame({ code: 'ABCD', controller: false, sport: 'bowling' });
   expect(frames[2].src).not.toBe(frames[3].src);
+});
+
+const gameCommand = (extra = {}) => ({ id: 'options-1', gameId: 'match-a', action: 'configure', settings: { timingAssist: false }, ...extra });
+const commandResult = (extra = {}) => ({ type: 'wee:game-command-result', id: 'options-1', gameId: 'match-a', result: { ok: true }, ...extra });
+
+test('phone commands wait for a matching result from the current TV iframe', async () => {
+  const f = mount(), ack = vi.fn();
+  const command = gameCommand();
+  h.socketHandlers.get(EVENTS.GAME_COMMAND)(command, ack);
+  expect(f.contentWindow.postMessage).toHaveBeenCalledWith({ type: 'wee:game-command', command }, window.location.origin);
+  expect(ack).not.toHaveBeenCalled();
+  await f.receive(commandResult(), { source: {} });
+  await f.receive(commandResult(), { origin: 'https://wrong.test' });
+  await f.receive(commandResult({ gameId: 'old-match' }));
+  await f.receive(commandResult({ id: 'unrelated' }));
+  await f.receive(commandResult({ result: { ok: 'yes' } }));
+  expect(ack).not.toHaveBeenCalled();
+  await f.receive(commandResult({ result: { ok: false, error: 'solo-only' } }));
+  expect(ack).toHaveBeenCalledExactlyOnceWith({ ok: false, error: 'solo-only' });
+  await f.receive(commandResult());
+  vi.advanceTimersByTime(2000);
+  expect(ack).toHaveBeenCalledTimes(1);
+});
+
+test('commands reject stale games, unsupported sport controls and duplicate pending delivery', () => {
+  const f = mount(), ack = vi.fn(), duplicateAck = vi.fn();
+  const command = h.socketHandlers.get(EVENTS.GAME_COMMAND);
+  f.contentWindow.postMessage.mockClear();
+  command(gameCommand({ gameId: 'old' }), ack);
+  command(gameCommand({ settings: { gravity: 0 } }), ack);
+  expect(ack).toHaveBeenCalledTimes(2);
+  expect(f.contentWindow.postMessage).not.toHaveBeenCalled();
+  command(gameCommand(), ack);
+  command(gameCommand(), duplicateAck);
+  expect(duplicateAck).toHaveBeenCalledExactlyOnceWith({ ok: false, error: 'duplicate-command' });
+  expect(f.contentWindow.postMessage).toHaveBeenCalledTimes(1);
+  f.rerender({ sport: 'bowling', gameId: 'match-b' });
+  f.receive({ type: 'wee:bridge-ready' });
+  f.contentWindow.postMessage.mockClear();
+  h.socketHandlers.get(EVENTS.GAME_COMMAND)(gameCommand({ gameId: 'match-b' }), duplicateAck);
+  expect(f.contentWindow.postMessage).not.toHaveBeenCalled();
+});
+
+test('a command timeout ignores a late game result and settles only once', async () => {
+  const f = mount(), ack = vi.fn();
+  h.socketHandlers.get(EVENTS.GAME_COMMAND)(gameCommand(), ack);
+  vi.advanceTimersByTime(1800);
+  expect(ack).toHaveBeenCalledExactlyOnceWith({ ok: false, error: 'game-loading' });
+  await f.receive(commandResult());
+  expect(ack).toHaveBeenCalledTimes(1);
+});
+
+test.each([{ paused: true }, { playing: false }, { gameId: 'new-match' }, { connection: 'offline' }, { unmount: true }])(
+  'pending game commands are cancelled on a lifecycle change: %j', async change => {
+    const f = mount(), ack = vi.fn();
+    h.socketHandlers.get(EVENTS.GAME_COMMAND)(gameCommand(), ack);
+    if (change.unmount) f.unmount();
+    else if (change.connection) { h.connection = change.connection; f.rerender({}); }
+    else f.rerender(change);
+    expect(ack).toHaveBeenCalledExactlyOnceWith({ ok: false, error: 'game-loading' });
+    if (!change.unmount) await f.receive(commandResult());
+    vi.advanceTimersByTime(2000);
+    expect(ack).toHaveBeenCalledTimes(1);
+  },
+);
+
+test('a phone frame cannot receive match commands or publish TV options/results', async () => {
+  const f = mount({ controller: true });
+  expect(h.socketHandlers.has(EVENTS.GAME_COMMAND)).toBe(false);
+  await f.receive(commandResult());
+  await f.receive({ type: 'wee:game-options', gameId: 'match-a', sport: 'bowling' });
+  expect(h.request).not.toHaveBeenCalled();
+});
+
+test('only current validated TV options are forwarded as a sanitized snapshot', async () => {
+  const f = mount({ sport: 'bowling' });
+  const options = { type: 'wee:game-options', gameId: 'match-a', sport: 'bowling', extra: 'discard' };
+  await f.receive(options, { source: {} });
+  await f.receive({ ...options, gameId: 'old' });
+  await f.receive({ ...options, sport: 'tennis' });
+  expect(h.request).not.toHaveBeenCalled();
+  await f.receive(options);
+  expect(h.request).toHaveBeenCalledExactlyOnceWith(EVENTS.HOST_GAME_OPTIONS, { gameId: 'match-a', sport: 'bowling' });
 });
