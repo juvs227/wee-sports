@@ -5,12 +5,12 @@ import './css/pause.css';
 export class Menu {
     private paused: boolean = false;
     private world: World;
-    private menu: HTMLElement = document.createElement('div') as HTMLDivElement;
-    private resumeButton: HTMLElement;
-    private resetButton: HTMLElement;
-    private pauseButton: HTMLElement = document.createElement('button') as HTMLButtonElement;
+    private menu: HTMLDivElement = document.createElement('div');
+    private resumeButton: HTMLButtonElement;
+    private resetButton: HTMLButtonElement;
+    private pauseButton: HTMLButtonElement = document.createElement('button');
 
-    constructor(world: World) {
+    constructor(world: World, private onPauseChange: (paused: boolean) => void) {
         // Set the world instance
         this.world = world;
 
@@ -24,14 +24,14 @@ export class Menu {
                 <h2 id="pause-title">Paused</h2>
                 <button id="resume">Resume</button>
                 <button id="reset">Reset</button>
-                <button id="quit">Quit</button>
+                <button id="quit">Return to Lobby</button>
             </div>
         `;
         document.body.appendChild(this.menu);
 
         // Get references to the buttons
-        this.resumeButton = document.getElementById('resume') as HTMLButtonElement;
-        this.resetButton = document.getElementById('reset') as HTMLButtonElement;
+        this.resumeButton = this.menu.querySelector('#resume')!;
+        this.resetButton = this.menu.querySelector('#reset')!;
 
         // Set up pause button
         this.pauseButton.id = 'pause-btn';
@@ -49,45 +49,48 @@ export class Menu {
         document.body.appendChild(this.pauseButton);
 
         // Add event listeners
-        window.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape') {
-                this.toggle();
-            }
-        });
-        this.resumeButton.addEventListener('click', () => {
-            this.toggle();
-        });
-        this.resetButton.addEventListener('click', () => {
-            this.toggle();
-            this.world.reset();
-        });
-        this.pauseButton.addEventListener('click', () => {
-            this.toggle();
-        });
+        window.addEventListener('keydown', this.handleKeyDown);
+        this.resumeButton.addEventListener('click', this.handleResume);
+        this.resetButton.addEventListener('click', this.handleReset);
+        this.pauseButton.addEventListener('click', this.handlePauseButton);
     }
+
+    private readonly handleKeyDown = (event: KeyboardEvent): void => {
+        if (event.key === 'Escape') this.toggle();
+    };
+
+    private readonly handleResume = (): void => {
+        this.toggle();
+    };
+
+    private readonly handleReset = (): void => {
+        this.toggle();
+        this.world.reset();
+    };
+
+    private readonly handlePauseButton = (): void => {
+        this.toggle();
+    };
 
     get isPaused(): boolean {
         return this.paused;
     }
 
-    // This will trigger the menu to pause the game and show the menu overlay,
-    // and resume the game and hide the menu overlay when toggled again, 
-    // going back and forth between the two states.
     public toggle(): void {
-        // if (this.paused) {
-        //     this.world.start();
-        // } else {
-        //     this.world.stop();
-        // }
-        this.pauseButton.classList.toggle('is-paused', !this.paused);
-        this.pauseButton.setAttribute('aria-pressed', !this.paused ? 'Resume' : 'Pause');
-        this.menu.hidden = this.paused;
         this.paused = !this.paused;
+        this.pauseButton.classList.toggle('is-paused', this.paused);
+        this.pauseButton.setAttribute('aria-pressed', String(this.paused));
+        this.pauseButton.setAttribute('aria-label', this.paused ? 'Resume' : 'Pause');
+        this.menu.hidden = !this.paused;
+        this.onPauseChange(this.paused);
     }
 
-    // This will unload all of the elements and event listeners, which should be used
-    // when the game is being closed.
     public dispose(): void {
-
+        window.removeEventListener('keydown', this.handleKeyDown);
+        this.resumeButton.removeEventListener('click', this.handleResume);
+        this.resetButton.removeEventListener('click', this.handleReset);
+        this.pauseButton.removeEventListener('click', this.handlePauseButton);
+        this.menu.remove();
+        this.pauseButton.remove();
     }
 }

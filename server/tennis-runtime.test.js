@@ -20,6 +20,15 @@ beforeEach(() => {
   listeners = new Map();
   parent = { postMessage: vi.fn() };
   const elements = new Map();
+  const createElement = () => ({
+    setAttribute: vi.fn(),
+    classList: { toggle: vi.fn() },
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    appendChild: vi.fn(),
+    remove: vi.fn(),
+    querySelector: () => createElement(),
+  });
   vi.stubGlobal('window', { parent,
     addEventListener(type, callback) { listeners.set(type, callback); },
     removeEventListener(type) { listeners.delete(type); },
@@ -27,8 +36,8 @@ beforeEach(() => {
   });
   vi.stubGlobal('document', {
     querySelector: () => ({}),
-    createElement: () => ({ setAttribute: vi.fn() }),
-    body: { append: vi.fn() },
+    createElement,
+    body: { append: vi.fn(), appendChild: vi.fn() },
     getElementById(id) { if (!elements.has(id)) elements.set(id, {}); return elements.get(id); },
   });
   vi.stubGlobal('location', { origin: 'https://wee.test', href: 'https://wee.test/game.html?room=lobby-SOLO', search: '?room=lobby-SOLO' });
@@ -48,6 +57,12 @@ test('solo contact notifications use the current lobby match and stop while paus
   state({});
   runtime.world.onBallHit(1);
   expect(parent.postMessage).toHaveBeenLastCalledWith({ type: 'wee:game-hit', player: 1, gameId: 'solo-match' }, location.origin);
+  listeners.get('keydown')({ key: 'Escape' });
+  runtime.world.onBallHit(1);
+  expect(parent.postMessage).toHaveBeenCalledTimes(1);
+  listeners.get('keydown')({ key: 'Escape' });
+  runtime.world.onBallHit(1);
+  expect(parent.postMessage).toHaveBeenLastCalledWith({ type: 'wee:game-hit', player: 1, gameId: 'solo-match' }, location.origin);
   parent.postMessage.mockClear();
   state({ paused: true });
   runtime.world.onBallHit(1);
@@ -61,6 +76,7 @@ test('restoring a solo game from browser history asks the lobby for fresh state 
   await import('../src/main.ts');
   state({});
   runtime.world.start.mockClear();
+  runtime.world.stop.mockClear();
   listeners.get('pagehide')({ persisted: true });
   expect(runtime.world.stop).toHaveBeenCalledOnce();
   listeners.get('pageshow')({ persisted: true });

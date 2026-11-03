@@ -13,10 +13,26 @@ async function main(): Promise<void> {
     const world = new World(container as HTMLElement);
     const embedded = window.parent !== window;
     let lobbyPaused = embedded;
+    let menuPaused = false;
+    let pageSuspended = false;
     let activeGameId: string | null = null;
     let names = ['Player 1', 'Bot'];
-    if (!embedded) world.start();
-    new InputController(input => world.setPlayerInput(lobbyPaused ? { moveX: 0, moveZ: 0 } : input, 1));
+    const isPaused = (): boolean => lobbyPaused || menuPaused || pageSuspended;
+    const syncWorldState = (): void => {
+        if (isPaused()) {
+            world.setPlayerInput({ moveX: 0, moveZ: 0 }, 1);
+            world.setPlayerInput({ moveX: 0, moveZ: 0 }, 2);
+            world.stop();
+        } else {
+            world.start();
+        }
+    };
+    const menu = new Menu(world, paused => {
+        menuPaused = paused;
+        syncWorldState();
+    });
+    syncWorldState();
+    new InputController(input => world.setPlayerInput(isPaused() ? { moveX: 0, moveZ: 0 } : input, 1));
 
     const params = new URLSearchParams(location.search);
     const room = params.get('room') || createInputId().slice(0, 8);
@@ -57,7 +73,7 @@ async function main(): Promise<void> {
     link.hidden = embedded;
     world.onSwingFeedback = message => { el('feedback').textContent = message; };
     world.onBallHit = player => {
-        if (embedded && activeGameId && !lobbyPaused) {
+        if (embedded && activeGameId && !isPaused()) {
             window.parent.postMessage({ type: 'wee:game-hit', player, gameId: activeGameId }, location.origin);
         }
     };
@@ -72,17 +88,17 @@ async function main(): Promise<void> {
         const ballData = world.ball.userData as BallUserData;
         const servingPlayer = ballData.servingPlayer === 'player1' ? 'P1' : 'P2';
         const serveStatus = el('serve-status');
-        const statusClass = lobbyPaused ? 'paused' :
+        const statusClass = isPaused() ? 'paused' :
             ballData.isWaitingForServe
                 ? servingPlayer === 'P1' ? 'serving-p1' : 'serving-p2'
                 : 'rally';
         serveStatus.className = statusClass;
-        serveStatus.textContent = lobbyPaused || !ballData.isWaitingForServe
+        serveStatus.textContent = isPaused() || !ballData.isWaitingForServe
             ? '' : `${servingPlayer} serving`;
         const countdown = ballData.isWaitingForServe
             ? Math.ceil(ballData.serveDelayRemaining) : 0;
         serveCountdown.textContent = countdown > 0 ? String(countdown) : '';
-        serveCountdown.classList?.toggle('visible', countdown > 0 && !lobbyPaused);
+        serveCountdown.classList?.toggle('visible', countdown > 0 && !isPaused());
         serveCountdown.classList?.toggle('player-1', servingPlayer === 'P1' && world.isSplitScreen);
         serveCountdown.classList?.toggle('player-2', servingPlayer === 'P2' && world.isSplitScreen);
     };
@@ -99,11 +115,7 @@ async function main(): Promise<void> {
         world.setSplitScreen?.(true); // for testing only
         el('match-mode').textContent = p2 ? 'Tennis · head to head' : 'Tennis · solo';
         lobbyPaused = event.data.paused || !event.data.connected;
-        if (lobbyPaused) {
-            world.setPlayerInput({ moveX: 0, moveZ: 0 }, 1);
-            world.setPlayerInput({ moveX: 0, moveZ: 0 }, 2);
-            world.stop();
-        } else world.start();
+        syncWorldState();
         updateScore();
     };
     window.addEventListener('message', receiveState);
@@ -111,22 +123,30 @@ async function main(): Promise<void> {
     const scoreTimer = window.setInterval(updateScore, 250);
     const connection = connectSwings({ room, role: 'game',
         onStatus: text => { el('connection').textContent = text; },
-        onSwing: event => { if (!lobbyPaused) world.swing(event); },
+        onSwing: event => { if (!isPaused()) world.swing(event); },
     });
     window.addEventListener('pagehide', event => {
-        if (event.persisted) { world.stop(); return; }
+        if (event.persisted) {
+            pageSuspended = true;
+            syncWorldState();
+            return;
+        }
         window.clearInterval(scoreTimer);
         window.removeEventListener('message', receiveState);
         connection.close();
+        menu.dispose();
         world.dispose();
     });
     window.addEventListener('pageshow', event => {
         if (!event.persisted) return;
+        pageSuspended = false;
         if (embedded) {
             // Restoring from browser history does not reload the iframe. Ask
             // the parent for current pause/connection state before resuming.
+            lobbyPaused = true;
+            syncWorldState();
             window.parent.postMessage({ type: 'wee:bridge-ready' }, location.origin);
-        } else world.start();
+        } else syncWorldState();
     });
 }
 
