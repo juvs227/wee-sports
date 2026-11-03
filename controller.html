@@ -19,6 +19,14 @@
     <div class="buttons"><button id="calibrate" class="primary" disabled>Calibrate</button></div>
     <p class="play-muted" id="setup-next">Once set up, press Ready above and wait for Play on the TV.</p>
   </section>
+  <section class="play-card strength-rehearsal" id="strength-panel" hidden aria-labelledby="strength-title">
+    <h2 id="strength-title">Comfortable swings</h2>
+    <p class="play-muted">Optional: hold the phone upright in your playing hand. Try three relaxed forehands, then three backhands. Keep holding the phone and return to rest between swings.</p>
+    <p id="strength-status" role="status">Default strength is ready. This tunes power to your comfortable swings.</p>
+    <progress id="strength-progress" max="6" value="0" aria-label="Comfortable swing rehearsal" hidden></progress>
+    <div class="buttons"><button id="tune-strength" type="button">Tune comfortable swings</button><button id="skip-strength" type="button" class="subtle">Skip for now</button></div>
+    <small>Your setup pauses during rehearsal. Practice swings are not sent to the game.</small>
+  </section>
   <section class="play-card play-state" id="play-panel" hidden aria-labelledby="play-title">
     <div class="play-state__status"><span id="play-status" class="play-pill" role="status">Getting ready</span></div>
     <div id="motion-visual" class="motion-visual" data-sport="tennis" aria-hidden="true">
@@ -82,6 +90,13 @@
     <small>Filters your follow-through so one physical swing sends one shot.</small>
     <small id="timing">Fast confirmation recognizes a deliberate swing as it slows. Small grip changes are filtered.</small>
     <small>Swing comfortably: gentle, medium and strong strokes change ball pace within a limited range. Swinging harder than the strong range adds no power.</small>
+  </details>
+  <details class="play-card" id="timing-details" hidden><summary>Response timing</summary>
+    <p id="timing-recognition">Recognition: waiting for a swing.</p>
+    <p id="timing-delivery">Delivery round trip: waiting for a swing.</p>
+    <p id="timing-contact">TV arrival to contact: waiting for a hit.</p>
+    <p id="timing-result"></p>
+    <small>These are separate measurements. Delivery is an acknowledgement round trip; TV contact time excludes the network.</small>
   </details>
   <details class="play-card"><summary>Controller help</summary>
     <p id="sensor-status" class="sensor-status" role="status">Checking motion support…</p>

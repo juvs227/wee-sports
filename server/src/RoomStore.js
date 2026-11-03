@@ -35,6 +35,7 @@ import {
   isRoll,
   isGameHit,
   isTennisState,
+  isStrokeResult,
   isController,
   playerCapacity,
 } from '@wee/shared/protocol.js';
@@ -108,7 +109,7 @@ export class RoomStore {
 
     this.#rooms.set(code, { code, sport, hostId, phase: PHASES.LOBBY, players: new Map(), deadline: null, pausedAt: null,
       gameId: null, gameState: null, pendingRoll: null, seenRolls: new Set(),
-      seenHits: new Set(), lastHitAt: new Map() });
+      seenHits: new Set(), lastHitAt: new Map(), pendingStrokes: new Map() });
     const memberId = this.#addSession(hostId, code, 'host');
     this.#rooms.get(code).hostId = memberId;
     return this.#sessionView(memberId);
@@ -214,9 +215,39 @@ export class RoomStore {
     if (room.phase !== PHASES.TUTORIAL || room.gameState?.phase === 'complete') {
       return { ok: false, error: 'not-playing' };
     }
+    const now = this.#now();
+    for (const [id, pending] of room.pendingStrokes) {
+      if (now - pending.at > 5000) room.pendingStrokes.delete(id);
+    }
+    if (!room.pendingStrokes.has(event.id)) room.pendingStrokes.set(event.id, { player: player.slot + 1, at: now });
+    if (room.pendingStrokes.size > 128) room.pendingStrokes.delete(room.pendingStrokes.keys().next().value);
     return { ok: true, hostSocketId: this.#members.get(room.hostId)?.socketId,
       event: { type: 'swing', id: event.id, label: event.label, hand: event.hand,
         ...(event.power === undefined ? {} : { power: event.power }), player: player.slot + 1 } };
+  }
+
+  /** Correlated diagnostics are private, transient feedback for a real recent input. */
+  strokeResultTarget(socketId, event) {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    const room = member && this.#rooms.get(member.code);
+    if (member?.role !== 'host') return { ok: false, error: ERRORS.NOT_HOST };
+    if (!isStrokeResult(event)) return { ok: false, error: 'bad-stroke-result' };
+    if (room.sport !== 'tennis' || room.phase !== PHASES.TUTORIAL || event.gameId !== room.gameId) {
+      return { ok: false, error: 'not-playing' };
+    }
+    if (room.pausedAt !== null) return { ok: false, error: ERRORS.PAUSED };
+    const pending = room.pendingStrokes.get(event.id);
+    if (!pending || pending.player !== event.player || this.#now() - pending.at > 5000) {
+      return { ok: false, error: 'unknown-stroke' };
+    }
+    room.pendingStrokes.delete(event.id);
+    const seat = [...room.players.entries()].find(([, player]) => player.slot + 1 === event.player);
+    const target = seat && this.#members.get(seat[0]);
+    if (!target?.socketId) return { ok: false, error: 'disconnected' };
+    return { ok: true, phoneSocketId: target.socketId, event: {
+      id: event.id, gameId: room.gameId, player: event.player, result: event.result, reason: event.reason,
+      ...(event.receivedToContactMs === undefined ? {} : { receivedToContactMs: event.receivedToContactMs }),
+    } };
   }
 
   /** Only the current TV can report contact, and only to that match's live seat. */
@@ -255,7 +286,9 @@ export class RoomStore {
     }
     if (room.sport === 'tennis') {
       if (!isTennisState(payload)) return { ok: false, error: 'bad-game-state' };
-      room.gameState = { phase: payload.phase, server: payload.server, winner: payload.winner };
+      room.gameState = { phase: payload.phase, server: payload.server, winner: payload.winner,
+        ...(payload.practice === undefined ? {} : { practice: payload.practice }),
+        ...(payload.serveAttempt === undefined ? {} : { serveAttempt: payload.serveAttempt }) };
       return { ok: true, code: room.code };
     }
     if (room.sport !== 'bowling') return { ok: false, error: 'not-playing' };
@@ -405,7 +438,7 @@ export class RoomStore {
   #updatePause(room) {
     const missing = [...this.#members.values()].some(member => member.code === room.code && member.disconnectedAt !== null) ||
       (room.phase === PHASES.TUTORIAL && [...room.players.values()].some(player => isController(room.sport, player.slot) && !player.setup));
-    if (missing && room.pausedAt === null) room.pausedAt = this.#now();
+    if (missing && room.pausedAt === null) { room.pausedAt = this.#now(); room.pendingStrokes.clear(); }
     else if (!missing && room.pausedAt !== null) {
       if (room.deadline !== null) room.deadline += this.#now() - room.pausedAt;
       room.pausedAt = null;
@@ -474,6 +507,7 @@ export class RoomStore {
     this.#clearReady(room);
     room.gameId = null; room.gameState = null; room.pendingRoll = null; room.seenRolls.clear();
     room.seenHits.clear(); room.lastHitAt.clear();
+    room.pendingStrokes.clear();
     room.phase = room.players.size >= READY_AT_PLAYERS &&
       (room.sport === 'bowling' || [...room.players.values()].some(player => player.slot === 0)) ? PHASES.READY : PHASES.LOBBY;
   }

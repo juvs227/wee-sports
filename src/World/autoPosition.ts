@@ -1,3 +1,4 @@
+import {netHeightAt, TENNIS_COURT} from './tennisRules';
 export interface BallForecast {
     position: { x: number; y: number; z: number };
     velocity: { x: number; y: number; z: number };
@@ -8,11 +9,12 @@ export interface BallForecast {
 export interface Intercept { x: number; y: number; time: number }
 
 // Match the existing 60-Hz velocity units and ground response. This predicts
-// the current free-flight/bounce model, not future opponent shots or net impacts.
+// the current free-flight/bounce/net model, not future opponent shots.
 export function predictBaselineIntercept(ball: BallForecast, targetZ: number, maxTime = 4): Intercept | null {
     let { x, y, z } = ball.position;
     let { x: vx, y: vy, z: vz } = ball.velocity;
     let bounceCount = ball.bounceCount ?? 0;
+    let netTouched = false;
     if (![x, y, z, vx, vy, vz, ball.gravity, targetZ, maxTime].every(Number.isFinite) ||
         maxTime <= 0 || ball.gravity < 0 || Math.abs(vz) < 1e-5 || (targetZ - z) * vz < 0) return null;
     if (Math.abs(targetZ - z) < 1e-5) return { x, y, time: 0 };
@@ -24,6 +26,18 @@ export function predictBaselineIntercept(ball: BallForecast, targetZ: number, ma
         x += vx * frameScale;
         y += vy * frameScale;
         z += vz * frameScale;
+        if (!netTouched && previous.z !== 0 && previous.z * z <= 0) {
+            const fraction = -previous.z / (z - previous.z);
+            const nx = previous.x + (x - previous.x) * fraction;
+            const ny = previous.y + (y - previous.y) * fraction;
+            const top = netHeightAt(nx);
+            if (Math.abs(nx) <= TENNIS_COURT.netHalfWidth + .1 && ny - .1 <= top) {
+                netTouched = true;
+                if (ny < top - .1) return null;
+                vx *= .85; vz *= .85; vy = Math.max(vy, .025);
+                y = Math.max(y, top + .1);
+            }
+        }
         if (y <= 0.1) {
             if (++bounceCount >= 2) return null;
             y = 0.1;

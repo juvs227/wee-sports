@@ -1,4 +1,7 @@
 import type { BallPlayer } from './components/ball';
+import type { PointReason, ServiceSide } from './tennisRules';
+
+export type MatchFormat = 'full' | 'quick';
 
 export interface CompletedSet {
     player1: number;
@@ -18,11 +21,14 @@ export interface Score {
     matchWinner: BallPlayer | null;
     completedSets: CompletedSet[];
     lastPoint: PointResult | null;
+    format: MatchFormat;
+    serviceSide: ServiceSide;
 }
 
 export interface PointResult {
     kind: 'point' | 'game' | 'set' | 'match';
     player: 1 | 2;
+    reason?: PointReason;
 }
 
 export function determinePointWinner(
@@ -52,6 +58,12 @@ export class ScoreSystem {
     private matchWinner: BallPlayer | null = null;
     private completedSets: CompletedSet[] = [];
     private lastPoint: PointResult | null = null;
+    private format: MatchFormat;
+
+    public constructor(format: MatchFormat = 'full') {
+        this.format = format;
+        this.tieBreak = format === 'quick';
+    }
 
     public get isComplete(): boolean {
         return this.matchWinner !== null;
@@ -70,10 +82,12 @@ export class ScoreSystem {
             matchWinner: this.matchWinner,
             completedSets: this.completedSets.map(set => ({ ...set })),
             lastPoint: this.lastPoint && { ...this.lastPoint },
+            format: this.format,
+            serviceSide: (this.points.player1 + this.points.player2) % 2 === 0 ? 'deuce' : 'ad',
         };
     }
 
-    public awardPoint(winner: BallPlayer, loser: BallPlayer): PointResult | null {
+    public awardPoint(winner: BallPlayer, loser: BallPlayer, reason?: PointReason): PointResult | null {
         if (this.matchWinner || winner === loser) return null;
         this.points[winner]++;
         let kind: PointResult['kind'] = 'point';
@@ -86,17 +100,18 @@ export class ScoreSystem {
             this.server = Math.floor((played + 1) / 2) % 2 === 0
                 ? this.tieBreakStarter : opponent(this.tieBreakStarter);
         }
-        this.lastPoint = { kind, player: winner === 'player1' ? 1 : 2 };
+        this.lastPoint = { kind, player: winner === 'player1' ? 1 : 2, ...(reason ? {reason} : {}) };
         return { ...this.lastPoint };
     }
 
-    public reset(): void {
+    public reset(format: MatchFormat = this.format): void {
+        this.format = format;
         this.points = { player1: 0, player2: 0 };
         this.games = { player1: 0, player2: 0 };
         this.sets = { player1: 0, player2: 0 };
         this.server = 'player1';
         this.tieBreakStarter = 'player1';
-        this.tieBreak = false;
+        this.tieBreak = format === 'quick';
         this.matchWinner = null;
         this.completedSets = [];
         this.lastPoint = null;
@@ -111,6 +126,10 @@ export class ScoreSystem {
     }
 
     private completeGame(winner: BallPlayer): PointResult['kind'] {
+        if (this.format === 'quick') {
+            this.matchWinner = winner;
+            return 'match';
+        }
         this.games[winner]++;
         this.points = { player1: 0, player2: 0 };
         // A tie-break's first server receives in the first game of the next set.

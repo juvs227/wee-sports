@@ -2,7 +2,7 @@ import { isSwing } from '../../shared/protocol.js';
 import { createInputId } from './inputId.js';
 
 /** Embedded tennis uses the outer page's lobby session and reconnect handling. */
-export function connectLobbySwings({ role, onSwing, onStatus, onAck }) {
+export function connectLobbySwings({ role, onSwing, onStatus, onAck, onSent = () => {} }) {
   let connected = false;
   let paused = true;
   const seen = new Set();
@@ -38,6 +38,7 @@ export function connectLobbySwings({ role, onSwing, onStatus, onAck }) {
       sentAt.set(event.id, performance.now());
       if (sentAt.size > 40) sentAt.delete(sentAt.keys().next().value);
       post({ type: 'wee:player-swing', event });
+      onSent(event);
       return true;
     },
     close() { connected = false; window.removeEventListener('message', receive); },

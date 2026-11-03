@@ -1,11 +1,13 @@
 import { createSwingStream } from './swingStream.js';
 import { createSimpleSwingStream, createBowlingMotionDetector, bowlingTiltAim } from './motionGestures.js';
 import { tennisPower, tennisStrength } from './tennisPower.js';
+import { createStrengthRehearsal } from './strengthRehearsal.js';
 import { connectSwings } from '../network/swingConnection.js';
 import { createInputId } from '../network/inputId.js';
 import { createCalibrationSession } from './calibration.js';
 import { createPhoneFeedback, createScreenAwake } from './phoneExperience.js';
-import { isTennisState } from '../../shared/protocol.js';
+import { isTennisState, isStrokeResult } from '../../shared/protocol.js';
+import { createTimingStats } from '../network/timingStats.js';
 import '../../client/src/styles/tokens.css';
 import '../play.css';
 import './controller.css';
@@ -39,6 +41,11 @@ let permissionPending = false;
 let permissionAt = 0;
 let bias = null;
 let calibration = null;
+let strengthProfile = null;
+let strengthOffer = false;
+let rehearsal = null;
+let rehearsalStream = null;
+let rehearsalStarted = 0;
 let stream = null;
 let recording = false;
 let motionWanted = false;
@@ -67,6 +74,22 @@ let lastTiltReading = null;
 let liveAim = 0;
 let bowlingReadout = null;
 let pageActive = true;
+const timingStats = { recognition: createTimingStats(), delivery: createTimingStats(), contact: createTimingStats() };
+const pendingTimings = new Map();
+let nextRecognitionMs;
+let strokeNotice = '';
+let strokeNoticeUntil = 0;
+function renderTiming() {
+  for (const [key, label] of [['recognition', 'Motion confirmation'], ['delivery', 'Delivery acknowledgement round trip'], ['contact', 'TV arrival to contact']]) {
+    const sample = timingStats[key].summary();
+    if (key === 'contact' && !embedded) {
+      element('timing-contact').textContent = 'TV arrival to contact: available when playing through the homepage lobby.';
+      continue;
+    }
+    element(`timing-${key}`).textContent = `${label}: ${sample ? `median ${Math.round(sample.median)} ms · p95 ${Math.round(sample.p95)} ms · ${sample.count} ${sample.count === 1 ? 'sample' : 'samples'}` : 'waiting for samples'}.`;
+  }
+}
+renderTiming();
 element('motion-visual').dataset.sport = bowling ? 'bowling' : 'tennis';
 const phoneFeedback = createPhoneFeedback({ visual: element('motion-visual'), object: element('motion-object'),
   navigator: globalThis.navigator, document, reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)') });
@@ -80,7 +103,7 @@ const screenAwake = createScreenAwake({ navigator: globalThis.navigator, documen
 
 function recentReadings() { return lastReading !== null && performance.now() - lastReading < 1500; }
 function publishSetup() {
-  const setup = buttonMode ? 'buttons' : bias ? 'motion' : null;
+  const setup = buttonMode ? 'buttons' : bias && !rehearsal ? 'motion' : null;
   element('setup-status').textContent = setup === 'motion' ? 'Calibrated ✓' : setup === 'buttons' ? 'Button controls selected ✓' : 'Set up your controller';
   if (embedded && setup !== lastSetup) {
     lastSetup = setup;
@@ -97,9 +120,15 @@ function renderPlayState() {
   element('setup-panel').hidden = setup && !settingsOpen;
   element('controller-options').hidden = setup && !settingsOpen;
   element('play-panel').hidden = !setup || settingsOpen;
+  element('timing-details').hidden = bowling || !settingsOpen;
+  element('strength-panel').hidden = bowling || buttonMode || !bias || (!settingsOpen && (!strengthOffer || gameActive));
+  element('tune-strength').disabled = !bias || !recentReadings() || Boolean(rehearsal) || Boolean(calibration);
+  element('tune-strength').textContent = strengthProfile ? 'Tune again' : 'Tune comfortable swings';
+  element('skip-strength').textContent = rehearsal ? 'Cancel rehearsal' : strengthProfile ? 'Use default strength' : 'Skip for now';
+  element('strength-progress').hidden = !rehearsal;
   element('controller-header').hidden = embedded && setup && !settingsOpen;
   element('toggle-settings').hidden = !setup;
-  element('toggle-settings').disabled = Boolean(calibration) || permissionPending;
+  element('toggle-settings').disabled = Boolean(calibration) || Boolean(rehearsal) || permissionPending;
   element('toggle-settings').textContent = settingsOpen ? 'Back to controller' : 'Controller settings';
   element('toggle-settings').ariaExpanded = String(settingsOpen);
   element('stop').hidden = !setup || buttonMode || !gameActive || !settingsOpen;
@@ -133,13 +162,16 @@ function renderPlayState() {
     title = buttonMode ? 'Tap to swing' : 'Swing to play';
     help = 'Watch the TV.';
     if (buttonMode) help = 'Watch the TV and choose your shot.';
-    if (!bowling && tennisState?.phase === 'prepare') {
+    if (!bowling && tennisState?.practice) {
+      title = 'Practice your return'; help = 'Watch the feed on the TV. Each return helps you find your timing.';
+    } else if (!bowling && tennisState?.phase === 'prepare') {
       title = tennisState.server === player ? 'You serve next' : `P${tennisState.server} serves next`;
       help = 'Point finished. Get ready for the next serve.';
     } else if (!bowling && tennisState?.phase === 'serve') {
       const serving = tennisState.server === player;
       title = serving ? 'Your serve' : `P${tennisState.server} is serving`;
       help = serving ? 'Swing when you’re ready to serve.' : 'Get ready to return. Watch the ball on the TV.';
+      if (serving && tennisState.serveAttempt === 2) { title = 'Your second serve'; help = 'Take your time and swing comfortably.'; }
     }
     if (bowling) {
       if (pendingRoll || (currentPlayer === player && !canRoll)) {
@@ -155,7 +187,7 @@ function renderPlayState() {
     }
   }
   // Avoid repeatedly replacing live-region content on the sensor timer.
-  const notice = setupError || playNotice;
+  const notice = setupError || playNotice || (performance.now() < strokeNoticeUntil ? strokeNotice : '');
   for (const [id, text] of [['play-status', status], ['play-title', title], ['play-help', help], ['play-notice', notice]]) {
     if (element(id).textContent !== text) element(id).textContent = text;
   }
@@ -177,7 +209,8 @@ function renderPlayState() {
   element('latest').hidden = !gameActive || state === 'paused' || performance.now() >= feedbackUntil;
   const activeController = setup && gameActive && connected && !lobbyPaused && !settingsOpen && pageActive && !document.hidden && (state === 'playing' || state === 'waiting');
   const readyInLobby = !gameActive && Boolean(bias) && !buttonMode && connected && !settingsOpen && pageActive && !document.hidden && state === 'ready';
-  screenAwake.setActive(activeController || readyInLobby);
+  const rehearsing = Boolean(rehearsal) && connected && pageActive && !document.hidden;
+  screenAwake.setActive(activeController || readyInLobby || rehearsing);
   phoneFeedback.setActive(activeController);
 }
 function controls() {
@@ -189,7 +222,7 @@ function controls() {
   element('calibrate').disabled = permissionPending || Boolean(calibration);
   element('calibrate').textContent = calibration ? 'Calibrating…' : bias ? 'Calibrate again' : 'Calibrate';
   element('stop').disabled = !gameActive || !motionWanted;
-  for (const id of ['hand', 'response', 'stroke-mode', 'suppress-returns']) element(id).disabled = recording || Boolean(calibration);
+  for (const id of ['hand', 'response', 'stroke-mode', 'suppress-returns']) element(id).disabled = recording || Boolean(calibration) || Boolean(rehearsal);
   for (const id of ['forehand', 'backhand']) element(id).disabled = !gameActive || lobbyPaused || !connected || tennisState?.phase === 'complete';
   element('roll').disabled = !turnReady() || (!buttonMode && !bias);
   element('arm-roll').disabled = !turnReady() || !recording || Boolean(bowlingDetector);
@@ -218,11 +251,27 @@ const connection = connectSwings({ room, role: 'phone',
       controls();
     }
   },
-  onAck: event => deliveryResult(event),
+  onSent: event => {
+    pendingTimings.set(event.id, { at: performance.now(), acknowledged: false });
+    if (pendingTimings.size > 40) pendingTimings.delete(pendingTimings.keys().next().value);
+    timingStats.recognition.add(nextRecognitionMs); renderTiming();
+  },
+  onAck: event => {
+    const pending = pendingTimings.get(event.id);
+    if (!pending || pending.acknowledged || !connected || !gameActive || lobbyPaused || performance.now() - pending.at > 5000) return;
+    if (event.ok !== false) {
+      timingStats.delivery.add(event.roundTripMs); pending.acknowledged = true; renderTiming();
+    }
+    pending.acknowledged = true;
+    deliveryResult(event);
+  },
 });
-function send(label, power = 0.5) {
-  if (bowling || lobbyPaused || !gameActive || !connected || document.hidden || tennisState?.phase === 'complete') return;
+function send(label, power = 0.5, recognitionMs) {
+  if (bowling || lobbyPaused || !gameActive || !connected || settingsOpen || rehearsal || document.hidden || tennisState?.phase === 'complete') return;
+  strokeNoticeUntil = 0;
+  nextRecognitionMs = recognitionMs;
   const sent = connection.sendSwing(label, element('hand').value, power);
+  nextRecognitionMs = undefined;
   if (sent) phoneFeedback.swing(label);
   element('delivery').textContent = sent ? 'Sending stroke…' : 'Disconnected: the stroke was not sent.';
   playNotice = sent ? '' : element('delivery').textContent;
@@ -278,13 +327,15 @@ for (const id of ['aim', 'spin', 'power']) {
 function analyze() {
   if (!recording || bowling) return;
   for (const swing of stream?.analyze() ?? []) {
-    const power = tennisPower(swing.peakRotation);
+    const power = tennisPower(swing.peakRotation, strengthProfile, swing.label);
     element('latest').textContent = swing.label === 'Unknown' ? 'Try a clearer swing' : `${swing.label} · ${tennisStrength(power)}`;
     feedbackUntil = performance.now() + 1500;
     element('timing').textContent = swing.simple ? 'Simple motion mapping · your selected shot.' : swing.early || swing.fast
       ? `Recognized in ${Math.round(swing.detectionDelayMs)} ms, before network and game response.`
       : 'Stroke classified after completion.';
-    if ((swing.complete || swing.early || swing.fast) && swing.label !== 'Unknown') send(swing.label, power);
+    const recognitionMs = Number.isFinite(swing.detectionDelayMs) ? swing.detectionDelayMs
+      : Number.isFinite(swing.startMs) ? performance.now() - started - swing.startMs : undefined;
+    if ((swing.complete || swing.early || swing.fast) && swing.label !== 'Unknown') send(swing.label, power, recognitionMs);
   }
 }
 function stop(message = 'Motion paused. Tap Resume motion when you are ready.', user = false) {
@@ -299,7 +350,7 @@ function stop(message = 'Motion paused. Tap Resume motion when you are ready.', 
 }
 function startMotion() {
   if (!bowling && tennisState?.phase === 'complete') return;
-  if (recording || settingsOpen || !motionWanted || !bias || buttonMode || calibration || !enabled || !gameActive || lobbyPaused || !connected || document.hidden || !recentReadings()) return;
+  if (recording || settingsOpen || rehearsal || !motionWanted || !bias || buttonMode || calibration || !enabled || !gameActive || lobbyPaused || !connected || document.hidden || !recentReadings()) return;
   const mode = element('stroke-mode').value;
   stream = bowling ? null : mode === 'auto' ? createSwingStream(element('hand').value, {
     early: element('response').value === 'early', fast: element('response').value === 'fast', suppressReturns: element('suppress-returns').checked,
@@ -311,9 +362,57 @@ function startMotion() {
   element('motion').textContent = bowling ? 'Motion is live. Arm a roll when it is your turn.' : 'Motion is live. Swing to play; use Stop motion to pause your detector.';
   controls();
 }
+function finishRehearsal(message, profile = null) {
+  rehearsal = null;
+  rehearsalStream = null;
+  if (profile) strengthProfile = profile;
+  element('strength-status').textContent = message;
+  controls();
+}
+function updateRehearsal(result) {
+  element('strength-progress').value = result.count;
+  if (element('strength-status').textContent !== result.message) element('strength-status').textContent = result.message;
+  if (result.state !== 'collecting') finishRehearsal(result.message, result.profile);
+}
+element('tune-strength').onclick = () => {
+  if (bowling || !bias || buttonMode || calibration || !recentReadings() || document.hidden || rehearsal) return;
+  stop('Motion pauses while you rehearse comfortable swings.');
+  settingsOpen = true;
+  strengthOffer = true;
+  rehearsalStarted = performance.now();
+  rehearsal = createStrengthRehearsal(element('hand').value, rehearsalStarted);
+  // Use complete real classifications regardless of the selected gameplay mode.
+  rehearsalStream = createSwingStream(element('hand').value, { suppressReturns: true });
+  updateRehearsal(rehearsal.read(rehearsalStarted));
+  controls();
+};
+element('skip-strength').onclick = () => {
+  if (rehearsal) finishRehearsal(strengthProfile ? 'Rehearsal cancelled. Your previous comfortable strength is kept.' : 'Rehearsal cancelled. Default strength is ready.');
+  else {
+    strengthProfile = null;
+    element('strength-status').textContent = 'Default strength is ready. Tune again whenever you want.';
+  }
+  strengthOffer = false;
+  controls();
+};
+element('hand').onchange = () => {
+  strengthProfile = null;
+  strengthOffer = true;
+  finishRehearsal('Playing hand changed. Default strength is ready; tune comfortable swings again if you want.');
+};
 window.addEventListener('message', event => {
   if (!embedded || event.source !== window.parent || event.origin !== location.origin) return;
   const data = event.data;
+  if (data?.type === 'wee:stroke-result' && !bowling && isStrokeResult(data) &&
+      data.gameId === tennisGameId && data.player === player && connected && gameActive && !lobbyPaused) {
+    const pending = pendingTimings.get(data.id);
+    if (!pending || pending.result || performance.now() - pending.at > 5000) return;
+    pending.result = true;
+    if (data.result === 'hit') timingStats.contact.add(data.receivedToContactMs);
+    element('timing-result').textContent = `Last stroke: ${data.result} · ${data.reason}`;
+    if (!settingsOpen && data.result !== 'hit') { strokeNotice = data.reason; strokeNoticeUntil = performance.now() + 1800; }
+    renderTiming(); renderPlayState(); return;
+  }
   if (data?.type === 'wee:game-hit' && data.kind === (bowling ? 'bowling' : 'tennis') && data.player === player) {
     if (gameActive && connected && !lobbyPaused && !settingsOpen) phoneFeedback.hit(performance.now(), data.kind);
     return;
@@ -332,7 +431,7 @@ window.addEventListener('message', event => {
     controls(); return;
   }
   if (data?.type === 'wee:tennis-state' && !bowling && isTennisState(data)) {
-    tennisState = { phase: data.phase, server: data.server, winner: data.winner };
+    tennisState = { phase: data.phase, server: data.server, winner: data.winner, practice: data.practice, serveAttempt: data.serveAttempt };
     if (data.phase === 'complete') stop('Match complete. See the TV for results.');
     else startMotion();
     controls(); return;
@@ -344,12 +443,18 @@ window.addEventListener('message', event => {
     controls(); return;
   }
   if (data?.type !== 'wee:lobby-state' || typeof data.paused !== 'boolean') return;
-  if (data.gameId !== tennisGameId || !data.playing) { tennisState = null; tennisGameId = data.gameId; }
+  if (data.gameId !== tennisGameId || !data.playing) {
+    tennisState = null; tennisGameId = data.gameId; pendingTimings.clear(); strokeNoticeUntil = 0;
+    for (const stats of Object.values(timingStats)) stats.clear();
+    element('timing-result').textContent = ''; renderTiming();
+  }
   if (data.connected && !wasConnected) lastSetup = undefined;
   connected = data.connected === true;
+  if (!connected && rehearsal) finishRehearsal('Rehearsal stopped while reconnecting. Try again when connected, or keep the default strength.');
   wasConnected = connected;
   gameActive = data.playing === true;
   lobbyPaused = data.paused;
+  if (lobbyPaused || !connected) { pendingTimings.clear(); strokeNoticeUntil = 0; }
   if (lobbyPaused || !connected || !gameActive) stop('Paused. Motion will resume when the match is ready.');
   startMotion();
   controls();
@@ -364,10 +469,17 @@ function motion(event) {
   lastReading = now;
   latestRate = { alpha: rate.alpha, beta: rate.beta, gamma: rate.gamma };
   calibration?.push(rate, now);
-  if (!recording) return;
-  const sample = { timeMs: now - started, rotationAlpha: rate.alpha - bias.alpha,
+  if ((!recording && !rehearsal) || !bias) return;
+  const sample = { timeMs: now - (rehearsal ? rehearsalStarted : started), rotationAlpha: rate.alpha - bias.alpha,
     rotationBeta: rate.beta - bias.beta, rotationGamma: rate.gamma - bias.gamma,
     acceleration: event.acceleration };
+  if (rehearsal) {
+    rehearsalStream.push(sample);
+    for (const swing of rehearsalStream.analyze()) {
+      if (rehearsal) updateRehearsal(rehearsal.accept(swing, now));
+    }
+    return;
+  }
   phoneFeedback.motion(sample, now);
   if (bowling) {
     if (!bowlingDetector && turnReady()) {
@@ -415,12 +527,16 @@ function showMotionError(error) {
 }
 element('enable').onclick = () => requestMotion().catch(showMotionError);
 element('calibrate').onclick = async () => {
+  if (rehearsal) finishRehearsal('Rehearsal stopped for recalibration.');
   stop();
   try {
     // One tap also requests permission; disabled Calibrate used to hide this step.
     if (!enabled || !recentReadings()) await requestMotion();
     buttonMode = false;
     bias = null;
+    strengthProfile = null;
+    strengthOffer = false;
+    element('strength-status').textContent = 'Default strength is ready. This tunes power to your comfortable swings.';
     calibration = createCalibrationSession(performance.now());
     element('calibration-progress').hidden = false;
     element('calibration-progress').value = 0;
@@ -431,12 +547,14 @@ element('calibrate').onclick = async () => {
 element('record').onclick = () => { motionWanted = true; startMotion(); };
 element('stop').onclick = () => stop(undefined, true);
 element('toggle-settings').onclick = () => {
+  if (rehearsal) return;
   settingsOpen = !settingsOpen;
   if (settingsOpen) stop('Motion pauses while controller settings are open.');
   else startMotion();
   controls();
 };
 element('use-buttons').onclick = () => {
+  if (rehearsal) finishRehearsal('Rehearsal stopped. Button controls use default strength.');
   stop(undefined, true);
   calibration = null;
   element('calibration-progress').hidden = true;
@@ -479,6 +597,7 @@ setInterval(() => {
       calibration = null;
       element('calibration-progress').hidden = true;
       if (bias) {
+        strengthOffer = !bowling;
         motionWanted = true;
         settingsOpen = false;
         element('motion').textContent = gameActive ? 'Calibrated. Motion starts when the match is ready.' : 'Calibrated. Press Ready above; motion will start with the match.';
@@ -492,6 +611,10 @@ setInterval(() => {
       : `Keep still… ${Math.round(result.progress * 100)}%`;
   }
   if (recording && !recentReadings()) stop('Sensor readings paused. Keep the page visible; motion resumes when readings return.');
+  if (rehearsal) {
+    if (!recentReadings()) finishRehearsal('Rehearsal stopped because sensor readings paused. Keep the screen open and try again.');
+    else updateRehearsal(rehearsal.read(now));
+  }
   if (armedAt !== null && now - armedAt > 6000) {
     cancelArmedRoll(); playNotice = 'Roll timed out. Arm again when you are ready.'; element('motion').textContent = playNotice; controls();
   }
@@ -504,15 +627,20 @@ setInterval(() => {
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) { startMotion(); controls(); screenAwake.retry(); return; }
   stop('Motion paused while the page is hidden. Return to this page to continue.');
+  if (rehearsal) finishRehearsal('Rehearsal stopped because the page was hidden. Keep it open and try again.');
   if (calibration) {
-    calibration = null; bias = null;
+    calibration = null; bias = null; strengthProfile = null;
     element('calibration-progress').hidden = true;
     element('motion').textContent = 'Calibration stopped because the page was hidden. Keep it visible and try again.';
     controls();
   }
 });
 document.addEventListener('pointerdown', () => screenAwake.retry());
-window.addEventListener('pagehide', () => { pageActive = false; screenAwake.setActive(false); phoneFeedback.setActive(false); });
+window.addEventListener('pagehide', () => {
+  pageActive = false;
+  if (rehearsal) finishRehearsal('Rehearsal stopped. Start again when you return.');
+  screenAwake.setActive(false); phoneFeedback.setActive(false);
+});
 window.addEventListener('pageshow', () => { pageActive = true; controls(); screenAwake.retry(); });
 controls();
 sensorStatus(performance.now() + 250);

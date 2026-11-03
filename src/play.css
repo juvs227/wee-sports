@@ -284,3 +284,34 @@ summary {
     font-weight: 800;
     margin-bottom: 8px;
 }
+
+.game-panel:has(details[open]) {
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
+}
+
+.game-panel .tennis-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 16px;
+    padding: 8px 0;
+}
+
+.game-panel select {
+    display: block;
+    width: 100%;
+    margin: 4px 0;
+    padding: 7px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+}
+
+.game-panel button { margin: 4px 4px 4px 0; }
+.game-panel .tennis-practice { padding: 10px; border-radius: 10px; background: var(--surface-sunk); }
+.game-panel .tennis-practice p { color: var(--text-muted); }
+@media (max-width: 480px) {
+    .game-panel .tennis-options { grid-template-columns: 1fr; }
+}

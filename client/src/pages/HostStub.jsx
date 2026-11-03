@@ -18,6 +18,7 @@ import { useReconnect } from '../lib/useReconnect.js';
 import { ReconnectNotice } from '../components/ReconnectNotice.jsx';
 import { sportName } from '../lib/sports.js';
 import { enterFullscreen, exitFullscreen, fullscreenElement } from '../lib/fullscreen.js';
+import { useTvAudio } from '../lib/useTvAudio.jsx';
 import '../styles/game-shell.css';
 
 export default function HostStub() {
@@ -25,6 +26,7 @@ export default function HostStub() {
   const navigate = useNavigate();
   const { url, loading: phoneLinkLoading, status: phoneLinkStatus } = usePhoneLink(code);
   const { snapshot: lobby, reconnecting, ended, storageWarning, leave } = useReconnect('host', code);
+  const audio = useTvAudio(lobby, reconnecting || Boolean(ended));
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState(null);
 
@@ -79,6 +81,7 @@ export default function HostStub() {
   useEffect(() => setStartError(null), [phase]);
 
   async function play() {
+    void audio.activateForPlay();
     setStarting(true);
     setStartError(null);
     enterGameView();
@@ -107,6 +110,7 @@ export default function HostStub() {
 
   // Keep the game mounted through a temporary drop, so its local state survives.
   if (lobby?.phase === PHASES.TUTORIAL) return <TvTutorial lobby={lobby}
+    soundControls={audio.controls} onAudio={audio.onAudio}
     immersive={immersive} fullscreen={fullscreen} onToggleView={immersive ? leaveGameView : enterGameView}
     paused={reconnecting || lobby.paused} error={startError ? errorText(startError) : null} onClose={async () => {
       if (await leave()) navigate('/');
@@ -124,10 +128,11 @@ export default function HostStub() {
   }
 
   if (lobby.phase === PHASES.COUNTDOWN) return <div className={`game-countdown${immersive ? ' game-countdown--immersive' : ''}`}>
+    <div className="game-countdown__sound">{audio.controls}</div>
     <button type="button" className="game-countdown__view" onClick={immersive ? leaveGameView : enterGameView}>
       {immersive ? fullscreen ? 'Exit full screen' : 'Windowed view' : 'Full screen'}
     </button>
-    <TvCountdown lobby={lobby} />
+    <TvCountdown lobby={lobby} onTick={audio.onCountdown} />
   </div>;
 
   const capacity = playerCapacity(lobby.sport);
@@ -192,6 +197,7 @@ export default function HostStub() {
       ) : null}
 
       <div className="stub__actions">
+        {audio.controls}
         <button
           type="button"
           className="btn btn--primary btn--play"

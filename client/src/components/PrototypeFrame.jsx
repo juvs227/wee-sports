@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { EVENTS, isRoll, isSwing, isGameHit, isTennisState } from '@wee/shared/protocol.js';
+import { EVENTS, isRoll, isSwing, isGameHit, isTennisState, isStrokeResult, isGameSoundEvent } from '@wee/shared/protocol.js';
 import { request, socket, useConnection } from '../lib/socket.js';
 import { createInputId } from '../../../src/network/inputId.js';
 
 const NO_PLAYERS = [];
 /** Keep the game/controller alive while the outer page owns the lobby session. */
-export function PrototypeFrame({ code, controller = false, player = 1, players = NO_PLAYERS, sport = 'tennis', gameId, gameState, playing = true, paused = false, showPause = paused, pauseMessage }) {
+export function PrototypeFrame({ code, controller = false, player = 1, players = NO_PLAYERS, sport = 'tennis', gameId, gameState, playing = true, paused = false, showPause = paused, pauseMessage, onAudio }) {
   const frame = useRef(null);
   const ready = useRef(false);
   const pending = useRef(new Map());
@@ -22,7 +22,7 @@ export function PrototypeFrame({ code, controller = false, player = 1, players =
     if (controller && sport === 'bowling') post({ type: 'wee:bowling-state', ...gameState,
       canRoll: playing && !paused && connection === 'online' && gameState?.phase === 'ready' && gameState.currentPlayer === player });
     if (controller && sport === 'tennis' && isTennisState(gameState)) {
-      post({ type: 'wee:tennis-state', ...gameState });
+      post({ type: 'wee:tennis-state', ...gameState, gameId });
     }
   }
   useEffect(() => {
@@ -54,7 +54,16 @@ export function PrototypeFrame({ code, controller = false, player = 1, players =
         await request(EVENTS.HOST_GAME_STATE, { gameId, phase: data.phase, frame: data.frame, currentPlayer: data.currentPlayer });
       } else if (!controller && sport === 'tennis' && data?.type === 'wee:tennis-state' &&
           data.gameId === gameId && isTennisState(data)) {
-        await request(EVENTS.HOST_GAME_STATE, { gameId, phase: data.phase, server: data.server, winner: data.winner });
+        await request(EVENTS.HOST_GAME_STATE, { gameId, phase: data.phase, server: data.server, winner: data.winner,
+          practice: data.practice, serveAttempt: data.serveAttempt });
+      } else if (!controller && data?.type === 'wee:game-audio' && ready.current && playing &&
+          !paused && connection === 'online' && data.gameId === gameId && data.sport === sport &&
+          isGameSoundEvent(sport, data.event)) {
+        onAudio?.(data.event);
+      } else if (!controller && sport === 'tennis' && data?.type === 'wee:stroke-result' &&
+          ready.current && playing && !paused && connection === 'online' && socket.connected &&
+          data.gameId === gameId && isStrokeResult(data)) {
+        socket.volatile.emit(EVENTS.HOST_STROKE_RESULT, data);
       } else if (!controller && data?.type === 'wee:game-hit' &&
           ready.current && playing && !paused && connection === 'online' && socket.connected && data.gameId === gameId) {
         const hit = { id: createInputId(), gameId, player: data.player, kind: sport };
@@ -89,16 +98,23 @@ export function PrototypeFrame({ code, controller = false, player = 1, players =
         post({ type: 'wee:game-hit', kind: sport, player });
       }
     };
+    const strokeResult = event => {
+      if (controller && sport === 'tennis' && ready.current && playing && !paused &&
+          connection === 'online' && event.gameId === gameId && event.player === player && isStrokeResult(event)) {
+        post({ ...event, type: 'wee:stroke-result' });
+      }
+    };
     window.addEventListener('message', receive);
     if (!controller) { socket.on(EVENTS.GAME_SWING, swing); socket.on(EVENTS.GAME_ROLL, roll); }
-    else socket.on(EVENTS.GAME_HIT, hit);
+    else { socket.on(EVENTS.GAME_HIT, hit); socket.on(EVENTS.GAME_STROKE_RESULT, strokeResult); }
     publishState();
     return () => {
       window.removeEventListener('message', receive);
       socket.off(EVENTS.GAME_SWING, swing); socket.off(EVENTS.GAME_ROLL, roll);
       socket.off(EVENTS.GAME_HIT, hit);
+      socket.off(EVENTS.GAME_STROKE_RESULT, strokeResult);
     };
-  }, [paused, connection, src, controller, attempt, players, playing, sport, gameId, gameState, player]);
+  }, [paused, connection, src, controller, attempt, players, playing, sport, gameId, gameState, player, onAudio]);
   return (
     <div className={`prototype-frame ${controller ? 'prototype-frame--phone' : ''}`}>
       {loading ? <p role="status">{failed ? 'Taking too long to load.' : `Loading ${controller ? 'controller' : sport}…`}

@@ -1,5 +1,9 @@
 # Wee Sports
 
+Current tennis features and manual checks: [tennis upgrade](docs/tennis-upgrade.md).
+Rules, formats and practice: [tennis scoring](docs/tennis-scoring.md).
+Sound activation, effects and credits: [sound](docs/sound.md).
+
 Phone response/strength changes and manual testing: [tennis response](docs/tennis-response.md).
 Permanent server setup: [Railway](docs/railway.md).
 
@@ -60,8 +64,10 @@ HTTPS origin to the server; its QR is discovered at runtime.
    browser window. **Exit full screen** / **Windowed view** and **Full screen**
    switch views without restarting the game. Calibrated phone motion starts when
    the countdown ends.
-4. In tennis, P1 swings to serve, then each player swings as the ball approaches
-   their side. If a grip does not work with the team’s automatic classifier,
+4. In tennis, the TV and phone identify the server. Swing to serve, then return
+   the ball after its service bounce. Service alternates by game, or follows the
+   tie-break rotation. The TV offers practice, Quick/Full matches and independent
+   movement/timing and bot difficulty options. If a grip does not work with the team’s automatic classifier,
    controller settings offer an explicit forehand/backhand mapping.
 5. In bowling, use the phone to aim, make an underhand swing for power, and
    deliberately turn your wrist during the forward swing to add curve. Small
@@ -95,7 +101,9 @@ when a roll is accepted. A tennis contact sends brief vibration to the phone
 whose racket hit the ball, on browsers that support vibration. Bowling gives a
 light pulse on release and a distinct double pulse when the ball first contacts
 a pin. Gutter rolls do not trigger pin-impact feedback, and multiple colliding
-pins cannot repeatedly buzz the phone. No sound is played.
+pins cannot repeatedly buzz the phone. Game sound plays on the TV/laptop through
+the visible sound control; **Sound check** can confirm it is enabled. The phone
+keeps its separate motion animation and vibration feedback.
 The controller requests a screen wake lock after setup while connected and
 visible, including the lobby wait. Browser and battery settings can still deny
 or release it; controller help shows the current status. Vibration is not
@@ -117,11 +125,13 @@ the player's seat and match ID, rejects duplicate/out-of-turn rolls, and waits f
 an actual game acknowledgement. Reload old pages after updating. The internal
 post-countdown phase is still named `tutorial`; tutorial voting is separate work.
 
-Tennis keeps the team's models, preset strokes, trajectory calculation and
-scoring. Assisted contact timing and stroke-aware tracking compensate for phone
-recognition delay; a hit still requires the ball to cross the animated racket.
-P1 serves each point; regulation service turns, service boxes and a full tennis
-match-end/rematch flow remain future work.
+Tennis keeps the team's models and authored strokes. Assisted contact timing and
+stroke-aware tracking compensate for phone recognition delay; a hit still requires
+real animated racket contact. Placement is deterministic and power is bounded.
+Full matches use advantage games and best-of-three tie-break sets; Quick matches
+use one seven-point tie-break, win by two. Service boxes, first/second faults,
+lets, illegal serve-volley calls, net collisions and match-end/rematch flow are
+implemented. See the scoring document for the remaining simulation limits.
 
 Bowling reuses the lobby, calibration, controller bridge and Three.js, with a
 separate cannon-es rigid-body simulation suitable for a ball and ten pins. See
@@ -170,10 +180,12 @@ Phone strokes and keyboard J/K start an animation, but a hit still requires the
 ball to cross the animated racket's hitbox during its strike window. The same
 collision path releases a prepared serve and returns a moving rally ball. In a
 homepage lobby, paired phones control P1 and P2; standalone prototype links keep
-their original Player 1 relay. P1 swings to serve each point.
+their original Player 1 relay. The named server starts each point; the bot serves
+automatically when it owns the service turn.
 
-With **Automatic movement** enabled, phone/button inputs can be buffered for up
-to 450 ms while an incoming ball approaches. The game samples the shipped racket
+With **Timing assistance** enabled, phone/button inputs can be buffered for up
+to 450 ms in Standard or 550 ms in Beginner while an incoming ball approaches.
+Timing assistance is independent of **Automatic movement**. The game samples the shipped racket
 animations and chooses a remaining wind-up that can meet the ball. This adjusts
 the animation timing; it does not move the ball or guarantee a hit. Swing as the
 ball approaches your side. A stroke received after the ball has passed can miss.
@@ -183,9 +195,11 @@ prepared inputs so they cannot replay later.
 To test on the TV/laptop:
 
 1. Wait for the player and racket models to load.
-2. Press **B** for a forehand practice feed or **Shift+B** for a backhand feed.
-   A feed resets the ball without awarding a point and targets the current player
-   position. **N** / **Shift+N** feed Player 2 instead.
+2. Open **Practice** on the TV, choose forehand/backhand/alternating and the
+   playing hand, then start. Feeds repeat and count accepted returns without
+   awarding match points. Returning to the match preserves its score and restarts
+   the current point; a pending second serve is retained. B/Shift+B remain debug
+   shortcuts, and N/Shift+N feed Player 2 rather than enabling a bot drill.
 3. Use a phone/button stroke as the ball approaches your side, or **K** (forehand)
    / **J** (backhand) for Player 1's ordinary keyboard swing animation.
 4. Watch Hit/Miss feedback. **H** toggles contact boxes: amber = inactive,
@@ -201,9 +215,9 @@ not move the model's racket to its other physical hand.
 Physics and animation advance at a fixed 120 Hz, independent of rendering frame
 rate. Collision sweeps between ball and racket poses to reduce tunneling. A swing
 can hit only once, and a player cannot hit their own outgoing shot again. Returns
-use the team's court-targeted trajectory calculation and stroke-side variation;
-physical spin, exact racket impact response, and net collisions remain outside
-this tennis prototype.
+use court-targeted trajectories with repeatable stroke/timing placement. Net
+collisions, legal service targets and point reasons share one court model.
+Physical spin and exact string-bed impact response remain future simulation work.
 
 Physics steps now refresh only the racket pose needed for contact checks, rather
 than forcing the whole scene graph to update at 120 Hz. Normal rendering still
@@ -213,9 +227,9 @@ updates. This reduces local work; it does not remove internet connection delay.
 
 A first bounce outside the opponent's court, or the second bounce after a valid
 landing, ends the point immediately and awards it once. The ball then waits for
-P1's next serve. It no longer stays live through repeated bounces while rolling
-to a stop. Regulation service turns, service boxes, and a complete tennis match
-format remain future work.
+the correct server, retaining the same service side on a fault/let and alternating
+it after a scored point. The scoreboard explains out, second bounce, net,
+double fault and illegal serve reception. Completed matches wait for Play again.
 
 Validation uses the actual shipped player/racket GLBs: both players, both hands,
 both strokes, several shot directions, input arrival from 0–300 ms before the
@@ -236,33 +250,37 @@ and moves sideways toward that position within court bounds. Before a stroke is
 chosen it uses the nearest left/right candidate; a prepared or active stroke
 uses that stroke's offset instead. Offsets are sampled from the loaded models.
 
-Players slow near their target and continue ordinary speed-limited foot movement
-during an assisted swing until contact. They recover toward center when the ball
-travels away and hold position while waiting for a serve. There is no automatic
-forward/backward chase; manually changing depth is retained when assistance is
-re-enabled. Wide, late, or vertically unreachable balls can still miss.
+Players slow near their target and continue speed-limited foot movement during
+an assisted swing until contact. They recover toward center and rally depth when
+the ball travels away. Serving uses a stance behind the baseline; assisted
+receivers move forward for the shorter legal serve, then recover for the rally.
+Disable automatic movement for manual depth control. Wide, late or vertically
+unreachable balls can still miss.
 
 **H** shows the blue/red target rings with the racket boxes. To inspect tracking,
 disable assistance, move sideways with A/D, feed a practice ball, move away, then
-re-enable assistance. Forecasts do not predict future opponent hits or net impacts.
+re-enable assistance. Forecasts include the current bounce/net response but do
+not predict future opponent hits.
 The physics tests cover intercepts, bounce limits, steering, actual-model stroke
 alignment, human rallies, and bot returns.
 
 ## Player 2 bot
 
-The **Player 2 bot** checkbox enables a simple opponent by default. The bot moves
-sideways using assisted positioning (even if you disable Auto position for manual
-player-1 movement). For incoming player-1 shots, it predicts arrival at its cached
+The **Player 2 bot** checkbox enables a simple opponent by default. The bot uses
+assisted positioning (even if you disable movement assistance for Player 1),
+including the forward receiving position needed for a legal serve. For incoming player-1 shots, it predicts arrival at its cached
 racket strike poses and chooses a reachable forehand or backhand. It starts the
 animation just before arrival, allows one attempt per incoming shot, and must make
 the same timed racket contact as you. It has no guaranteed-hit or teleport mechanic.
-It does not automatically serve or implement full tennis strategy.
+It automatically serves when the score gives it the service turn. Beginner bot
+difficulty uses slower movement and gentler returns; Standard uses its normal
+pace. This setting is separate from the human's movement and timing assistance.
+Solo play keeps both player and bot views available.
 
-For a quick test, press **N** to feed a forehand ball to the bot or **Shift+N** for
-a backhand feed. The bot should swing and attempt to return it toward you. B and
-Shift+B still feed your player. Disable Player 2 bot to stop automatic swings and
-use player-2 inputs through the game API. An animation already underway finishes
-normally when the checkbox is disabled.
+Start a solo match to play the bot. Guided practice suspends bot strokes so fed
+balls remain repeatable; N/Shift+N are manual Player 2 feed shortcuts rather than
+an automatic bot practice mode. Disable Player 2 bot to use Player 2 inputs through
+the game API. An animation already underway finishes when the checkbox is disabled.
 
 Bot timing/reach are prototype settings in `botPlayer.ts`. Tests cover selecting
 both strokes, ignoring outgoing/passed/distant balls, and respecting reach. Real
@@ -333,24 +351,25 @@ merge based solely on local checks.
 
 Successful racket contacts now aim at a safe landing point rather than applying
 one fixed velocity everywhere. Player 1 aims into negative Z; player 2 aims into
-positive Z. The preferred depth is 8.5 units, with deterministic forehand/backhand
-placement kept inside X ±2.8. A central target at depth 7 is the fallback.
+positive Z. Rally targets prefer depth 8.5, with deterministic stroke/timing
+placement inside X ±3 and a central depth-7 fallback. Service targets use the
+correct diagonal box at depth 5.3, inside its 6.4-unit service line.
 
 `shotTrajectory.ts` solves launch velocity in the existing units per 60 Hz tick,
-then simulates the first bounce using 1/120 s substeps. It searches flight times
-from 1 to 2.5 seconds, requiring a first landing inside the opposite court's safe
-area and at least 0.9 units of ball-center height across the net (current net top
-0.55 plus radius and clearance margin). It compensates for semi-implicit gravity.
-This applies to rally returns and contact that releases a prepared serve; it does
-not implement regulation service boxes. Practice feeds retain their own setup.
+then simulates the first bounce using 1/120 s substeps. Flight-time searches begin
+from bounded power and assistance settings, extending when necessary to find a
+safe arc. They require a legal first landing and clearance above the shared net
+profile, ball radius and margin. The net is 0.914 units at center and 1.07 at its
+posts. The solver compensates for semi-implicit gravity. Prepared serves use
+service-box targets; practice feeds retain their own authored-pose setup.
 
-A yellow ring shows the intended landing point, and Hit feedback reports its X/Z.
-H toggles the ring alongside the other debug markers. Test with B/Shift+B, your
-phone, and the bot. Targets and power are deliberately repeatable while tuning.
-A later opponent contact changes the ball's trajectory, so its original target
-only applies if that shot is allowed to land. No collision with the net mesh was
-added: the planner checks clearance proactively. Impossible/invalid contact
-positions report no safe trajectory rather than launching invalid values.
+A yellow ring shows intended landing during practice or with debug markers on;
+Hit feedback describes placement in plain language. H toggles debug markers.
+Identical state and input produce the same target. A later opponent contact
+changes the trajectory, so the original target applies only if that shot lands.
+The planner checks clearance proactively and ball motion also resolves real net
+crossings, including service lets/faults. Invalid contact positions produce a
+clear no-contact result rather than invalid launch values.
 
 Tests cover 144 combinations of side, stroke, and contact location/height, plus
 invalid inputs and simulation at 30/60/144 FPS. They verify first-bounce court

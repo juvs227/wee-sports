@@ -1,52 +1,28 @@
-// components/court.ts
 import * as THREE from 'three';
+import {TENNIS_COURT} from '../tennisRules';
 
-export function createCourt() {
+export function createCourt(): THREE.Group {
     const group = new THREE.Group();
-
-    // Standard Tennis Court dimensions in meters (78 ft x 27 ft)
-    const groundWidth = 20;  // 27 feet
-    const groundLength = 50; // 78 feet
-    const courtWidth = 8.23;
-    const courtLength = 23.77;
-
-    // 1. Pure Green Court Placeholder
-    const geometry = new THREE.PlaneGeometry(groundWidth, groundLength);
-    const material = new THREE.MeshStandardMaterial({ 
-        color: 0x15803d, // Professional tennis court green
-        roughness: 0.8,
-        metalness: 0.1
-    });
-    const court = new THREE.Mesh(geometry, material);
+    const court = new THREE.Mesh(new THREE.PlaneGeometry(20, 50),
+        new THREE.MeshStandardMaterial({color: 0x15803d, roughness: .8, metalness: .1}));
     court.rotation.x = -Math.PI / 2;
-    court.position.y = 0.05;
+    court.position.y = .02;
     court.receiveShadow = true;
     group.add(court);
-
-    // 2. Grid lines for scale
-    const grid = new THREE.GridHelper(courtLength, 12, 0xffffff, 0x444444);
-    grid.position.y = 0.01;
-    group.add(grid);
-
-    // 3. Highlighted Official Court Border Lines (8.23m x 23.77m)
-    const halfWidth = courtWidth / 2;   // 4.115 meters
-    const halfLength = courtLength / 2; // 11.885 meters
-
-    // Define the 4 corners of the rectangle on the XZ plane
-    const points = [
-        new THREE.Vector3(-halfWidth, 0.06, -halfLength), // Top-Left
-        new THREE.Vector3(halfWidth, 0.06, -halfLength),  // Top-Right
-        new THREE.Vector3(halfWidth, 0.06, halfLength),   // Bottom-Right
-        new THREE.Vector3(-halfWidth, 0.06, halfLength)   // Bottom-Left
-    ];
-
-    const borderGeometry = new THREE.BufferGeometry().setFromPoints(points);
-    const borderMaterial = new THREE.LineBasicMaterial({ 
-        color: 0xffffff, // Bright white border line
-    });
-
-    const courtBorder = new THREE.LineLoop(borderGeometry, borderMaterial);
-    group.add(courtBorder);
-
+    const {halfWidth, halfLength, serviceLine, lineWidth} = TENNIS_COURT;
+    const paint = new THREE.MeshBasicMaterial({color: 0xffffff, side: THREE.DoubleSide});
+    const line = (x: number, z: number, width: number, depth: number): void => {
+        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), paint);
+        mesh.rotation.x = -Math.PI / 2;
+        mesh.position.set(x, .025, z);
+        group.add(mesh);
+    };
+    for (const x of [-1, 1]) line(x * (halfWidth - lineWidth / 2), 0, lineWidth, halfLength * 2);
+    for (const z of [-1, 1]) {
+        line(0, z * (halfLength - lineWidth / 2), halfWidth * 2, lineWidth);
+        line(0, z * (serviceLine - lineWidth / 2), halfWidth * 2, lineWidth);
+        line(0, z * (halfLength - .1), lineWidth, .2);
+    }
+    line(0, 0, lineWidth, serviceLine * 2);
     return group;
 }

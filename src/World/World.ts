@@ -13,10 +13,12 @@ import {
     createBall,
 } from './components/ball';
 
-import { GameLogic, type TennisGameEvent } from './gameLogic';
+import { GameLogic, type TennisGameEvent, type TennisSettings, type PracticeState, type StrokeResult } from './gameLogic';
 import type { Score } from './scoreSystem';
 import type { PlayerInput } from '../Controllers/playerInput';
 import { WorldCamera } from './camera';
+import {TENNIS_COURT} from './tennisRules';
+export type {TennisSettings, PracticeState, StrokeResult} from './gameLogic';
 
 const COURT_MIN_X = -4.115;
 const COURT_MAX_X = 4.115;
@@ -34,6 +36,7 @@ export class World {
     public onSwingFeedback: (message: string) => void = () => { };
     public onBallHit: (player: 1 | 2) => void = () => { };
     public onGameEvent: (event: TennisGameEvent) => void = () => { };
+    public onStrokeResult: (result: StrokeResult) => void = () => { };
     private readonly targetMarkers: THREE.Mesh[] = [];
     private readonly shotTargetMarker: THREE.Mesh;
     private readonly gameLogic: GameLogic;
@@ -97,14 +100,14 @@ export class World {
             minX: COURT_MIN_X,
             maxX: COURT_MAX_X,
             minZ: 1,
-            maxZ: 11.5,
+            maxZ: TENNIS_COURT.serveDepth + .2,
         });
         this.scene.add(this.player1.group);
 
         this.player2 = createPlayer(0, 0.25, -10, 0xef4444, {
             minX: COURT_MIN_X,
             maxX: COURT_MAX_X,
-            minZ: -11.5,
+            minZ: -TENNIS_COURT.serveDepth - .2,
             maxZ: -1,
         });
         this.player2.group.rotation.y = Math.PI;
@@ -135,6 +138,7 @@ export class World {
             onSwingFeedback: () => this.onSwingFeedback,
             onHit: player => this.onBallHit(player),
             onGameEvent: event => this.onGameEvent(event),
+            onStrokeResult: result => this.onStrokeResult(result),
         });
         window.addEventListener('resize', this.handleResize);
     }
@@ -162,9 +166,17 @@ export class World {
         hand: 'Left' | 'Right';
         player?: 1 | 2;
         power?: number;
+        id?: string;
     }): void {
         this.gameLogic.swing(event);
     }
+
+    public getSettings(): TennisSettings { return this.gameLogic.getSettings(); }
+    public configure(settings: Partial<TennisSettings>): void { this.gameLogic.configure(settings); }
+    public getServeState() { return this.gameLogic.getServeState(); }
+    public getPracticeState(): PracticeState { return this.gameLogic.getPracticeState(); }
+    public startPractice(stroke: PracticeState['stroke'] = 'alternate', hand: 'Right' | 'Left' = 'Right'): void { this.gameLogic.startPractice(stroke, hand); }
+    public stopPractice(): void { this.gameLogic.stopPractice(); }
 
     public feedPracticeBall(backhand = false, number: 1 | 2 = 1): void {
         this.gameLogic.feedPracticeBall(backhand, number);

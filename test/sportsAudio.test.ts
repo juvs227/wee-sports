@@ -2,6 +2,7 @@ import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {expect, test, vi} from 'vitest';
 import {createSportsAudio, SOUND_MANIFEST} from '../src/audio/sportsAudio';
+import {createTvAudioSession} from '../src/audio/tvAudioSession';
 
 function harness() {
   let clock = 0;
@@ -93,6 +94,81 @@ test('sound is silent until explicitly unlocked and never replays earlier events
   sound.dispose();
 });
 
+test('lobby preload stays silent and Play activation preserves an explicit saved mute', async () => {
+  const h = harness();
+  h.values.set('wee-sports:sound-muted', 'true');
+  const sound = createSportsAudio('tennis', h.options);
+  await sound.preload();
+  const fetched = h.fetchAsset.mock.calls.length;
+  expect(fetched).toBeGreaterThan(0);
+  expect(h.createContext).not.toHaveBeenCalled();
+  expect(h.sources).toHaveLength(0);
+  await expect(sound.unlock({respectMute: true})).resolves.toBe(false);
+  expect(h.createContext).not.toHaveBeenCalled();
+  expect(sound.getStatus().muted).toBe(true);
+  // The explicit Enable/Test sound action can unmute, using prefetched bytes.
+  await expect(sound.unlock()).resolves.toBe(true);
+  expect(h.fetchAsset).toHaveBeenCalledTimes(fetched);
+  expect(h.createContext).toHaveBeenCalledTimes(1);
+  await sound.unlock({respectMute: true});
+  expect(h.createContext).toHaveBeenCalledTimes(1);
+  sound.dispose();
+});
+
+test('one TV audio context survives countdown into actual game effects', async () => {
+  const h = harness();
+  const sound = createSportsAudio('tennis', h.options);
+  const session = createTvAudioSession(sound);
+  await sound.preload();
+  await sound.unlock({respectMute: true});
+  session.update({gameId: 'match-one', phase: 'countdown', paused: false});
+  for (const seconds of [5, 4, 3, 2, 1]) {
+    h.tick(1000);
+    session.countdown(seconds);
+  }
+  expect(h.sources).toHaveLength(5);
+  session.countdown(1);
+  session.countdown(2);
+  expect(h.sources).toHaveLength(5);
+  session.update({gameId: 'match-one', phase: 'tutorial', paused: false});
+  expect(h.sources).toHaveLength(6); // One start cue.
+  session.gameEvent('serve');
+  expect(h.sources).toHaveLength(7);
+  session.update({gameId: 'match-one', phase: 'tutorial', paused: true});
+  session.gameEvent('hit');
+  session.update({gameId: 'match-one', phase: 'tutorial', paused: false});
+  expect(h.sources).toHaveLength(7); // Reconnect has no repeated start/hit.
+  expect(h.createContext).toHaveBeenCalledTimes(1);
+  sound.dispose();
+});
+
+test('restored matches do not replay start, skipped countdowns do not catch up, and pause stops loops', () => {
+  const sound = {
+    play: vi.fn((_event: string) => true),
+    stop: vi.fn(),
+    setActive: vi.fn(),
+  };
+  const session = createTvAudioSession(sound);
+  session.update({gameId: 'restored', phase: 'tutorial', paused: false});
+  expect(sound.play).not.toHaveBeenCalled();
+  session.update({gameId: 'fresh', phase: 'countdown', paused: false});
+  session.countdown(5);
+  session.countdown(2);
+  session.countdown(4);
+  expect(sound.play.mock.calls.map(([event]) => event)).toEqual([
+    'countdown',
+    'countdown-2',
+  ]);
+  session.update({gameId: 'fresh', phase: 'tutorial', paused: true});
+  session.update({gameId: 'fresh', phase: 'tutorial', paused: false});
+  expect(sound.play).toHaveBeenCalledTimes(2);
+  session.gameEvent('roll');
+  session.gameEvent('roll-end');
+  expect(sound.stop).toHaveBeenLastCalledWith('roll');
+  session.gameEvent('stop');
+  expect(sound.stop).toHaveBeenLastCalledWith(undefined);
+});
+
 test('late asset downloads cannot queue stale hits or bypass a pause', async () => {
   const h = harness();
   let finishDownload!: () => void;
@@ -114,6 +190,41 @@ test('late asset downloads cannot queue stale hits or bypass a pause', async () 
   sound.setActive(true);
   expect(h.sources).toHaveLength(0);
   expect(sound.play('hit')).toBe(true);
+  sound.dispose();
+});
+
+test('one slow asset does not delay already decoded contact sounds', async () => {
+  const h = harness();
+  let finishSlow!: () => void;
+  const slow = new Promise<void>(resolve => {
+    finishSlow = resolve;
+  });
+  h.fetchAsset.mockImplementation(async (...args: unknown[]) => {
+    if (String(args[0]).endsWith('/match.wav')) await slow;
+    return {ok: true, arrayBuffer: async () => new ArrayBuffer(4)};
+  });
+  const sound = createSportsAudio('tennis', h.options);
+  let ready!: () => void;
+  const firstReady = new Promise<void>(resolve => {
+    ready = resolve;
+  });
+  const unsubscribe = sound.subscribe(status => {
+    if (status.ready) ready();
+  });
+  const unlock = sound.unlock();
+  await firstReady;
+  expect(sound.getStatus().loading).toBe(true);
+  expect(sound.play('hit')).toBe(true);
+  expect(sound.play('match')).toBe(false);
+  finishSlow();
+  await unlock;
+  expect(sound.getStatus()).toMatchObject({
+    ready: true,
+    loading: false,
+    partial: false,
+  });
+  expect(h.sources).toHaveLength(1); // The earlier unavailable match is never replayed.
+  unsubscribe();
   sound.dispose();
 });
 
@@ -205,6 +316,22 @@ test('disposal releases audio resources and prevents all subsequent playback', a
   expect(h.context.close).toHaveBeenCalledTimes(1);
   expect(sound.play('roll')).toBe(false);
   await expect(sound.unlock()).resolves.toBe(false);
+});
+
+test('explicit sound check can preview during a game pause but never bypass mute or a hidden tab', async () => {
+  const h = harness();
+  const sound = createSportsAudio('tennis', h.options);
+  await sound.unlock();
+  sound.setActive(false);
+  expect(sound.play('hit')).toBe(false);
+  expect(sound.preview()).toBe(true);
+  h.tick(500);
+  h.doc.hidden = true;
+  expect(sound.preview()).toBe(false);
+  h.doc.hidden = false;
+  sound.setMuted(true);
+  expect(sound.preview()).toBe(false);
+  sound.dispose();
 });
 
 test('every manifest asset ships as nonempty, bounded PCM WAV with a clean attack', () => {

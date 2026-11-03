@@ -19,6 +19,11 @@ neither recordings of athletes/crowds nor imitations of an existing game's audio
 They contain no third-party samples or melodies. Their source code is included
 so the team can regenerate and modify them.
 
+This includes the five shared `ui/` countdown/start/test cues and tennis
+`fault.wav` / `let.wav`. Their bright, brief sound palette is intended for an
+upbeat family sports game; no Wii Sports or Nintendo sound assets or melodies
+are used.
+
 Keep this credit file with distributions of the sound pack. The attribution for
 the tennis bounce and the link to its CC BY 4.0 license must remain available.
 The named authors do not endorse Wee Sports.

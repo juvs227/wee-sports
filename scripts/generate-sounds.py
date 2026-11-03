@@ -44,6 +44,14 @@ def chime(notes, spacing=0.12, decay=0.25):
 
 def generate_cues():
     cues = {
+        # Original bright, short arcade cues. No sampled console sounds/melodies.
+        'ui/countdown.wav': ([587.33], 0.1, 0.16),
+        'ui/countdown-2.wav': ([739.99], 0.1, 0.16),
+        'ui/countdown-1.wav': ([880], 0.1, 0.19),
+        'ui/start.wav': ([587.33, 880, 1174.66], 0.07, 0.32),
+        'ui/ready.wav': ([739.99, 987.77], 0.08, 0.20),
+        'tennis/fault.wav': ([293.66], 0.1, 0.18),
+        'tennis/let.wav': ([440, 440], 0.11, 0.16),
         'tennis/point.wav': ([523.25, 659.25], 0.10, 0.2),
         'tennis/game.wav': ([523.25, 659.25, 783.99], 0.12, 0.25),
         'tennis/set.wav': ([392, 523.25, 659.25, 783.99], 0.13, 0.3),

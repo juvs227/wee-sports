@@ -7,13 +7,18 @@ vi.mock('../src/World/World', () => ({ World: class {
   constructor() {
     this.start = vi.fn(); this.stop = vi.fn(); this.dispose = vi.fn(); this.swing = vi.fn();
     this.setPlayerInput = vi.fn();
+    this.setSplitScreen = vi.fn(); this.configure = vi.fn(); this.startRound = vi.fn();
+    this.startPractice = vi.fn(); this.stopPractice = vi.fn();
     this.ball = { userData: { isWaitingForServe: true } };
     this.score = { player1: 0, player2: 0, roundsPlayer1: 0, roundsPlayer2: 0,
       setsPlayer1: 0, setsPlayer2: 0, server: 'player1', tieBreak: false,
-      completedSets: [], lastPoint: null, matchWinner: null };
+      completedSets: [], lastPoint: null, matchWinner: null, format: 'full' };
     runtime.world = this;
   }
   getScore() { return this.score; }
+  getPracticeState() { return { active: false, attempts: 0, returns: 0, streak: 0, bestStreak: 0 }; }
+  getServeState() { return { attempt: 1, side: 'deuce', status: 'ready' }; }
+  getSettings() { return { autoMove: true, timingAssist: true }; }
 } }));
 vi.mock('../src/Controllers/inputController', () => ({ InputController: class {} }));
 vi.mock('../src/network/swingConnection.js', () => ({ connectSwings: () => ({ close: runtime.close }) }));
@@ -34,7 +39,7 @@ beforeEach(() => {
     querySelector: () => ({}),
     createElement: () => ({ setAttribute: vi.fn() }),
     body: { append: vi.fn() },
-    getElementById(id) { if (!elements.has(id)) elements.set(id, {}); return elements.get(id); },
+    getElementById(id) { if (!elements.has(id)) elements.set(id, { checked: true }); return elements.get(id); },
   });
   vi.stubGlobal('location', { origin: 'https://wee.test', href: 'https://wee.test/game.html?room=lobby-SOLO', search: '?room=lobby-SOLO' });
   vi.stubGlobal('history', { replaceState: vi.fn() });
@@ -81,7 +86,7 @@ test('serve status reaches the phone only on a state change and is refreshed aft
   await import('../src/main.ts');
   state({});
   const published = () => parent.postMessage.mock.calls.filter(([message]) => message.type === 'wee:tennis-state');
-  expect(published().at(-1)[0]).toEqual({ type: 'wee:tennis-state', gameId: 'solo-match', phase: 'serve', server: 1, winner: null });
+  expect(published().at(-1)[0]).toEqual({ type: 'wee:tennis-state', gameId: 'solo-match', phase: 'serve', server: 1, winner: null, practice: false, serveAttempt: 1 });
   state({}); vi.advanceTimersByTime(1000);
   expect(published()).toHaveLength(1);
   runtime.world.ball.userData.isWaitingForServe = false;
@@ -107,13 +112,27 @@ test('tennis audio follows real game events, not score polls, and pauses with th
   expect(runtime.sound.play).not.toHaveBeenCalled();
   state({});
   runtime.world.onGameEvent({ kind: 'serve', player: 1 });
-  expect(runtime.sound.play).toHaveBeenCalledExactlyOnceWith('serve');
+  const audio = () => parent.postMessage.mock.calls.filter(([message]) => message.type === 'wee:game-audio');
+  expect(audio()).toHaveLength(1);
+  expect(audio()[0][0]).toMatchObject({ gameId: 'solo-match', sport: 'tennis', event: 'serve' });
   vi.advanceTimersByTime(1000);
-  expect(runtime.sound.play).toHaveBeenCalledTimes(1);
+  expect(audio()).toHaveLength(1);
+  document.getElementById('play-again').onclick();
+  expect(audio().map(([message]) => message.event)).toEqual(['serve', 'stop', 'start']);
   state({ paused: true });
-  expect(runtime.sound.setActive).toHaveBeenLastCalledWith(false);
   runtime.world.onGameEvent({ kind: 'point', player: 1 });
-  expect(runtime.sound.play).toHaveBeenCalledTimes(1);
+  expect(audio()).toHaveLength(3);
   listeners.get('pagehide')({ persisted: false });
-  expect(runtime.sound.dispose).toHaveBeenCalledOnce();
+  expect(runtime.sound.play).not.toHaveBeenCalled(); // Homepage context owns every sound.
+});
+
+test('solo shows both views and actual stroke results carry the current match ID', async () => {
+  await import('../src/main.ts'); state({});
+  expect(runtime.world.setSplitScreen).toHaveBeenLastCalledWith(true);
+  runtime.world.onStrokeResult({ id: 'stroke-1', player: 1, result: 'hit', reason: 'Good contact', receivedToContactMs: 75 });
+  expect(parent.postMessage).toHaveBeenLastCalledWith({ type: 'wee:stroke-result', gameId: 'solo-match',
+    id: 'stroke-1', player: 1, result: 'hit', reason: 'Good contact', receivedToContactMs: 75 }, location.origin);
+  parent.postMessage.mockClear(); state({ paused: true });
+  runtime.world.onStrokeResult({ id: 'stroke-2', player: 1, result: 'miss', reason: 'Late' });
+  expect(parent.postMessage).not.toHaveBeenCalled();
 });

@@ -9,9 +9,26 @@ interface SoundDefinition {
   loop?: boolean;
 }
 
+const START_SOUNDS: Record<string, SoundDefinition> = {
+  countdown: {file: '/sounds/ui/countdown.wav', volume: 0.62, cooldownMs: 400},
+  'countdown-2': {
+    file: '/sounds/ui/countdown-2.wav',
+    volume: 0.62,
+    cooldownMs: 400,
+  },
+  'countdown-1': {
+    file: '/sounds/ui/countdown-1.wav',
+    volume: 0.65,
+    cooldownMs: 400,
+  },
+  start: {file: '/sounds/ui/start.wav', volume: 0.65, cooldownMs: 1000},
+  ready: {file: '/sounds/ui/ready.wav', volume: 0.6, cooldownMs: 300},
+};
+
 /** Local, short effects only. Gameplay owns when each event actually happened. */
 export const SOUND_MANIFEST: Record<Sport, Record<string, SoundDefinition>> = {
   tennis: {
+    ...START_SOUNDS,
     hit: {file: '/sounds/tennis/hit.wav', volume: 0.85, cooldownMs: 55},
     bounce: {file: '/sounds/tennis/bounce.wav', volume: 0.48, cooldownMs: 110},
     serve: {file: '/sounds/tennis/serve.wav', volume: 0.85, cooldownMs: 600},
@@ -19,8 +36,11 @@ export const SOUND_MANIFEST: Record<Sport, Record<string, SoundDefinition>> = {
     game: {file: '/sounds/tennis/game.wav', volume: 0.4, cooldownMs: 500},
     set: {file: '/sounds/tennis/set.wav', volume: 0.42, cooldownMs: 700},
     match: {file: '/sounds/tennis/match.wav', volume: 0.45, cooldownMs: 1000},
+    fault: {file: '/sounds/tennis/fault.wav', volume: 0.4, cooldownMs: 500},
+    let: {file: '/sounds/tennis/let.wav', volume: 0.4, cooldownMs: 500},
   },
   bowling: {
+    ...START_SOUNDS,
     release: {
       file: '/sounds/bowling/release.wav',
       volume: 0.6,
@@ -57,6 +77,14 @@ export interface SportsAudioOptions {
   now?: () => number;
 }
 
+export interface SportsAudioStatus {
+  muted: boolean;
+  ready: boolean;
+  loading: boolean;
+  unavailable: boolean;
+  partial: boolean;
+}
+
 const MUTE_KEY = 'wee-sports:sound-muted';
 const MAX_VOICES = 8;
 
@@ -83,20 +111,48 @@ export function createSportsAudio(
   let context: AudioContext | undefined;
   let master: GainNode | undefined;
   let loading: Promise<void> | undefined;
+  let preloading: Promise<void> | undefined;
   let unlocked = false;
   let loadingSounds = false;
   let unavailable = false;
   let disposed = false;
   let active = true;
   const buffers = new Map<string, AudioBuffer>();
+  const encoded = new Map<string, ArrayBuffer>();
+  const downloads = new Map<string, Promise<ArrayBuffer | undefined>>();
   const voices = new Set<Voice>();
   const lastPlayed = new Map<string, number>();
   const buttons = new Map<HTMLButtonElement, () => void>();
   const requests = new AbortController();
+  const listeners = new Set<(status: SportsAudioStatus) => void>();
+
+  function getStatus(): SportsAudioStatus {
+    return {
+      muted,
+      ready: unlocked && context?.state === 'running' && buffers.size > 0,
+      loading: loadingSounds,
+      unavailable,
+      partial:
+        !loadingSounds &&
+        buffers.size > 0 &&
+        buffers.size < Object.keys(SOUND_MANIFEST[sport]).length,
+    };
+  }
+
+  function subscribe(
+    listener: (status: SportsAudioStatus) => void,
+  ): () => void {
+    listeners.add(listener);
+    listener(getStatus());
+    return () => {
+      listeners.delete(listener);
+    };
+  }
 
   function refreshButtons() {
+    for (const listener of listeners) listener(getStatus());
     for (const button of buttons.keys()) {
-      const on = unlocked && !muted;
+      const on = getStatus().ready && !muted;
       button.textContent = muted
         ? 'Sound off'
         : unavailable
@@ -113,6 +169,44 @@ export function createSportsAudio(
       );
       button.title = on ? 'Mute game sound' : 'Enable sound on this screen';
     }
+  }
+
+  function download(
+    event: string,
+    definition: SoundDefinition,
+  ): Promise<ArrayBuffer | undefined> {
+    if (encoded.has(event)) return Promise.resolve(encoded.get(event));
+    const pending = downloads.get(event);
+    if (pending) return pending;
+    if (!fetchAsset || disposed) return Promise.resolve(undefined);
+    const task = fetchAsset(definition.file, {signal: requests.signal})
+      .then(async response => {
+        if (!response.ok) throw new Error('Sound asset unavailable');
+        const bytes = await response.arrayBuffer();
+        if (!disposed) encoded.set(event, bytes);
+        return disposed ? undefined : bytes;
+      })
+      .finally(() => {
+        downloads.delete(event);
+      });
+    downloads.set(event, task);
+    return task;
+  }
+
+  /** Download bytes in the lobby without creating an AudioContext or playing anything. */
+  function preload(): Promise<void> {
+    if (disposed || !fetchAsset) return Promise.resolve();
+    if (preloading) return preloading;
+    preloading = Promise.allSettled(
+      Object.entries(SOUND_MANIFEST[sport]).map(async ([event, definition]) => {
+        if (!buffers.has(event)) await download(event, definition);
+      }),
+    )
+      .then(() => {})
+      .finally(() => {
+        preloading = undefined;
+      });
+    return preloading;
   }
 
   function stop(event?: string) {
@@ -145,22 +239,27 @@ export function createSportsAudio(
     await Promise.allSettled(
       Object.entries(SOUND_MANIFEST[sport]).map(async ([event, definition]) => {
         if (buffers.has(event)) return;
-        const response = await fetchAsset(definition.file, {
-          signal: requests.signal,
-        });
-        if (!response.ok) throw new Error('Sound asset unavailable');
-        const buffer = await audioContext.decodeAudioData(
-          await response.arrayBuffer(),
-        );
-        if (!disposed) buffers.set(event, buffer);
+        const bytes = await download(event, definition);
+        if (!bytes) return;
+        try {
+          const buffer = await audioContext.decodeAudioData(bytes.slice(0));
+          if (!disposed) {
+            buffers.set(event, buffer);
+            refreshButtons();
+          }
+        } catch {
+          encoded.delete(event); // An explicit retry fetches a damaged response again.
+        }
       }),
     );
   }
 
   /** Call directly from a click/tap. Never queues a game event for later playback. */
-  async function unlock(): Promise<boolean> {
+  async function unlock({respectMute = false} = {}): Promise<boolean> {
     if (disposed) return false;
-    setMuted(false);
+    // Play can activate sound, but must not undo an explicit saved mute.
+    if (respectMute && muted) return false;
+    if (!respectMute) setMuted(false);
     unavailable = false;
     try {
       if (!context) {
@@ -181,6 +280,7 @@ export function createSportsAudio(
         master = context.createGain();
         master.gain.value = 0.55;
         master.connect(context.destination);
+        context.addEventListener?.('statechange', refreshButtons);
       }
       // Resume synchronously within the gesture, before waiting on downloads.
       const resumed = context.resume();
@@ -195,6 +295,7 @@ export function createSportsAudio(
       await resumed;
       if (disposed) return false;
       unlocked = context.state === 'running';
+      refreshButtons();
       await loading;
       if (disposed) return false;
       unavailable = !unlocked || buffers.size === 0;
@@ -208,7 +309,11 @@ export function createSportsAudio(
     }
   }
 
-  function play(event: string): boolean {
+  function play(event: string, preview = false): boolean {
+    if (event === 'stop') {
+      stop();
+      return false;
+    }
     if (event === 'roll-end') {
       stop('roll');
       return false;
@@ -217,7 +322,7 @@ export function createSportsAudio(
     const buffer = buffers.get(event);
     if (
       disposed ||
-      !active ||
+      (!active && !preview) ||
       doc?.hidden ||
       muted ||
       !unlocked ||
@@ -281,6 +386,11 @@ export function createSportsAudio(
     }
   }
 
+  /** An explicit Sound check is useful even while gameplay is paused. */
+  function preview(): boolean {
+    return play('ready', true);
+  }
+
   function setActive(value: boolean) {
     active = value;
     if (!active) {
@@ -301,7 +411,10 @@ export function createSportsAudio(
     button.className = 'sports-sound-toggle';
     const onClick = () => {
       if (unlocked && !muted && context?.state === 'running') setMuted(true);
-      else void unlock();
+      else
+        void unlock().then(ok => {
+          if (ok) preview();
+        });
     };
     button.addEventListener('click', onClick);
     buttons.set(button, onClick);
@@ -322,7 +435,11 @@ export function createSportsAudio(
     }
     buttons.clear();
     buffers.clear();
+    encoded.clear();
+    downloads.clear();
     lastPlayed.clear();
+    listeners.clear();
+    context?.removeEventListener?.('statechange', refreshButtons);
     try {
       void context?.close().catch(() => {});
     } catch {
@@ -330,5 +447,17 @@ export function createSportsAudio(
     }
   }
 
-  return {play, stop, unlock, setMuted, setActive, mountButton, dispose};
+  return {
+    play: (event: string) => play(event),
+    preview,
+    stop,
+    preload,
+    unlock,
+    setMuted,
+    setActive,
+    getStatus,
+    subscribe,
+    mountButton,
+    dispose,
+  };
 }

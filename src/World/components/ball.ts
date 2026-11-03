@@ -1,82 +1,66 @@
-// components/ball.ts
 import * as THREE from 'three';
-import { determinePointWinner } from '../scoreSystem';
-export const BALL_RADIUS = 0.1; // Define the radius of the ball for collision detection
-const COURT_BOUNDS = { width: 4.115, length: 11.885 };
-// Define an interface for the custom physics properties stored in userData
+import {determinePointWinner} from '../scoreSystem';
+import {insideCourt, insideServiceBox, netHeightAt, serviceSign, TENNIS_COURT,
+    type PointReason, type ServiceSide, type ServeCall} from '../tennisRules';
+
+export const BALL_RADIUS = 0.1;
+const COURT_BOUNDS = {width: TENNIS_COURT.halfWidth, length: TENNIS_COURT.halfLength};
+export type BallPlayer = 'player1' | 'player2';
 export interface BallUserData {
     velocity: THREE.Vector3;
     pendingVelocity: THREE.Vector3;
     gravity: number;
-    isWaitingForServe: boolean;   // Tracks if the ball is held/waiting
+    isWaitingForServe: boolean;
     serveDelayRemaining: number;
     servingPlayer: BallPlayer;
     waitingForRacketHit: boolean;
-    servePosition: THREE.Vector3; // Default position to reset to
+    servePosition: THREE.Vector3;
     slideTimer?: number;
-    bounceCount: number;          // How many times ball hit the ground
-    firstBounceInBounds: boolean; // Was the 1st bounce inside court bounds?
-    lastHitBy?: 'player1' | 'player2'; // Who last hit/served the ball
+    bounceCount: number;
+    firstBounceInBounds: boolean;
+    lastHitBy?: BallPlayer;
+    serveAttempt: 1 | 2;
+    serviceSide: ServiceSide;
+    isServeFlight: boolean;
+    serveReturnPending: boolean;
+    netTouched: boolean;
+    serveStatus: 'ready' | 'first-fault' | 'let' | 'in-play';
 }
-export type BallPlayer = 'player1' | 'player2';
+export type PointCallback = (winner: BallPlayer, loser: BallPlayer, reason?: PointReason) => void;
+export type RuleCallback = (call: ServeCall, player: 1 | 2) => void;
+
 export function createBall(x: number, y: number, z: number): THREE.Mesh {
-
-    const geometry = new THREE.SphereGeometry(BALL_RADIUS, 32, 32);
-    const material = new THREE.MeshStandardMaterial({
-        color: 0xfacc15, // Bright yellow ball
-        roughness: 0.2,
-        metalness: 0.1
-    });
-
-    const ball = new THREE.Mesh(geometry, material);
-
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(BALL_RADIUS, 32, 32),
+        new THREE.MeshStandardMaterial({color: 0xfacc15, roughness: .2, metalness: .1}));
     ball.position.set(x, y, z);
     ball.castShadow = true;
-
-    // Initialize velocity, gravity, and serve properties with explicit typing
     ball.userData = {
-        velocity: new THREE.Vector3(0, 0, 0), // Starts stationary while waiting for serve
-        pendingVelocity: new THREE.Vector3(0, 0, 0),
-        gravity: 0.006,                       // Downward pull per frame
-        isWaitingForServe: true,
-        serveDelayRemaining: 0,
-        servingPlayer: 'player1',
-        waitingForRacketHit: false,
-        servePosition: new THREE.Vector3(x, y, z),
-        bounceCount: 0,
-        firstBounceInBounds: false,
-    } as BallUserData;
-
+        velocity: new THREE.Vector3(), pendingVelocity: new THREE.Vector3(), gravity: .006,
+        isWaitingForServe: true, serveDelayRemaining: 0, servingPlayer: 'player1',
+        waitingForRacketHit: false, servePosition: new THREE.Vector3(x, y, z),
+        bounceCount: 0, firstBounceInBounds: false, serveAttempt: 1,
+        serviceSide: 'deuce', isServeFlight: false, serveReturnPending: false, netTouched: false, serveStatus: 'ready',
+    } satisfies BallUserData;
     return ball;
 }
 
-export function serveBall(
-    ball: THREE.Mesh,
-    initialVelocity: THREE.Vector3,
-    player?: BallPlayer,
-    waitForRacketHit = true
-): void {
-    const userData = ball.userData as BallUserData;
-
-    // Only serve if the ball is currently waiting
-    if (userData.isWaitingForServe) {
-        userData.isWaitingForServe = false;
-        if (waitForRacketHit) {
-            userData.velocity.set(0, 0, 0);
-            userData.pendingVelocity.copy(initialVelocity);
-            userData.waitingForRacketHit = true;
-        } else {
-            userData.velocity.copy(initialVelocity);
-            userData.pendingVelocity.set(0, 0, 0);
-            userData.waitingForRacketHit = false;
-        }
-        userData.lastHitBy = player;
-    }
+export function serveBall(ball: THREE.Mesh, initialVelocity: THREE.Vector3,
+    player?: BallPlayer, waitForRacketHit = true): void {
+    const data = ball.userData as BallUserData;
+    if (!data.isWaitingForServe) return;
+    data.isWaitingForServe = false;
+    data.waitingForRacketHit = waitForRacketHit;
+    data.velocity.copy(waitForRacketHit ? new THREE.Vector3() : initialVelocity);
+    data.pendingVelocity.copy(waitForRacketHit ? initialVelocity : new THREE.Vector3());
+    data.lastHitBy = player;
+    data.isServeFlight = !waitForRacketHit;
+    data.serveReturnPending = true;
+    data.netTouched = false;
 }
 
-// Used for rally returns as well as releasing a prepared serve. Values retain
-// the existing game's velocity units (world units per 60 Hz tick).
-export function hitBall(ball: THREE.Mesh, velocity: THREE.Vector3, player: BallPlayer): void {
+/** The same authored racket contact launches serves and returns. */
+export function hitBall(ball: THREE.Mesh, velocity: THREE.Vector3, player: BallPlayer,
+    serving = false): void {
     const data = ball.userData as BallUserData;
     data.isWaitingForServe = false;
     data.waitingForRacketHit = false;
@@ -86,126 +70,140 @@ export function hitBall(ball: THREE.Mesh, velocity: THREE.Vector3, player: BallP
     data.bounceCount = 0;
     data.firstBounceInBounds = false;
     data.slideTimer = 0;
+    data.isServeFlight = serving;
+    data.serveReturnPending = serving;
+    data.netTouched = false;
+    data.serveStatus = 'in-play';
 }
 
-export function resetBallForServe(
-    ball: THREE.Mesh,
-    courtBounds: { width: number; length: number } = COURT_BOUNDS,
-    onPointScored?: (winner: BallPlayer, loser: BallPlayer) => void,
-): void {
-    const userData = ball.userData as BallUserData;
-
-    userData.bounceCount = userData.bounceCount ?? 0;
-    userData.firstBounceInBounds = userData.firstBounceInBounds ?? false;
-
-    const pointWinner = determinePointWinner(
-        userData.firstBounceInBounds, userData.lastHitBy, ball.position.z);
-    const pointLoser = pointWinner === 'player1' ? 'player2' : 'player1';
-    onPointScored?.(pointWinner, pointLoser);
-
-    // Reset ball state for serve
-    // Scoring chooses the server for the whole game, or the tie-break rotation.
-    userData.servePosition.z = userData.servingPlayer === 'player1' ? 10 : -10;
-    userData.serveDelayRemaining = 1.2;
-    userData.isWaitingForServe = true;
-    userData.velocity.set(0, 0, 0);
-    userData.pendingVelocity.set(0, 0, 0);
-    userData.waitingForRacketHit = false;
-    userData.slideTimer = 0;
-    userData.bounceCount = 0;
-    userData.firstBounceInBounds = false;
-    userData.lastHitBy = undefined;
-
-    ball.position.copy(userData.servePosition);
+/** Reset placement only; a fault or let must not change score or service side. */
+export function prepareServe(ball: THREE.Mesh, delay = 1.2): void {
+    const data = ball.userData as BallUserData;
+    const server = data.servingPlayer === 'player1' ? 1 : 2;
+    data.servePosition.set(serviceSign(server, data.serviceSide) * 1.3, .3,
+        server === 1 ? TENNIS_COURT.serveDepth : -TENNIS_COURT.serveDepth);
+    data.serveDelayRemaining = delay;
+    data.isWaitingForServe = true;
+    data.velocity.set(0, 0, 0);
+    data.pendingVelocity.set(0, 0, 0);
+    data.waitingForRacketHit = false;
+    data.slideTimer = 0;
+    data.bounceCount = 0;
+    data.firstBounceInBounds = false;
+    data.lastHitBy = undefined;
+    data.isServeFlight = false;
+    data.serveReturnPending = false;
+    data.netTouched = false;
+    ball.position.copy(data.servePosition);
 }
 
-export function updateBallMotion(
-    ball: THREE.Mesh,
-    delta: number,
-    onPointScored?: (winner: BallPlayer, loser: BallPlayer) => void,
-    onBounce?: () => void,
-): void {
-    const userData = ball.userData as BallUserData;
+export function finishPoint(ball: THREE.Mesh, winner: BallPlayer, reason: PointReason,
+    onPointScored?: PointCallback): void {
+    const data = ball.userData as BallUserData;
+    onPointScored?.(winner, winner === 'player1' ? 'player2' : 'player1', reason);
+    data.serveAttempt = 1;
+    data.serveStatus = 'ready';
+    prepareServe(ball);
+}
 
-    if (userData.isWaitingForServe) {
-        return;
+export function resetBallForServe(ball: THREE.Mesh,
+    _courtBounds: {width: number; length: number} = COURT_BOUNDS,
+    onPointScored?: PointCallback): void {
+    const data = ball.userData as BallUserData;
+    const winner = determinePointWinner(data.firstBounceInBounds, data.lastHitBy, ball.position.z);
+    finishPoint(ball, winner, data.firstBounceInBounds ? 'second-bounce' : 'out', onPointScored);
+}
+
+export function recordServeFault(ball: THREE.Mesh, onPointScored?: PointCallback, onRule?: RuleCallback): void {
+    const data = ball.userData as BallUserData;
+    const player = data.servingPlayer === 'player1' ? 1 : 2;
+    if (data.serveAttempt === 2) {
+        finishPoint(ball, player === 1 ? 'player2' : 'player1', 'double-fault', onPointScored);
+    } else {
+        data.serveAttempt = 2;
+        data.serveStatus = 'first-fault';
+        prepareServe(ball);
+        onRule?.('first-fault', player);
+    }
+}
+
+export function updateBallMotion(ball: THREE.Mesh, delta: number,
+    onPointScored?: PointCallback, onBounce?: () => void, onRule?: RuleCallback): void {
+    const data = ball.userData as BallUserData;
+    if (data.isWaitingForServe || data.waitingForRacketHit) return;
+    const previous = ball.position.clone();
+    const frameScale = delta * 60;
+    data.velocity.y -= data.gravity * frameScale;
+    ball.position.addScaledVector(data.velocity, frameScale);
+
+    // Sweep across the net plane so a fast ball cannot tunnel through it.
+    if (previous.z !== 0 && previous.z * ball.position.z <= 0 && !data.netTouched) {
+        const fraction = -previous.z / (ball.position.z - previous.z);
+        const x = previous.x + (ball.position.x - previous.x) * fraction;
+        const y = previous.y + (ball.position.y - previous.y) * fraction;
+        const height = netHeightAt(x);
+        if (Math.abs(x) <= TENNIS_COURT.netHalfWidth + BALL_RADIUS && y - BALL_RADIUS <= height) {
+            data.netTouched = true;
+            if (y >= height - BALL_RADIUS) {
+                // A tape clip can still land legally. Resolve let vs fault at landing.
+                data.velocity.x *= .85;
+                data.velocity.z *= .85;
+                data.velocity.y = Math.max(data.velocity.y, .025);
+                ball.position.y = Math.max(ball.position.y, height + BALL_RADIUS);
+            } else if (data.isServeFlight) {
+                recordServeFault(ball, onPointScored, onRule);
+                return;
+            } else {
+                // Retain a weak rebound: the net does not itself end a rally.
+                // A dribbling ball can still be returned before its second bounce.
+                data.velocity.z *= -.18;
+                data.velocity.x *= .5;
+                data.velocity.y = Math.min(data.velocity.y, 0);
+                ball.position.z = Math.sign(previous.z) * (BALL_RADIUS + TENNIS_COURT.netThickness / 2);
+            }
+        }
     }
 
-    const frameScale = delta * 60;
-
-    // Contact is handled in World for both players, during the swing window.
-    if (userData.waitingForRacketHit) return;
-
-    // 1. Apply gravity to vertical velocity
-    userData.velocity.y -= userData.gravity * frameScale;
-
-    // 2. Update position
-    ball.position.addScaledVector(userData.velocity, frameScale);
-
-    // 3. Ground Collision, Bouncing, and Sliding
-    if (ball.position.y <= BALL_RADIUS) {
-        ball.position.y = BALL_RADIUS; // Snap to ground level
-        if (userData.velocity.y < -0.01) onBounce?.();
-        handleGroundBounce(ball);
-        // A tennis point ends on the first out bounce or the second bounce.
-        // Waiting for the ball to roll to a stop allowed several illegal returns
-        // and made an ordinary miss look like a frozen game.
-        if (!userData.firstBounceInBounds || userData.bounceCount >= 2) {
-            resetBallForServe(ball, COURT_BOUNDS, onPointScored);
+    if (ball.position.y > BALL_RADIUS) return;
+    ball.position.y = BALL_RADIUS;
+    if (data.velocity.y < -.01) onBounce?.();
+    handleGroundBounce(ball);
+    if (data.isServeFlight && data.bounceCount === 1) {
+        const server = data.servingPlayer === 'player1' ? 1 : 2;
+        const legal = insideServiceBox(ball.position.x, ball.position.z, server, data.serviceSide, BALL_RADIUS);
+        if (!legal) { recordServeFault(ball, onPointScored, onRule); return; }
+        if (data.netTouched) {
+            data.serveStatus = 'let';
+            prepareServe(ball);
+            onRule?.('let', server);
             return;
         }
-        // If bounce velocity is low, treat it as sliding/rolling on the floor
-        if (Math.abs(userData.velocity.y) < 0.04) {
-            userData.velocity.y = 0;
-
-            // Apply stronger friction so it slides to a gradual stop
-            userData.velocity.x *= 0.90;
-            userData.velocity.z *= 0.90;
-
-            // Initialize slide timer if it doesn't exist yet
-            if (userData.slideTimer === undefined) {
-                userData.slideTimer = 0;
-            }
-
-            // Accumulate time spent sliding
-            userData.slideTimer += delta;
-
-            // After sliding for 1.5 seconds, reset the ball for the next serve
-            if (userData.slideTimer >= 1.5) {
-                resetBallForServe(ball, COURT_BOUNDS, onPointScored);
-                return;
-            }
-        } else {
-            // Normal bouncy collision
-            const bounceVelocity = -userData.velocity.y * 0.55;
-            userData.velocity.y = bounceVelocity;
-
-            userData.velocity.x *= 0.65;
-            userData.velocity.z *= 0.65;
-        }
+        data.isServeFlight = false;
+        data.firstBounceInBounds = true;
     }
-
+    if (!data.firstBounceInBounds || data.bounceCount >= 2) {
+        const winner = determinePointWinner(data.firstBounceInBounds, data.lastHitBy, ball.position.z);
+        finishPoint(ball, winner, data.firstBounceInBounds ? 'second-bounce' : data.netTouched ? 'net' : 'out', onPointScored);
+        return;
+    }
+    if (Math.abs(data.velocity.y) < .04) {
+        data.velocity.y = 0;
+        data.velocity.x *= .9;
+        data.velocity.z *= .9;
+    } else {
+        data.velocity.y = -data.velocity.y * .55;
+        data.velocity.x *= .65;
+        data.velocity.z *= .65;
+    }
 }
 
-export function handleGroundBounce(
-    ball: THREE.Mesh,
-    courtBounds: { width: number; length: number } = COURT_BOUNDS
-): void {
-    const userData = ball.userData as BallUserData;
-
-    userData.bounceCount = (userData.bounceCount ?? 0) + 1;
-
-    const xPos = ball.position.x;
-    const zPos = ball.position.z;
-
-    // Check if the bounce is inside the valid court area
-    const opponentSide = !userData.lastHitBy ||
-        (userData.lastHitBy === 'player1' ? zPos < 0 : zPos > 0);
-    const isInside = opponentSide && Math.abs(xPos) <= courtBounds.width &&
-        Math.abs(zPos) <= courtBounds.length;
-
-    if (userData.bounceCount === 1) {
-        // Record whether the first bounce landed inside
-        userData.firstBounceInBounds = isInside;
-    }
+export function handleGroundBounce(ball: THREE.Mesh,
+    courtBounds: {width: number; length: number} = COURT_BOUNDS): void {
+    const data = ball.userData as BallUserData;
+    data.bounceCount = (data.bounceCount ?? 0) + 1;
+    if (data.bounceCount !== 1) return;
+    const opponentSide = !data.lastHitBy || (data.lastHitBy === 'player1' ? ball.position.z < 0 : ball.position.z > 0);
+    const inBounds = courtBounds === COURT_BOUNDS ? insideCourt(ball.position.x, ball.position.z, BALL_RADIUS)
+        : Math.abs(ball.position.x) - BALL_RADIUS <= courtBounds.width && Math.abs(ball.position.z) - BALL_RADIUS <= courtBounds.length;
+    data.firstBounceInBounds = opponentSide && inBounds;
 }

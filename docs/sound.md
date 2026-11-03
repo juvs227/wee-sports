@@ -1,16 +1,27 @@
 # Tennis and bowling sound
 
-Sound is optional feedback on the TV/game display. Click **Enable sound** once on
-that display; the button then toggles between **Sound on** and **Sound off**.
-Browsers require a user gesture before game audio can start, including games
-embedded in an iframe. A previous mute preference is stored locally, but a new
-page still needs a click to unlock audio. Sound never changes scoring, physics,
-motion thresholds, or networking. The controller retains vibration separately.
+Sound plays on the **TV/laptop**, with phone vibration as separate feedback.
+Pressing **Play** in the homepage lobby now activates sound directly from that
+click. The TV keeps the same audio context through the countdown and embedded
+game. **Sound on / Sound off** remains visible in the lobby, countdown and game
+header. An explicit saved mute is respected; Play never turns it back on.
+
+Use **Sound check → Test sound** to enable and hear a short confirmation cue.
+This explicit test also works while gameplay is paused; game effects remain paused.
+If that cue is silent, check the TV/laptop volume, selected output device and
+browser tab mute. A failed audio initialization or partial asset load produces
+a retry message. Direct standalone game pages still use **Enable sound** on the
+game panel. Browsers require a user gesture before audio starts.
+
+The previous implementation created audio only inside the game iframe and
+required a second, easy-to-miss Enable sound click after Play. The parent-page
+context removes that extra activation step. This is a code-level fix to that
+flow; physical output devices and listening balance still require a manual test.
 
 ## Files and sources
 
-The 15 local, mono, 24 kHz, 16-bit PCM WAV files are under
-`public/sounds/tennis/` and `public/sounds/bowling/`. Vite copies `public/` into the
+The 22 local, mono, 24 kHz, 16-bit PCM WAV files are under
+`public/sounds/tennis/`, `public/sounds/bowling/` and `public/sounds/ui/`. Vite copies `public/` into the
 production build. The server must serve `.wav` as `audio/wav`.
 
 [Full sound credits and license/change notices](../public/sounds/ATTRIBUTION.md)
@@ -18,6 +29,10 @@ ship with the assets. Racket, ground and pin impacts use recordings; the rolling
 bed uses recorded foley. Point/game/set/match and bowling-result cues are original
 short synthesized chimes. They are not advertised as recorded sports effects.
 The serve sound is the recorded racket impact, without a chime over the contact.
+The countdown and Go cues use original bright, rounded chimes with an upbeat
+family-sports feel. They contain no Nintendo recordings or copied melodies.
+The existing five-second lobby countdown has a pip per displayed number, with
+rising last-two pips and a distinct Go cue. Tennis serves do not restart it.
 
 Research favored isolated effects over long match recordings: the Freesound
 [racket hit](https://freesound.org/people/kletton97/sounds/710041/) and
@@ -41,6 +56,10 @@ There is no continuous music or voice announcing every countdown.
 
 | Sport   | Event      | Trigger                                   | Sound                                               |
 | ------- | ---------- | ----------------------------------------- | --------------------------------------------------- |
+| Both    | `countdown` | Lobby numbers 5, 4 and 3                 | Short bright pip                                    |
+| Both    | `countdown-2`, `countdown-1` | Final lobby numbers      | Rising pips                                         |
+| Both    | `start`    | Countdown enters play                     | Original short Go chime                             |
+| Both    | `ready`    | Explicit enable/test sound click          | Two-note confirmation                               |
 | Tennis  | `hit`      | Accepted racket/ball contact in a rally   | Racket impact                                       |
 | Tennis  | `serve`    | Ball actually served                      | Same racket impact; replaces `hit` for this contact |
 | Tennis  | `bounce`   | Actual court bounce                       | Ground impact                                       |
@@ -48,6 +67,8 @@ There is no continuous music or voice announcing every countdown.
 | Tennis  | `game`     | A game is won, without ending a set       | Three-note cue                                      |
 | Tennis  | `set`      | A set is won, without ending the match    | Four-note cue                                       |
 | Tennis  | `match`    | Match is won                              | Longer finish cue                                   |
+| Tennis  | `fault`    | First serve fault                         | Soft low cue                                        |
+| Tennis  | `let`      | Serve is replayed                         | Gentle repeated-note cue                            |
 | Bowling | `release`  | An accepted delivery begins               | Short release/thump                                 |
 | Bowling | `roll`     | Ball begins rolling                       | Quiet loop; only one instance                       |
 | Bowling | `pin`      | First actual ball/pin contact per delivery | Recorded pin knock                                 |
@@ -65,6 +86,28 @@ This avoids false hits, repeated score sounds and sound storms.
 
 ## Integration and lifecycle
 
+`client/src/lib/useTvAudio.jsx` owns the parent context and prefetches encoded
+sound bytes while the lobby is open. It calls `unlock({respectMute: true})`
+directly in Play, before waiting for fullscreen or a server acknowledgement.
+Creating/resuming the context stays inside the user gesture. Decoding finishes
+as individual assets arrive; one slow or missing sample does not hold up others.
+
+The embedded game emits `{type: 'wee:game-audio', gameId, sport, event}`. The
+homepage bridge accepts only its current iframe, same origin, current game and
+sport, active connection and allowlisted event. It calls `onAudio(event)` on the
+existing parent manager; the iframe does not create a second audio context.
+`roll-end` stops the bowling rolling loop; `stop` clears all effects on reset or
+teardown. Pause and document visibility also stop active effects.
+
+`src/audio/tvAudioSession.ts` remembers countdown progress and whether each
+current game has started. Snapshot polling, reconnect, backgrounding or skipped
+countdown numbers cannot replay expired pips or Go sounds. Restoring directly
+into an existing game is silent. A new lobby match can play a new countdown.
+An explicit Play again/replay action may request the Go cue without repeating
+the lobby countdown; ordinary serves never do.
+
+Standalone pages use the same audio manager locally:
+
 ```ts
 import {createSportsAudio} from './audio/sportsAudio';
 
@@ -81,7 +124,7 @@ Keep its container visible in immersive/fullscreen play. If providing a custom
 control, call `unlock()` directly in its click handler, and use `setMuted(true)`
 to mute. Never call `unlock()` from a socket update or a timer.
 
-The audio manager preloads and decodes the small sound pack after the click.
+The audio manager can prefetch bytes before the click and decodes them after activation.
 `play()` never waits, fetches, resumes a context, or queues events. A hit received
 before its buffer is ready is dropped; it cannot play late. A missing asset,
 denied browser permission or failed audio device stays silent without throwing
@@ -118,8 +161,11 @@ downloads, cooldowns, voice limits, loops, mute, pause, visibility, retry, dispo
 and every manifest file's PCM header, size, sample format, non-silent content,
 clipping bounds and prompt attack. The whole pack is bounded below 1 MB.
 
-Manual test on the TV/laptop after starting it yourself: enable sound, serve and
-rally, confirm a point/game/set/match gets one appropriate result cue, then mute.
+Manual test on the TV/laptop after starting it yourself: use Sound check, then
+Play. Confirm pips follow the initial countdown, Go sounds once, and serving or
+scoring does not restart that countdown. Serve and rally, confirm a
+point/game/set/match gets one appropriate result cue, then mute. A new match
+must retain the mute preference; an explicit Test sound click enables sound.
 In bowling, confirm release → quiet rolling → actual pin impacts → result, and
 that rolling stops on settlement. Pause or background either game during an
 effect; returning should be silent until the next real event. Adjust the manifest

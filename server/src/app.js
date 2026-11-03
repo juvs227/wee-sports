@@ -90,6 +90,14 @@ export function createGameServer({ store = new RoomStore(), origins = [], tickMs
           : { ok: false, error: received?.error || 'game-loading' });
       });
     });
+    socket.on(EVENTS.HOST_STROKE_RESULT, (event, ack) => {
+      const result = store.strokeResultTarget(socket.id, event);
+      if (!result.ok) return reply(ack, result);
+      const phone = io.sockets.sockets.get(result.phoneSocketId);
+      if (!phone?.connected) return reply(ack, { ok: false, error: 'disconnected' });
+      phone.volatile.emit(EVENTS.GAME_STROKE_RESULT, result.event);
+      reply(ack, { ok: true });
+    });
     socket.on(EVENTS.PLAYER_SWING, (event, ack) => {
       const result = store.swingTarget(socket.id, event);
       if (!result.ok) return reply(ack, result);

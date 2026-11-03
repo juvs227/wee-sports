@@ -3,9 +3,9 @@ import { createInputId } from './inputId.js';
 import { isSwing } from '../../shared/protocol.js';
 
 // Standalone prototypes retain their relay; embedded tennis uses its lobby.
-export function connectSwings({ room, role, onSwing = () => {}, onStatus = () => {}, onAck = () => {} }) {
+export function connectSwings({ room, role, onSwing = () => {}, onStatus = () => {}, onAck = () => {}, onSent = () => {} }) {
   if (window.parent !== window && new URLSearchParams(location.search).has('lobby')) {
-    return connectLobbySwings({ role, onSwing, onStatus, onAck });
+    return connectLobbySwings({ role, onSwing, onStatus, onAck, onSent });
   }
   let socket;
   let retry;
@@ -51,6 +51,7 @@ export function connectSwings({ room, role, onSwing = () => {}, onStatus = () =>
       sentAt.set(event.id, performance.now());
       if (sentAt.size > 40) sentAt.delete(sentAt.keys().next().value);
       socket.send(JSON.stringify(event));
+      onSent(event);
       return true;
     },
     close() { stopped = true; clearTimeout(retry); socket.close(); },

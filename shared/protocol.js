@@ -96,6 +96,8 @@ export const EVENTS = {
   /** TV -> server -> the contacted player's phone. Transient collision feedback. */
   HOST_GAME_HIT: 'host:game-hit',
   GAME_HIT: 'game:hit',
+  HOST_STROKE_RESULT: 'host:stroke-result',
+  GAME_STROKE_RESULT: 'game:stroke-result',
   /** Server -> everyone in a lobby: the snapshot. */
   LOBBY_UPDATE: 'lobby:update',
   /** Server -> phones: the TV closed the lobby or its reconnect window expired. */
@@ -112,8 +114,26 @@ export function isSwing(event) {
 /** TV-published tennis status; scoring/physics remain on the TV. */
 export function isTennisState(state) {
   return ['prepare', 'serve', 'rally', 'complete'].includes(state?.phase) &&
+    (state.practice === undefined || typeof state.practice === 'boolean') &&
+    (state.serveAttempt === undefined || [1, 2].includes(state.serveAttempt)) &&
     [1, 2].includes(state.server) && (state.phase === 'complete'
       ? [1, 2].includes(state.winner) : state.winner === null);
+}
+
+export function isStrokeResult(event) {
+  return typeof event?.id === 'string' && event.id.length > 0 && event.id.length <= 100 &&
+    typeof event.gameId === 'string' && event.gameId.length > 0 && event.gameId.length <= 100 &&
+    [1, 2].includes(event.player) && ['hit', 'miss', 'rejected'].includes(event.result) &&
+    typeof event.reason === 'string' && event.reason.length <= 160 &&
+    (event.receivedToContactMs === undefined || (event.result === 'hit' &&
+      Number.isFinite(event.receivedToContactMs) && event.receivedToContactMs >= 0 && event.receivedToContactMs <= 10000));
+}
+
+export function isGameSoundEvent(sport, event) {
+  const events = sport === 'tennis'
+    ? ['hit', 'bounce', 'serve', 'point', 'game', 'set', 'match', 'fault', 'let', 'start', 'stop']
+    : sport === 'bowling' ? ['release', 'roll', 'roll-end', 'pin', 'gutter', 'strike', 'spare', 'result', 'match', 'start', 'stop'] : [];
+  return events.includes(event);
 }
 
 export function isRoll(event) {

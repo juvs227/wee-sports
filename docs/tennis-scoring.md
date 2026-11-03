@@ -1,59 +1,112 @@
-# Tennis scoring and serve flow
+# Tennis scoring, controls and practice
 
-The match uses **best of three tie-break sets**. Points in a standard game are
-0, 15, 30, 40, deuce and advantage; a player must win two points from deuce.
-The same player serves for the entire standard game. Service changes at the
-end of the game, including across set boundaries.
+## Match formats
 
-A set needs six games and a two-game lead, or a tie-break at 6–6. The tie-break
-uses numeric points, first to seven with a two-point lead. Its first server
-serves one point, then the players alternate two serves each. The tie-break's
-first server receives in the next set. Winning two sets ends the match;
-further swings and physics updates cannot add points until **Play again**.
+**Full match** uses best of three tie-break sets: 0/15/30/40, deuce and advantage;
+win six games by two, with a seven-point tie-break at 6–6. The same server keeps
+the whole standard game. Tie-break service is one point, then two points each;
+the first tie-break server receives in the following set. Two sets wins the match.
 
-The scoreboard separates points, games and sets, keeps the completed set
-scores, and names the next server. The large numeric countdown is removed.
-There is a short 1.2-second pause after a point so its result can be read; the
-player then serves when ready. Scoring calls remain visible alongside the
-stroke feedback, including when the solo bot starts its next serve.
+**Quick match** is a standalone seven-point tie-break, win by two. It has numeric
+points and the same one-then-two service rotation. It is clearly labelled as a
+short format, rather than a complete regulation best-of-three match.
 
-The homepage lobby forwards a compact TV-owned status to the phone: `prepare`
-during the pause, `serve` when ready, `rally`, or `complete`. The phone says
-"You serve next" before "Your serve", and shows the match result at the end.
-Only changes are published; score polling does not repeatedly broadcast a lobby
-snapshot. A completed match rejects late phone swings, and Play again restores
-the initial serving state without requiring recalibration.
+The scoreboard separates points/games/sets, names the server and retains the
+last result. Completed matches reject further swings. **New match / Play again**
+resets the selected format. Selecting the same format does not itself erase a score.
 
-## What remains arcade-style
+## Serving and court rules
 
-This change corrects scoring and service rotation, not every physical rule of
-competitive tennis. The existing authored swing/contact paths, bounded motion
-power, assisted movement and shot planning are preserved. Serves still launch
-through the existing racket-contact flow, without alternating diagonal service
-boxes, first/second faults, foot faults, or service lets. Court ends do not
-change. Net collision, ball-line contact geometry, and receive-before-bounce
-rules need a coordinated physics/rules pass before describing the game as a
-full tennis simulation. The existing ball code awards a point for a first
-landing outside the opponent's court or a second bounce.
+The painted court, net profile, shot planner and net collision share dimensions
+in `src/World/tennisRules.ts`. The service lines are 6.4 m from the net; the net's
+center is 0.914 m high and its posts are 1.07 m. The collision uses a swept crossing
+of the net plane, so faster balls cannot skip through a low net collision.
 
-## Game events
+The service side alternates deuce/ad after each point, including tie-breaks.
+The assisted server stands behind the baseline, with the ball still released
+only by the authored racket-contact animation. The service planner selects the
+opposite diagonal service box. Receivers automatically move forward during the
+serve when movement assistance is on, so legal short serves remain reachable.
 
-`World.onGameEvent(event)` emits an actual occurrence, not a score poll:
+- An attempted service animation that ends without racket contact is a fault;
+  rejected/not-ready inputs and paused/cancelled animations are not attempts.
+- A first service fault keeps the point, server and side and offers a second serve.
+- A second fault awards one point to the receiver.
+- A serve clipping the net is judged at its landing: correct box means a let;
+  an invalid landing remains a fault. A let repeats the same service attempt.
+- A net-touch serve contacting the receiver before landing is also a let.
+- Returning an untouched serve before its first bounce awards the server the point.
+- A rally net collision stays physically live until the bounce/return resolves it;
+  a tape clip can pass over. A first landing outside the opponent's court or a
+  second bounce ends the point. A ball touching a court/service line is in.
 
-- `serve`: the racket releases a held serve.
-- `hit`: a rally racket contact.
-- `bounce`: a descending ball impacts the ground; `player` identifies its last hitter.
-- `point`, `game`, `set`, `match`: only the highest result of a scored point,
-  with `player` identifying the winner. A match-ending point emits `match` once.
+The TV publishes `prepare`, `serve`, `rally` or `complete` to the phone, so
+"You serve next" precedes "Your serve". The brief post-point pause has no repeated
+numeric countdown. Match-start countdown audio is a separate lobby feature.
 
-Events have `{ kind, player: 1 | 2 }`. `World.onBallHit` still runs for serve and
-rally contact for the existing phone vibration bridge. Reading `getScore()`
-does not emit events; reconnecting or polling cannot replay score sounds.
+## Predictable placement and assistance
 
-## Rule references
+Rally shot placement no longer rolls a random left/right choice. It uses the
+stroke side and a bounded timing value captured when the swing arrives, before
+animation assistance changes the contact timing. Earlier intent favors a wider
+angle, later intent a straighter placement. Given identical state and input,
+the planner returns the same target and trajectory. The safe-arc solver and real
+racket-contact checks remain in use; power remains bounded.
 
-- [ITF-hosted 2026 ATP rulebook, ITF Rules of Tennis](https://www.itftennis.com/media/15604/atp-2026-rulebook.pdf): Rules 5–7 (game, tie-break, set and match scoring) and Rule 14 (service order).
-- [ITF tennis glossary](https://www.itftennis.com/en/about-us/organisation/tennis-glossary/): deuce, advantage, set, tie-break and best-of-three format.
+**Beginner** assistance offers a slightly larger early-input window, gentler
+pace and narrower angles. **Standard** retains the existing timing window.
+Movement and timing assistance can be toggled independently. Bot difficulty is
+also independent: the Beginner bot moves more slowly and returns gently;
+Standard retains its usual movement and power. Both bots must physically contact
+the ball and cannot manufacture a successful hit.
 
-Verification uses pure scoring tests and the shipped models' animation/contact
-code without a browser, live server, tunnel, or human two-player session.
+Miss messages describe the known situation (early, late, out of reach, unfinished
+stroke, or unavailable contact), rather than always advising an earlier swing.
+Point messages include out, second bounce, net, double fault or illegal serve
+return. These messages do not claim a precise timing diagnosis when the game has
+insufficient evidence.
+
+## Practice
+
+Practice reuses the authored forehand/backhand poses and supports **Right** and
+**Left** hands. Choose forehand, backhand or alternating feeds. Feeds repeat;
+the TV counts attempts, accepted racket returns, current streak and best streak.
+Simple ground/landing markers are visible while practicing. The bot does not
+return practice balls, even if lobby snapshots leave its bot-enabled flag on.
+
+Practice never awards match points. Returning to the match preserves its score,
+format and service side; a pending second serve is retained. If practice began
+during a rally, the current point restarts with a serve. A completed match remains
+completed. **New match** is the explicit action that clears its score.
+
+## Contact events and diagnostics
+
+`World.onGameEvent({kind, player, reason?, swingId?})` emits actual events:
+`serve`, `hit`, `bounce`, `fault`, `let`, or the highest scoring result among
+`point`, `game`, `set`, `match`. Score polling never replays audio.
+`World.onBallHit` remains the actual-contact vibration callback.
+
+`World.onStrokeResult({id, player, result, reason, receivedToContactMs?})` correlates
+a phone swing with its TV result. `receivedToContactMs` is measured with one
+monotonic TV clock and exists only on successful contact. Rejected, missed,
+replaced or cancelled inputs do not borrow the timing of a later hit. This duration
+excludes phone detection and network delivery; it is not total motion-to-screen latency.
+
+## Scope and verification
+
+The existing assisted movement, authored racket animation and bounded power are
+retained. This remains a motion party game: it does not simulate body/racket
+violations, foot-fault judging of free-form real-world movement, changing physical
+court ends, weather, spin or a full officiating system. Serving, scoring and net
+behavior now have explicit, testable state transitions rather than visual-only rules.
+
+Offline checks cover both service sides/players, first/second faults, lets,
+serve-volley penalties, net tunnelling, boundary contact, legal service trajectories,
+repeatable aim, tie-break rotation, quick/full completion, practice score preservation,
+left/right-hand contact, diagnostic ID ownership and existing frame-rate regressions.
+No browser, game server, tunnel or physical phone session is launched by those tests.
+
+References:
+- [USTA serving rules](https://www.usta.com/en/home/improve/tips-and-instruction/national/tennis-serving-rules.html): diagonal service boxes, alternating sides, two attempts and lets.
+- [ITF-hosted 2026 ATP rulebook, Rules of Tennis](https://www.itftennis.com/media/15604/atp-2026-rulebook.pdf): court/net dimensions; scoring; service order; lets; ball on a line; loss of point.
+- [Microsoft XAG 108](https://learn.microsoft.com/en-us/xbox/accessibility/xbox-accessibility-guidelines/108): independently configurable difficulty and assistance.

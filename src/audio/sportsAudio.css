@@ -31,3 +31,64 @@
   outline: 3px solid #a6f5d5;
   outline-offset: 3px;
 }
+
+.tv-sound-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+.tv-sound-help {
+  position: relative;
+  font-size: 12px;
+}
+.tv-sound-help summary {
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tv-sound-help__panel {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(280px, calc(100vw - 32px));
+  padding: 14px;
+  background: #18363a;
+  color: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px #0004;
+}
+.tv-sound-help__panel p {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.tv-sound-help__panel button {
+  background: #d5f487;
+  color: #16342d;
+  border: 0;
+  border-radius: 20px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.game-countdown__sound {
+  position: absolute;
+  z-index: 4;
+  top: 16px;
+  left: 16px;
+}
+.game-countdown__sound .tv-sound-help__panel {
+  left: 0;
+  right: auto;
+}
+@media (max-width: 600px) {
+  .game-session__actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+  .game-session .sports-sound-toggle {
+    min-height: 36px;
+    padding: 6px 8px;
+  }
+}

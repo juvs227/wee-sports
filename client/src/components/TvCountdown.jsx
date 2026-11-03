@@ -5,9 +5,11 @@
 
 import { sportName } from '../lib/sports.js';
 import { useCountdown } from '../lib/useCountdown.js';
+import { useEffect } from 'react';
 
-export function TvCountdown({ lobby }) {
+export function TvCountdown({ lobby, onTick }) {
   const secondsLeft = useCountdown(lobby.countdown?.msLeft ?? null);
+  useEffect(() => { onTick?.(secondsLeft); }, [secondsLeft, onTick, lobby.gameId]);
 
   return (
     <main className="countdown">

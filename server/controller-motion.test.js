@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
-const relay = vi.hoisted(() => ({ sendSwing: vi.fn(() => true) }));
-vi.mock('../src/network/swingConnection.js', () => ({ connectSwings: () => relay }));
+const relay = vi.hoisted(() => ({ sendSwing: vi.fn(() => true), options: null }));
+vi.mock('../src/network/swingConnection.js', () => ({ connectSwings: options => { relay.options = options; return relay; } }));
 let elements;
 let listeners;
 let documentListeners;
@@ -46,6 +46,48 @@ const tick = (ms = 20, rate = { alpha: 0.1, beta: -.1, gamma: .2 }, sensors = {}
   vi.advanceTimersByTime(ms);
 };
 
+test('phone diagnostics keep delivery and contact separate and ignore unrelated or replayed results', async () => {
+  await import('../src/controller/main.js');
+  state({ gameId: 'match-a' }); elements.get('use-buttons').onclick();
+  state({ playing: true, paused: false, gameId: 'match-a' });
+  relay.options.onSent({ id: 'actual-stroke' });
+  relay.options.onAck({ id: 'actual-stroke', ok: true, receivers: 1, roundTripMs: 80 });
+  const result = data => emit('message', { source: parent, origin: location.origin,
+    data: { type: 'wee:stroke-result', id: 'actual-stroke', gameId: 'match-a', player: 1,
+      result: 'hit', reason: 'Good contact', receivedToContactMs: 70, ...data } });
+  result({ player: 2 }); result({ gameId: 'old-match' }); result({ id: 'unknown-stroke' });
+  expect(elements.get('timing-contact').textContent).toContain('waiting');
+  result({}); result({});
+  expect(elements.get('timing-delivery').textContent).toContain('median 80 ms');
+  expect(elements.get('timing-contact').textContent).toContain('median 70 ms');
+  expect(elements.get('timing-contact').textContent).toContain('1 sample');
+  expect(elements.get('timing-details').hidden).toBe(true);
+  elements.get('toggle-settings').onclick();
+  expect(elements.get('timing-details').hidden).toBe(false);
+  state({ playing: true, paused: false, gameId: 'match-b' });
+  result({});
+  expect(elements.get('timing-contact').textContent).toContain('waiting');
+  relay.options.onAck({ id: 'actual-stroke', ok: false, error: 'timeout' });
+  expect(elements.get('play-notice').textContent).not.toContain('not accepted');
+});
+
+test('a miss notice survives its delivery acknowledgement then clears from the play screen', async () => {
+  await import('../src/controller/main.js');
+  state({ gameId: 'match-a' }); elements.get('use-buttons').onclick();
+  state({ playing: true, paused: false, gameId: 'match-a' });
+  relay.options.onSent({ id: 'missed-stroke' });
+  emit('message', { source: parent, origin: location.origin, data: {
+    type: 'wee:stroke-result', id: 'missed-stroke', gameId: 'match-a', player: 1,
+    result: 'miss', reason: 'Ball already passed',
+  } });
+  relay.options.onAck({ id: 'missed-stroke', ok: true, receivers: 1, roundTripMs: 80 });
+  expect(elements.get('play-notice').textContent).toBe('Ball already passed');
+  tick(1900, null);
+  expect(elements.get('play-notice').hidden).toBe(true);
+  expect(elements.get('timing-result').textContent).toContain('Ball already passed');
+  expect(elements.get('timing-contact').textContent).toContain('waiting');
+});
+
 test.each(['tennis', 'bowling'])('%s contact vibrates only its active phone from the trusted game bridge', async sport => {
   const vibrate = vi.fn(() => true);
   vi.stubGlobal('navigator', { vibrate, userActivation: { hasBeenActive: true } });
@@ -76,6 +118,58 @@ async function calibrate() {
   await elements.get('calibrate').onclick();
   for (let i = 0; i < 110; i++) tick();
 }
+
+test('optional strength rehearsal uses real completed strokes, pauses setup, and never sends a match swing', async () => {
+  await import('../src/controller/main.js');
+  await calibrate();
+  expect(elements.get('strength-panel').hidden).toBe(false);
+  state({ playing: true, paused: false });
+  elements.get('toggle-settings').onclick();
+  elements.get('tune-strength').onclick();
+  expect(messages.at(-1)).toEqual({ type: 'wee:controller-setup', setup: null });
+  state({ playing: true, paused: true }); // Host pauses while this phone rehearses.
+  const rehearsalSwing = direction => {
+    for (let i = 0; i < 15; i++) tick(20, { alpha: 300 * direction, beta: 600 * direction, gamma: 0 });
+    for (let i = 0; i < 25; i++) tick();
+  };
+  for (let i = 0; i < 3; i++) rehearsalSwing(1);
+  expect(elements.get('strength-progress').value).toBe(3);
+  for (let i = 0; i < 3; i++) rehearsalSwing(-1);
+  expect(elements.get('strength-status').textContent).toContain('saved');
+  expect(elements.get('tune-strength').textContent).toBe('Tune again');
+  expect(relay.sendSwing).not.toHaveBeenCalled();
+  expect(messages.at(-1)).toEqual({ type: 'wee:controller-setup', setup: 'motion' });
+  state({ playing: true, paused: false });
+  elements.get('toggle-settings').onclick();
+  rehearsalSwing(1);
+  expect(relay.sendSwing).toHaveBeenCalledOnce();
+  expect(relay.sendSwing.mock.calls[0][2]).toBeGreaterThan(.59);
+  elements.get('toggle-settings').onclick();
+  elements.get('hand').value = 'Left';
+  elements.get('hand').onchange();
+  expect(elements.get('strength-status').textContent).toContain('Playing hand changed');
+  expect(elements.get('tune-strength').textContent).toBe('Tune comfortable swings');
+});
+
+test('rehearsal is optional, cancels cleanly on hidden page, and recalibration clears its profile', async () => {
+  await import('../src/controller/main.js');
+  await calibrate();
+  elements.get('skip-strength').onclick();
+  expect(elements.get('strength-panel').hidden).toBe(true);
+  expect(messages.at(-1)).toEqual({ type: 'wee:controller-setup', setup: 'motion' });
+  elements.get('toggle-settings').onclick();
+  elements.get('tune-strength').onclick();
+  for (let i = 0; i < 15; i++) tick(20, { alpha: 300, beta: 600, gamma: 0 });
+  document.hidden = true;
+  documentListeners.get('visibilitychange')();
+  expect(elements.get('strength-status').textContent).toContain('page was hidden');
+  expect(elements.get('strength-progress').hidden).toBe(true);
+  expect(relay.sendSwing).not.toHaveBeenCalled();
+  document.hidden = false;
+  documentListeners.get('visibilitychange')();
+  await calibrate();
+  expect(elements.get('strength-status').textContent).toContain('Default strength');
+});
 
 test('tennis phone shows whose serve it is and stops input after a match', async () => {
   await import('../src/controller/main.js');

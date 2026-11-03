@@ -2,7 +2,7 @@
 import { sportName } from '../lib/sports.js';
 import { PrototypeFrame } from './PrototypeFrame.jsx';
 
-export function TvTutorial({ lobby, paused, onClose, error, immersive = true, fullscreen = false, onToggleView }) {
+export function TvTutorial({ lobby, paused, onClose, error, immersive = true, fullscreen = false, onToggleView, soundControls, onAudio }) {
   const bowling = lobby.sport === 'bowling';
   return (
     <main className={`game-session${immersive ? ' game-session--immersive' : ''}`}>
@@ -10,6 +10,7 @@ export function TvTutorial({ lobby, paused, onClose, error, immersive = true, fu
         <div className="game-session__identity"><span className="game-session__brand">wee.</span>
           <h1>{sportName(lobby.sport)}</h1><span className="game-session__room">{lobby.code}</span></div>
         <div className="game-session__actions">
+          {soundControls}
           <span className="game-session__mode">{bowling ? `${lobby.players.length} ${lobby.players.length === 1 ? 'player' : 'players'} · 10 frames` : lobby.players.some(player => player.slot === 1) ? '2 players · head to head' : 'Solo · vs bot'}</span>
           <details className="game-session__menu">
             <summary>Game options</summary>
@@ -25,6 +26,7 @@ export function TvTutorial({ lobby, paused, onClose, error, immersive = true, fu
       </header>
       {error ? <p className="game-session__error" role="alert">{error}</p> : null}
       <PrototypeFrame code={lobby.code} players={lobby.players} paused={paused} sport={lobby.sport} gameId={lobby.gameId} gameState={lobby.gameState}
+        onAudio={onAudio}
         pauseMessage={lobby.reconnecting?.length ? `Waiting for ${lobby.reconnecting.map(member => member.name).join(', ')} to reconnect.`
           : lobby.setupPending?.length ? `Waiting for ${lobby.setupPending.join(', ')} to finish controller setup.` : undefined} />
     </main>

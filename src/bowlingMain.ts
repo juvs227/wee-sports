@@ -10,14 +10,20 @@ let world: BowlingWorld | null = null;
 let gameId: string | null = null;
 let paused = embedded;
 let connected = false;
-const sound = createSportsAudio('bowling');
-sound.mountButton(document.querySelector('.bowling-heading') as HTMLElement);
-sound.setActive(!paused);
+const sound = embedded ? null : createSportsAudio('bowling');
+sound?.mountButton(document.querySelector('.bowling-heading') as HTMLElement);
+sound?.setActive(!paused);
 const delivered = new Set<string>();
 const post = (message: object): void => { if (embedded) window.parent.postMessage(message, location.origin); };
+function audioEvent(event: string): void {
+  if (embedded) {
+    if (gameId) post({type: 'wee:game-audio', sport: 'bowling', gameId, event});
+  } else if (event === 'stop') sound?.stop();
+  else sound?.play(event);
+}
 
 function render(state: BowlingState): void {
-  if (state.phase !== 'rolling') sound.stop('roll');
+  if (state.phase !== 'rolling') audioEvent('roll-end');
   const player = state.players.find(p => p.player === state.currentPlayer);
   el('turn').textContent = state.complete ? 'Every pin counts.' : `P${player?.player} · ${player?.name}`;
   el('frame-label').textContent = `Frame ${state.frame} / 10 · Ball ${state.ball}`;
@@ -50,8 +56,7 @@ function create(players: Array<{player: number; name: string}>): void {
   world = new BowlingWorld(el('lane'), players);
   world.onState = render;
   world.onSoundEvent = event => {
-    if (event === 'roll-end') sound.stop('roll');
-    else if (!paused) sound.play(event);
+    if (!paused || event === 'roll-end') audioEvent(event);
   };
   world.onPinHit = player => {
     if (!paused && connected && gameId) post({type: 'wee:game-hit', player, gameId});
@@ -67,12 +72,12 @@ function receive(event: MessageEvent): void {
     const wasConnected = connected;
     connected = data.connected === true;
     paused = data.paused || !connected || !data.playing;
-    sound.setActive(!paused);
+    sound?.setActive(!paused);
     if (typeof data.gameId !== 'string') return;
     if (!world || gameId !== data.gameId) {
       const players = (Array.isArray(data.players) ? data.players : []).map((p: {slot: number; name: string}) => ({player: p.slot + 1, name: p.name}));
       if (!players.length) return;
-      sound.stop('roll');
+      audioEvent('roll-end');
       world?.dispose(); world = null; gameId = data.gameId; delivered.clear();
       try { create(players); }
       catch (error) {
@@ -102,7 +107,7 @@ function receive(event: MessageEvent): void {
 for (const label of [...Array.from({length: 10}, (_, i) => String(i + 1)), 'Total']) {
   const th = document.createElement('th'); th.scope = 'col'; th.textContent = label; el('score-head').append(th);
 }
-el('replay').onclick = () => { if (!paused) { sound.stop('roll'); delivered.clear(); world?.reset(); } };
+el('replay').onclick = () => { if (!paused) { audioEvent('stop'); delivered.clear(); world?.reset(); audioEvent('start'); } };
 el('roll').onclick = () => {
   const player = world?.getState().currentPlayer;
   if (!world || !player) return;
@@ -120,12 +125,12 @@ try {
   console.error(error);
 }
 window.addEventListener('pagehide', event => {
-  sound.setActive(false);
+  audioEvent('stop'); sound?.setActive(false);
   if (event.persisted) world?.stop();
-  else { window.removeEventListener('message', receive); world?.dispose(); sound.dispose(); }
+  else { window.removeEventListener('message', receive); world?.dispose(); sound?.dispose(); }
 });
 window.addEventListener('pageshow', event => {
   if (!event.persisted) return;
   if (embedded) post({type: 'wee:bridge-ready'});
-  else { sound.setActive(!paused); if (!paused) world?.start(); }
+  else { sound?.setActive(!paused); if (!paused) world?.start(); }
 });

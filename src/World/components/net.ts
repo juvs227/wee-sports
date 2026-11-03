@@ -1,41 +1,37 @@
-// components/net.js
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import {netHeightAt, TENNIS_COURT} from '../tennisRules';
 
-// export function createNet() {
-//     const group = new THREE.Group();
-
-//     const loader = new GLTFLoader();
-    
-//     // Replace './assets/net.glb' with your teammate's actual file path
-//     loader.load('./assets/net.glb', (gltf) => {
-//         const netModel = gltf.scene;
-        
-//         netModel.traverse((child) => {
-//             if (child.isMesh) {
-//                 child.castShadow = true;
-//                 child.receiveShadow = true;
-//             }
-//         });
-
-//         group.add(netModel);
-//     }, undefined, (error) => {
-//         console.error('An error occurred loading the net asset:', error);
-//     });
-
-//     return group;
-// }
-
-
-export function createNet() {
-    const geometry = new THREE.BoxGeometry(8.23, 0.5, 0.1);
-    const material = new THREE.MeshStandardMaterial({ 
-        color: 0xffffff,
-        roughness: 0.5 
+/** Visual net uses exactly the top profile checked by ball/trajectory code. */
+export function createNet(): THREE.Group {
+    const group = new THREE.Group();
+    const points: THREE.Vector3[] = [];
+    const width = TENNIS_COURT.netHalfWidth;
+    for (let index = 0; index <= 50; index++) {
+        const x = -width + 2 * width * index / 50;
+        points.push(new THREE.Vector3(x, .03, 0), new THREE.Vector3(x, netHeightAt(x), 0));
+    }
+    for (let row = 1; row <= 10; row++) {
+        for (let index = 0; index < 50; index++) {
+            const x = -width + 2 * width * index / 50;
+            const next = -width + 2 * width * (index + 1) / 50;
+            points.push(new THREE.Vector3(x, netHeightAt(x) * row / 10, 0),
+                new THREE.Vector3(next, netHeightAt(next) * row / 10, 0));
+        }
+    }
+    group.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(points),
+        new THREE.LineBasicMaterial({color: 0x33443c, transparent: true, opacity: .8})));
+    const tape = Array.from({length: 51}, (_, index) => {
+        const x = -width + 2 * width * index / 50;
+        return new THREE.Vector3(x, netHeightAt(x), 0);
     });
-    const net = new THREE.Mesh(geometry, material);
-    net.position.set(0, 0.3, 0); // Position it on the ground
-    net.castShadow = true;
-
-    return net;
+    group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(tape),
+        new THREE.LineBasicMaterial({color: 0xffffff})));
+    for (const x of [-width, width]) {
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(.045, .045, TENNIS_COURT.netPostHeight, 8),
+            new THREE.MeshStandardMaterial({color: 0x254336, roughness: .8}));
+        post.position.set(x, TENNIS_COURT.netPostHeight / 2, 0);
+        post.castShadow = true;
+        group.add(post);
+    }
+    return group;
 }
