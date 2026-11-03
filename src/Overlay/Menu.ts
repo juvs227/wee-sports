@@ -59,7 +59,7 @@ export class Menu {
         });
         this.resetButton.addEventListener('click', () => {
             this.toggleMenu();
-            this.world.resetRound();
+            this.world.reset();
         });
         this.pauseButton.addEventListener('click', () => {
             console.log('Click!');

@@ -174,7 +174,7 @@ export class World {
         this.gameLogic.startRound();
     }
 
-    public resetRound(): void {
+    public reset(): void {
         this.gameLogic.resetRound();
     }
 
