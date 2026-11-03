@@ -4,11 +4,13 @@ import {BALL_RADIUS, BowlingPhysics, LANE, PIN_COM, pinSpot, RollControls, RollS
 
 export type {BowlingPlayer, BowlingState} from './match';
 export interface BowlingRoll extends RollControls {player: number}
+export type BowlingSoundEvent = 'release' | 'roll' | 'roll-end' | 'pin' | 'gutter' | 'strike' | 'spare' | 'result' | 'match';
 
 /** A TV-owned scene. Phones only request deliveries; all pinfall is simulated here. */
 export class BowlingWorld {
   onState: ((state: BowlingState) => void) | null = null;
   onPinHit: ((player: number) => void) | null = null;
+  onSoundEvent: ((event: BowlingSoundEvent) => void) | null = null;
   private match: BowlingMatch;
   private players: BowlingPlayer[];
   private physics = new BowlingPhysics();
@@ -25,6 +27,7 @@ export class BowlingWorld {
   private running = false;
   private disposed = false;
   private rolling = false;
+  private rollSoundActive = false;
   private settlement: RollSettlement | null = null;
   private revealTime = 0;
   private animation = 0;
@@ -36,14 +39,12 @@ export class BowlingWorld {
   constructor(private container: HTMLElement, players: BowlingPlayer[]) {
     this.players = players.map(player => ({...player}));
     this.match = new BowlingMatch(players);
-    this.physics.onPinHit = () => {
-      const player = this.match.getState().currentPlayer;
-      if (this.running && this.rolling && player !== null) this.onPinHit?.(player);
-    };
+    this.physics.onPinHit = () => this.pinContact();
+    this.physics.onGutter = () => this.gutterContact();
     this.renderer = new THREE.WebGLRenderer({antialias: true, alpha: false});
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.25;
@@ -98,23 +99,29 @@ export class BowlingWorld {
   stop(): void {
     this.running = false;
     cancelAnimationFrame(this.animation);
+    this.endRollingSound();
     // Neither physical time nor the result-reveal timer advances while paused.
   }
 
   roll(roll: BowlingRoll): {ok: boolean; error?: string} {
     if (this.disposed || !this.running) return {ok: false, error: 'The game is paused. Reconnect all players to continue.'};
     const state = this.getState();
-    if (state.complete) return {ok: false, error: 'This match is finished. Start a new match on the TV.'};
+    if (state.complete) return {ok: false, error: 'This match is finished. Start a new match in game options.'};
     if (state.currentPlayer !== roll.player) return {ok: false, error: 'Wait for your turn.'};
     if (this.rolling) return {ok: false, error: 'Wait for the ball and pins to settle.'};
     if (!validRoll(roll)) return {ok: false, error: 'Choose a valid aim, power, and spin.'};
-    if (!this.physics.roll(roll)) return {ok: false, error: 'This delivery could not start.'};
+    // Inputs use the player's left/right. This camera faces world +Z, so
+    // screen-right is world -X. Keep the physics' world coordinates unchanged.
+    if (!this.physics.roll({...roll, aim: -roll.aim, spin: -roll.spin})) return {ok: false, error: 'This delivery could not start.'};
     this.rolling = true;
     this.trailCount = 0;
     this.trail.geometry.setDrawRange(0, 0);
     this.trail.visible = true;
     this.aimLine.visible = false;
     this.onState?.(this.getState());
+    this.onSoundEvent?.('release');
+    this.rollSoundActive = true;
+    this.onSoundEvent?.('roll');
     return {ok: true};
   }
 
@@ -125,13 +132,14 @@ export class BowlingWorld {
     this.aimLine?.geometry.dispose();
     if (this.aimLine) {
       this.aimLine.geometry = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(0, 0.012, 0.35), new THREE.Vector3(Math.tan(this.aim * 0.06) * 7, 0.012, 7.35),
+        new THREE.Vector3(0, 0.012, 0.35), new THREE.Vector3(-Math.tan(this.aim * 0.06) * 7, 0.012, 7.35),
       ]);
       this.aimLine.computeLineDistances();
     }
   }
 
   reset(players: BowlingPlayer[] = this.players): void {
+    this.endRollingSound();
     this.players = players.map(player => ({...player}));
     this.match = new BowlingMatch(players);
     this.physics.resetRack();
@@ -169,7 +177,9 @@ export class BowlingWorld {
     this.renderer.domElement.remove();
     this.onState = null;
     this.onPinHit = null;
+    this.onSoundEvent = null;
     this.physics.onPinHit = null;
+    this.physics.onGutter = null;
   }
 
   private resize = (): void => {
@@ -181,26 +191,32 @@ export class BowlingWorld {
     this.render();
   };
 
+  private endRollingSound(): void {
+    if (!this.rollSoundActive) return;
+    this.rollSoundActive = false;
+    this.onSoundEvent?.('roll-end');
+  }
+
+  private pinContact(): void {
+    const player = this.match.getState().currentPlayer;
+    if (!this.running || !this.rolling || player === null) return;
+    // The lane bed ends at impact, not after every pin has finished settling.
+    this.endRollingSound();
+    this.onPinHit?.(player);
+    this.onSoundEvent?.('pin');
+  }
+
+  private gutterContact(): void {
+    if (!this.running || !this.rolling) return;
+    this.endRollingSound();
+    this.onSoundEvent?.('gutter');
+  }
+
   private tick = (time: number): void => {
     if (!this.running) return;
     const dt = Math.min(Math.max((time - this.lastTime) / 1000, 0), 0.1);
     this.lastTime = time;
-    if (this.rolling && !this.settlement) {
-      this.settlement = this.physics.step(dt);
-      if (this.settlement) this.revealTime = 1.1;
-    } else if (this.settlement) {
-      this.revealTime -= dt;
-      if (this.revealTime <= 0) {
-        const transition = this.match.record(this.settlement.remaining);
-        if (transition.resetRack) this.physics.resetRack();
-        else if (!this.match.getState().complete) this.physics.sweep(this.settlement.remaining);
-        this.settlement = null;
-        this.rolling = false;
-        this.trail.visible = false;
-        this.aimLine.visible = !this.match.getState().complete;
-        this.onState?.(this.getState());
-      }
-    }
+    this.advanceDelivery(dt);
     this.syncBodies();
     this.updateTrail();
     const advance = this.rolling ? Math.max(0, Math.min(this.physics.ball.position.z - 2.2, 15.4)) : 0;
@@ -214,6 +230,32 @@ export class BowlingWorld {
     this.render();
     this.animation = requestAnimationFrame(this.tick);
   };
+
+  /** Advance deliveries independently of rendering; only real transitions produce sound. */
+  private advanceDelivery(dt: number): void {
+    if (!this.running || this.disposed) return;
+    if (this.rolling && !this.settlement) {
+      this.settlement = this.physics.step(dt);
+      if (this.settlement) {
+        this.revealTime = 1.1;
+        this.endRollingSound();
+      }
+    } else if (this.settlement) {
+      this.revealTime -= dt;
+      if (this.revealTime <= 0) {
+        const transition = this.match.record(this.settlement.remaining);
+        if (transition.resetRack) this.physics.resetRack();
+        else if (!this.match.getState().complete) this.physics.sweep(this.settlement.remaining);
+        this.settlement = null;
+        this.rolling = false;
+        this.trail.visible = false;
+        this.aimLine.visible = !this.match.getState().complete;
+        this.onState?.(this.getState());
+        this.onSoundEvent?.(this.match.getState().complete ? 'match' :
+          transition.result.strike ? 'strike' : transition.result.spare ? 'spare' : 'result');
+      }
+    }
+  }
 
   private syncBodies(): void {
     const visible = new Set(this.physics.pins.map(pin => pin.id));

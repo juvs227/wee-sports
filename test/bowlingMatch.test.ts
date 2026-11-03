@@ -87,6 +87,23 @@ describe('ten-pin match rules', () => {
     expect(match.getState().complete).toBe(true);
   });
 
+  it.each([
+    {rolls: [6, 4, 10], strike: true, spare: false},
+    {rolls: [0, 10, 10], strike: true, spare: false},
+    {rolls: [10, 10, 10], strike: true, spare: false},
+    {rolls: [10, 0, 10], strike: false, spare: true},
+    {rolls: [10, 7, 3], strike: false, spare: true},
+    {rolls: [6, 4, 0], strike: false, spare: false},
+  ])('classifies the last tenth-frame delivery in $rolls without extending the game', ({rolls, strike, spare}) => {
+    const match = new BowlingMatch([{player: 1, name: 'Ten'}]);
+    toTenth(match);
+    for (const pins of rolls) bowl(match, pins);
+    expect(match.getState().lastRoll).toMatchObject({strike, spare});
+    expect(match.getState().players[0].total).toBe(rolls.reduce((total, pins) => total + pins, 0));
+    expect(match.getState().complete).toBe(true);
+    expect(() => bowl(match, 0)).toThrow('complete');
+  });
+
   it('tenth-frame open stops at two deliveries and no zero-pin false rerack occurs', () => {
     const match = new BowlingMatch([{player: 1, name: 'Ten'}]);
     toTenth(match);

@@ -1,27 +1,58 @@
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
-* { box-sizing: border-box; }
-body { margin: 0; background: #f4f6ec; color: #263a32; font-family: Nunito, system-ui, sans-serif; }
-#bowling-app { width: 100%; height: 100dvh; min-height: 640px; margin: auto; padding: 16px 24px 12px; display: flex; flex-direction: column; }
-#bowling-app > :not(#lane) { flex-shrink: 0; }
-.bowling-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 12px; }
-.play-eyebrow { margin: 0 0 3px; font-size: 11px; text-transform: uppercase; letter-spacing: .16em; font-weight: 900; color: #60744b; }
-h1 { margin: 0; font-size: clamp(21px, 2.5vw, 32px); line-height: 1.2; }
-.bowling-pill { border: 1px solid #bfcba8; background: #e8efd9; border-radius: 30px; padding: 8px 15px; font-weight: 800; white-space: nowrap; font-size: 13px; }
-#lane { flex: 1 0 250px; min-height: 250px; overflow: hidden; border-radius: 20px; box-shadow: 0 6px 25px #263a3215; }
-.bowling-status { display: flex; justify-content: space-between; gap: 14px; align-items: center; margin: 12px 2px; }
-.bowling-status p { margin: 0; font-size: 14px; }
-#roll-status { font-weight: 900; } #pin-status { color: #60744b; }
-.bowling-scores { overflow-x: auto; border-radius: 14px; border: 1px solid #d7dfc8; background: #fffef9; }
-table { border-collapse: collapse; width: 100%; text-align: center; min-width: 690px; font-size: 13px; }
-th { padding: 7px 9px; } thead { background: #e8eedc; color: #55684a; }
-tbody th { min-width: 135px; text-align: left; border-left: 5px solid var(--player-color); }
-td { border-left: 1px solid #e3e7d9; padding: 4px 6px; min-width: 41px; height: 48px; }
-td strong { display: block; height: 18px; } tbody tr + tr { border-top: 1px solid #d7dfc8; }
-tr[data-active='true'] { background: #f1f8df; } .bowling-marks { display: block; min-height: 17px; font-size: 12px; letter-spacing: .05em; }
-.bowling-total { font-size: 20px; font-weight: 900; } .bowling-help { color: #60744b; font-size: 12px; text-align: center; margin: 10px 0 0; }
-button { border: 0; border-radius: 22px; background: #315a28; color: white; padding: 11px 22px; font: 800 14px Nunito, system-ui, sans-serif; cursor: pointer; }
-button:disabled { opacity: .45; cursor: default; } button:focus-visible, input:focus-visible { outline: 3px solid #8567c4; outline-offset: 3px; }
-.bowling-controls { display: flex; flex-wrap: wrap; gap: 24px; align-items: center; } .bowling-controls label { display: flex; gap: 10px; align-items: center; font-weight: 800; } input { accent-color: #6a4ba0; }
-.bowling-results { margin: 14px 0; padding: 18px; border-radius: 18px; background: #e8efd9; text-align: center; }
-.bowling-results h2 { margin: 0 0 8px; } .bowling-results ol { padding: 0; list-style: none; } .bowling-results li { margin: 4px; font-weight: 800; }
-@media (max-width: 600px) { #bowling-app { padding: 12px; } .bowling-heading { align-items: flex-start; } .bowling-pill { padding: 7px 9px; font-size: 10px; } #lane { height: 330px; } .bowling-status { align-items: flex-start; } #pin-status { white-space: nowrap; font-size: 11px; } }
+html, body { width: 100%; height: 100%; overflow: hidden; }
+body { margin: 0; background: #203a32; color: var(--text); font-family: var(--font); }
+#bowling-app { position: relative; width: 100%; height: 100dvh; min-height: 0; overflow: hidden; }
+#lane { position: absolute; inset: 0; overflow: hidden; }
+.bowling-hud { width: min(1040px, calc(100% - 32px)); border-radius: 15px; padding: 9px 12px 8px; backdrop-filter: blur(12px); }
+.bowling-embedded .bowling-hud { top: max(54px, calc(env(safe-area-inset-top) + 48px)); }
+.bowling-heading { gap: 8px; margin-bottom: 7px; }
+.bowling-heading h1 { margin: 0; color: var(--accent-ink); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; line-height: 1.3; font-weight: 900; }
+.bowling-pill { color: var(--text-muted); font-weight: 800; white-space: nowrap; font-size: 11px; font-variant-numeric: tabular-nums; }
+.bowling-hud__footer { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 2px 16px; margin-top: 5px; }
+.bowling-hud #roll-status { margin: 0; font-size: 11px; font-weight: 800; overflow-wrap: anywhere; }
+.bowling-hud .scorecard-help { margin: 0; color: var(--text-muted); font-size: 9px; }
+.bowling-scores { overflow: auto; max-height: min(280px, 33dvh); border-radius: 7px; border: 1px solid var(--border-strong); background: var(--surface); scrollbar-width: thin; overscroll-behavior: contain; }
+.bowling-scores table { border-collapse: separate; border-spacing: 0; table-layout: fixed; width: 100%; min-width: 730px; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; }
+.bowling-scores thead th { position: sticky; top: 0; z-index: 2; padding: 4px; height: 24px; background: var(--surface-sunk); color: var(--text-muted); font-size: 10px; }
+.bowling-scores thead th:first-child { width: 132px; left: 0; z-index: 3; text-align: left; padding-left: 10px; }
+.bowling-scores thead th:nth-last-child(2) { width: 74px; }
+.bowling-scores thead th:last-child { width: 64px; right: 0; z-index: 3; }
+.bowling-scores tbody th { position: sticky; left: 0; z-index: 1; padding: 5px 9px; background: var(--surface); color: var(--text); border-left: 3px solid var(--player-color); text-align: left; font-size: 12px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bowling-scores td { border-left: 1px solid var(--border-strong); padding: 0; height: 48px; vertical-align: top; }
+.bowling-scores td strong { display: block; height: 25px; padding: 1px 3px; font-size: 16px; line-height: 23px; font-weight: 900; }
+.bowling-scores tbody tr + tr > * { border-top: 1px solid var(--border-strong); }
+.bowling-scores tr[data-active='true'] th, .bowling-scores tr[data-active='true'] .bowling-total { background: var(--accent-soft); }
+.bowling-scores td[data-current='true'] { box-shadow: inset 0 0 0 2px var(--accent-ink); background: var(--accent-soft); }
+.bowling-marks { display: grid; grid-template-columns: repeat(var(--rolls, 2), minmax(0, 1fr)); height: 22px; font-size: 13px; font-weight: 800; line-height: 21px; }
+.bowling-marks > span + span { border-left: 1px solid var(--border-strong); border-bottom: 1px solid var(--border-strong); }
+.bowling-marks .bowling-mark--strike, .bowling-marks .bowling-mark--spare { color: var(--accent-ink); background: var(--accent-soft); font-weight: 900; }
+.bowling-scores .bowling-total { position: sticky; right: 0; z-index: 1; background: var(--surface); font-size: 21px; font-weight: 900; vertical-align: middle; }
+.bowling-callout { position: absolute; z-index: 5; left: 50%; top: 49%; transform: translate(-50%, -50%); min-width: 260px; max-width: calc(100% - 32px); padding: 17px 36px 21px; border: 1px solid #d2f78b; border-radius: 23px; background: #132e27ed; box-shadow: 0 12px 50px #00170c55; text-align: center; color: #f1ffe8; pointer-events: none; animation: bowling-call-in 240ms ease-out; }
+.bowling-callout[hidden] { display: none; }
+.bowling-callout > span { display: block; max-width: 290px; overflow-wrap: anywhere; color: #d8ebd6; font-size: 13px; font-weight: 800; }
+.bowling-callout strong { display: block; color: #dcff91; font-size: clamp(38px, 5vw, 68px); font-weight: 900; letter-spacing: -.04em; line-height: 1.2; }
+.bowling-callout p { margin: 5px 0 0; font-size: 12px; color: #e2eddf; }
+.bowling-callout[data-kind='spare'] { border-color: #9fd6e9; }
+.bowling-callout[data-kind='spare'] strong { color: #b4e9f5; }
+@keyframes bowling-call-in { from { opacity: 0; translate: 0 10px; scale: .96; } to { opacity: 1; translate: 0 0; scale: 1; } }
+.bowling-help { position: absolute; bottom: max(10px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100% - 28px); padding: 6px 12px; border-radius: 20px; color: #fff; background: #142c2ac7; font-size: 11px; text-align: center; margin: 0; }
+#bowling-app button { border: 1px solid var(--accent-bottom); border-radius: var(--radius-sm); background: linear-gradient(var(--accent-top), var(--accent-bottom)); color: white; padding: 10px 18px; font: 800 13px var(--font); cursor: pointer; }
+#bowling-app button:disabled { opacity: .45; cursor: default; }
+#bowling-app button:focus-visible, #bowling-app input:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+#local-controls { position: absolute; z-index: 2; bottom: 12px; left: 50%; transform: translateX(-50%); width: min(760px, calc(100% - 24px)); padding: 12px 16px; border-radius: 16px; background: var(--surface-overlay); box-shadow: var(--shadow); }
+#local-controls h2 { margin: 0 0 6px; font-size: 13px; }
+.bowling-controls { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; }
+.bowling-controls label { display: flex; gap: 8px; align-items: center; font-size: 12px; font-weight: 800; }
+.bowling-controls input { width: 110px; accent-color: var(--accent-ink); }
+#bowling-app:has(#local-controls:not([hidden])) .bowling-help { display: none; }
+@media (max-width: 540px) {
+  .bowling-hud { width: calc(100% - 14px); padding: 7px 8px; }
+  .bowling-embedded .bowling-hud { top: max(48px, calc(env(safe-area-inset-top) + 44px)); }
+  .bowling-heading { margin-bottom: 5px; }
+  .bowling-pill, .bowling-help { font-size: 10px; }
+  .bowling-scores thead th:first-child { width: 98px; }
+  .bowling-scores table { min-width: 680px; }
+  .bowling-scores tbody th { font-size: 10px; }
+  .bowling-hud .scorecard-help { font-size: 8px; }
+}
+@media (prefers-reduced-motion: reduce) { .bowling-callout { animation: none; } }

@@ -2,21 +2,21 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { createPlayer } from '../src/World/components/player';
-import { createBall } from '../src/World/components/ball';
-import { GameLogic } from '../src/World/gameLogic';
+import { createPlayer } from '../src/Tennis/components/player';
+import { createBall } from '../src/Tennis/components/ball';
+import { GameLogic } from '../src/Tennis/gameLogic';
+import { TENNIS_COURT } from '../src/Tennis/tennisRules';
 
 afterEach(() => vi.restoreAllMocks());
 
 test('solo phone serve and bot contact report actual hits without updating static scenery at physics frequency', async () => {
-    vi.spyOn(Math, 'random').mockReturnValue(.5);
     vi.spyOn(GLTFLoader.prototype, 'load').mockImplementation((url, onLoad) => {
         const data = readFileSync(`public${url}`);
         void new GLTFLoader().parseAsync(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength), '').then(onLoad);
     });
     const scene = new THREE.Scene();
-    const phonePlayer = createPlayer(0, .25, 10, 0x3b82f6);
-    const bot = createPlayer(0, .25, -10, 0xef4444, { minZ: -11.5, maxZ: -1 });
+    const phonePlayer = createPlayer(0, .25, 10, 0x3b82f6, {minZ: 1, maxZ: TENNIS_COURT.serveDepth + .2});
+    const bot = createPlayer(0, .25, -10, 0xef4444, { minZ: -TENNIS_COURT.serveDepth - .2, maxZ: -1 });
     bot.group.rotation.y = Math.PI;
     scene.add(phonePlayer.group, bot.group);
     await vi.waitFor(() => { expect(phonePlayer.hitbox).toBeTruthy(); expect(bot.hitbox).toBeTruthy(); });
@@ -39,10 +39,11 @@ test('solo phone serve and bot contact report actual hits without updating stati
     expect(feedback.some(message => message.startsWith('Player 2: Hit!'))).toBe(true);
     expect(updateScenery.mock.calls.length).toBe(0);
     expect(hits.slice(0, 2)).toEqual([1, 2]);
-    expect(hits.slice(2)).toContain(2);
+    expect(hits).toEqual([1, 2]);
+    expect(game.getScore().server).toBe('player1'); // Service does not change after a point.
     game.clearPendingInputs();
     for (let frame = 0; frame < 120; frame++) game.update(1 / 60);
-    expect(hits.length).toBeGreaterThanOrEqual(3);
+    expect(hits).toEqual([1, 2]);
     phonePlayer.hitbox?.dispose();
     bot.hitbox?.dispose();
 });

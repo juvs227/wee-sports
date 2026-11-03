@@ -44,7 +44,49 @@ test('bowling underhand pitch releases once after slowing and scales power with 
   expect(slow[0].power).toBeGreaterThanOrEqual(.2);
   expect(fast[0].power).toBeGreaterThan(slow[0].power);
   expect(fast[0].power).toBeLessThanOrEqual(1);
-  expect(delivery(600, value => ({ ...value, rotationAlpha: -value.rotationAlpha }))).toHaveLength(1);
+  expect(delivery(600, value => ({ ...value, rotationAlpha: -value.rotationAlpha }))).toEqual([]);
+});
+
+test('backswing never charges or releases, even with strong linear acceleration', () => {
+  const detector = createBowlingMotionDetector();
+  for (let time = 0; time <= 1000; time += 20) {
+    const pitch = time < 400 ? -900 * Math.sin(Math.PI * time / 400) : 0;
+    expect(detector.push({ ...bowlSample(time, pitch, 100), acceleration: { x: 20, y: -25, z: 15 } })).toBeNull();
+    expect(detector.preview).toEqual({ power: 0, spin: 0, peakRotation: 0 });
+  }
+});
+
+test('a fast backswing followed by a gentle forward swing uses only forward power and curve', () => {
+  const detector = createBowlingMotionDetector();
+  for (let time = 0; time < 600; time += 20) {
+    const pitch = time < 400 ? -900 * Math.sin(Math.PI * time / 400) : 0;
+    expect(detector.push({ ...bowlSample(time, pitch, -250), acceleration: { x: 20, y: -25, z: 15 } })).toBeNull();
+  }
+  const rolls = [];
+  for (let time = 0; time <= 1000; time += 20) {
+    const pitch = time < 400 ? 260 * Math.sin(Math.PI * time / 400) : 0;
+    const result = detector.push(bowlSample(time + 600, pitch));
+    if (result) rolls.push(result);
+  }
+  expect(rolls).toEqual(delivery(260));
+});
+
+test('reversing a charged forward swing cancels it instead of releasing on the backswing', () => {
+  const detector = createBowlingMotionDetector();
+  for (let time = 0; time < 300; time += 20) expect(detector.push(bowlSample(time, 400))).toBeNull();
+  expect(detector.preview.power).toBeGreaterThan(0);
+  for (let time = 300; time <= 1000; time += 20) {
+    expect(detector.push(bowlSample(time, time < 600 ? -400 : 0))).toBeNull();
+    expect(detector.preview.power).toBe(0);
+  }
+});
+
+test('ordinary signed sensor noise cannot charge a bowling delivery', () => {
+  const detector = createBowlingMotionDetector();
+  for (let time = 0; time <= 1000; time += 20) {
+    expect(detector.push(bowlSample(time, Math.sin(time) * 25, Math.cos(time) * 20))).toBeNull();
+    expect(detector.preview.power).toBe(0);
+  }
 });
 
 test('bowling ignores weak movement, sideways tennis strokes, and sensor gaps', () => {
@@ -93,6 +135,7 @@ test('power can use linear acceleration but works without it and never uses grav
   expect(delivery(300, value => ({ ...value, acceleration: { x: null, y: null, z: null } }))[0]).toEqual(gyro);
   expect(delivery(300, value => ({ ...value, accelerationIncludingGravity: { x: 0, y: 0, z: 9.8 } }))[0]).toEqual(gyro);
   expect(delivery(0, value => ({ ...value, acceleration: { x: 30, y: 30, z: 30 } }))).toEqual([]);
+  expect(delivery(300, value => ({ ...value, acceleration: { x: 0, y: value.timeMs > 340 ? -30 : 0, z: 0 } }))[0]).toEqual(gyro);
 });
 
 test('wrist curve and power remain close at common sensor sampling rates', () => {

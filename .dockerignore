@@ -1,0 +1,10 @@
+.git
+**/node_modules
+**/dist
+build
+.phone-build
+.env
+.env.*
+*.log
+.DS_Store
+stress-results

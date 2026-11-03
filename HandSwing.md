@@ -120,8 +120,8 @@ separate WebSocket server to follow these steps.
 - `src/controller/classifySwing.js`: `gyro-handed-v6` directional rules originally copied
   from branch `juve-swing-classification`. Future classifier edits must be synced
   deliberately; Git branches do not share live files.
-- `src/World/World.js`: receives strokes via `world.swing(event)` and updates animation.
-- `src/World/components/player.js`: stroke animation for the placeholder player.
+- `src/Tennis/World.js`: receives strokes via `world.swing(event)` and updates animation.
+- `src/Tennis/components/player.js`: stroke animation for the placeholder player.
 
 Example message:
 

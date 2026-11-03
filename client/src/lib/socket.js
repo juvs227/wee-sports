@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react';
 import { io } from 'socket.io-client';
+import { sendSwingRequest } from '../../../src/network/swingRequest.js';
 
 /**
  * One connection per tab, shared by every page, so moving between pages never
  * drops a seat. Same origin by default: in development Vite proxies
  * /socket.io to the game server.
  */
-export const socket = io(import.meta.env.VITE_SERVER_URL || undefined);
+export const socket = io(import.meta.env.VITE_SERVER_URL || undefined, {
+  transports: ['websocket', 'polling'],
+  tryAllTransports: true,
+});
 
 const TIMEOUT_MS = 5000;
 
@@ -19,6 +23,11 @@ export function request(event, payload) {
       resolve(err ? { ok: false, error: 'timeout' } : response);
     });
   });
+}
+
+/** Gameplay input uses a separate transient path; settings/ready stay reliable. */
+export function requestSwing(event, payload, current) {
+  return sendSwingRequest(socket, event, payload, current);
 }
 
 /** 'connecting' | 'online' | 'offline'. Socket.io keeps retrying while offline. */

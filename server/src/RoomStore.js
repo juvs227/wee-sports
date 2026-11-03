@@ -10,9 +10,9 @@
  * A member keeps a stable id across socket replacements; private tokens
  * authorize reattachment. Public lobby snapshots never include tokens.
  *
- * There are no timers in here either. The countdown deadline is read from an
- * injectable clock; app.js periodically expires missing sessions and calls
- * finishCountdown().
+ * There are no timers in here either. The countdown and vote deadlines are
+ * read from an injectable clock; app.js periodically expires missing sessions
+ * and calls finishCountdown() and expireVote().
  */
 
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -26,30 +26,36 @@ import {
   NAME_MAX,
   OPEN_SPORTS,
   PHASES,
+  PICKS,
   PROTOCOL_VERSION,
   READY_AT_PLAYERS,
   RECONNECT_MS,
+  TUTORIAL_MOVES,
+  VOTE_SECONDS,
   cleanName,
+  hasTutorial,
   isRoomCode,
   isSwing,
   isRoll,
   isGameHit,
+  isTennisState,
+  isBowlingState,
+  isStrokeResult,
   isController,
+  isGameCommand,
+  isGameOptions,
   playerCapacity,
 } from '../../shared/protocol.js';
 
 const MAX_CODE_ATTEMPTS = 50;
+const COUNTDOWN_MS = COUNTDOWN_SECONDS * 1000;
+const VOTE_MS = VOTE_SECONDS * 1000;
 
-/**
- * Where a lobby goes once every player is ready. The one place to change if
- * something (the tutorial vote, say) should come between the ready check and
- * the TV's Play button.
- */
-function nextPhaseAfterReady() {
-  return PHASES.ALL_READY;
-}
-
-const BEFORE_PLAY = new Set([PHASES.LOBBY, PHASES.READY, PHASES.ALL_READY]);
+const BEFORE_PLAY = new Set([PHASES.LOBBY, PHASES.READY]);
+/** After the countdown and before the game: the vote and the tutorial. */
+const PREGAME = new Set([PHASES.VOTE, PHASES.TUTORIAL]);
+/** Phases where a controller without setup pauses everyone. */
+const NEEDS_SETUP = new Set([PHASES.VOTE, PHASES.TUTORIAL, PHASES.GAME]);
 
 export function randomCode(random = Math.random) {
   let code = '';
@@ -61,9 +67,15 @@ export function randomCode(random = Math.random) {
 
 export class RoomStore {
   /**
-   * code -> { code, sport, hostId, phase, players: Map<id, { slot, name, ready }>, deadline }
+   * code -> { code, sport, hostId, phase, players: Map<id, { slot, name, ready }>, deadline, vote, tutorial }
    *
-   * deadline is when the countdown ends, or null when none is running.
+   * deadline is when the countdown or the vote ends, or null when neither is
+   * running.
+   * vote is null until it opens, { picks: Map<id, boolean> } while open, and
+   * { picks: [{ slot, pick }] } once resolved, frozen so the reveal still shows
+   * what everyone picked.
+   * tutorial is null outside 'tutorial', and { step, learners: Set<id>,
+   * done: Set<id> } in it. learners are the Yes voters.
    */
   #rooms = new Map();
   /** id -> { code, role: 'host' | 'player' } */
@@ -105,9 +117,10 @@ export class RoomStore {
     }
     if (!code) return { ok: false, error: ERRORS.SERVER_BUSY };
 
-    this.#rooms.set(code, { code, sport, hostId, phase: PHASES.LOBBY, players: new Map(), deadline: null, pausedAt: null,
-      gameId: null, gameState: null, pendingRoll: null, seenRolls: new Set(),
-      seenHits: new Set(), lastHitAt: new Map() });
+    this.#rooms.set(code, { code, sport, hostId, phase: PHASES.LOBBY, players: new Map(), deadline: null, pausedAt: null, manuallyPaused: false,
+      gameId: null, inputGeneration: 0, gameState: null, pendingRoll: null, seenRolls: new Set(),
+      seenHits: new Set(), lastHitAt: new Map(), pendingStrokes: new Map(), soundMuted: null,
+      gameOptions: null, seenCommands: new Set(), pendingGameCommand: null, vote: null, tutorial: null });
     const memberId = this.#addSession(hostId, code, 'host');
     this.#rooms.get(code).hostId = memberId;
     return this.#sessionView(memberId);
@@ -142,15 +155,18 @@ export class RoomStore {
   }
 
   /**
-   * Ready or not ready. Players can change their mind until everyone is
-   * ready; then the lobby moves on and the result says so.
+   * Ready or not ready, during the ready check and the countdown. When the
+   * last player readies up the countdown starts by itself; anyone un-readying
+   * during it cancels it. The result says which happened.
    */
   setReady(playerId, payload) {
     playerId = this.#sockets.get(playerId);
     const member = this.#members.get(playerId);
     if (member?.role !== 'player') return { ok: false, error: ERRORS.NOT_PLAYER };
     const room = this.#rooms.get(member.code);
-    if (room?.phase !== PHASES.READY) return { ok: false, error: ERRORS.NO_READY_CHECK };
+    if (room?.phase !== PHASES.READY && room?.phase !== PHASES.COUNTDOWN) {
+      return { ok: false, error: ERRORS.NO_READY_CHECK };
+    }
     if (room.pausedAt !== null) return { ok: false, error: ERRORS.PAUSED };
     const ready = payload?.ready;
     if (typeof ready !== 'boolean') return { ok: false, error: ERRORS.BAD_READY };
@@ -158,27 +174,200 @@ export class RoomStore {
     const player = room.players.get(playerId);
     if (ready && isController(room.sport, player.slot) && !player.setup) return { ok: false, error: 'setup-required' };
     player.ready = ready;
-    const advanced = [...room.players.values()].every((player) => player.ready);
-    if (advanced) {
-      this.#clearReady(room);
-      room.phase = nextPhaseAfterReady();
+
+    if (room.phase === PHASES.READY && [...room.players.values()].every((seat) => seat.ready)) {
+      room.phase = PHASES.COUNTDOWN;
+      room.gameId = randomUUID();
+      room.deadline = this.#now() + COUNTDOWN_MS;
+      return { ok: true, code: room.code, countdownStarted: true, msLeft: COUNTDOWN_MS };
     }
-    return { ok: true, code: room.code, advanced };
+    if (room.phase === PHASES.COUNTDOWN && !ready) {
+      // Everyone else stays ready, so readying up again restarts it at once.
+      room.phase = PHASES.READY;
+      room.deadline = null;
+      room.gameId = null;
+      room.inputGeneration++;
+      return { ok: true, code: room.code, countdownCancelled: true };
+    }
+    return { ok: true, code: room.code };
   }
 
-  /** The TV's Play button. Only the room's TV, and only once everyone is ready. */
-  start(hostId) {
-    hostId = this.#sockets.get(hostId);
-    const member = this.#members.get(hostId);
-    if (member?.role !== 'host') return { ok: false, error: ERRORS.NOT_HOST };
+  /**
+   * One final tutorial vote. watch: true is Yes. The vote resolves as soon as
+   * every player has voted, and the result says whether it did.
+   */
+  vote(socketId, payload) {
+    const playerId = this.#sockets.get(socketId);
+    const member = this.#members.get(playerId);
+    if (member?.role !== 'player') return { ok: false, error: ERRORS.NOT_PLAYER };
     const room = this.#rooms.get(member.code);
-    if (room?.phase !== PHASES.ALL_READY) return { ok: false, error: ERRORS.NOT_ALL_READY };
+    if (room?.phase !== PHASES.VOTE) return { ok: false, error: ERRORS.NO_VOTE };
     if (room.pausedAt !== null) return { ok: false, error: ERRORS.PAUSED };
+    const watch = payload?.watch;
+    if (typeof watch !== 'boolean') return { ok: false, error: ERRORS.BAD_VOTE };
+    if (room.vote.picks.has(playerId)) return { ok: false, error: ERRORS.ALREADY_VOTED };
 
-    room.phase = PHASES.COUNTDOWN;
-    room.gameId = randomUUID();
-    room.deadline = this.#now() + COUNTDOWN_SECONDS * 1000;
-    return { ok: true, code: room.code, msLeft: COUNTDOWN_SECONDS * 1000 };
+    room.vote.picks.set(playerId, watch);
+    const resolved = room.vote.picks.size === room.players.size;
+    if (resolved) this.#resolveVote(room);
+    return { ok: true, code: room.code, resolved };
+  }
+
+  /**
+   * Resolves the vote once its deadline has passed; anyone who hasn't voted
+   * counts as No. Returns null and changes nothing otherwise, so a stale or
+   * early tick is harmless. The deadline does not run while the room is paused.
+   */
+  expireVote(code) {
+    const room = this.#rooms.get(code);
+    if (room?.phase !== PHASES.VOTE || room.pausedAt !== null || this.#now() < room.deadline) return null;
+    this.#resolveVote(room);
+    return { code };
+  }
+
+  /**
+   * A learner did the move for a tutorial step. Once every learner has done
+   * it, the next step starts, and after the last step the game does. The
+   * result says whether the step advanced.
+   *
+   * A step that has already ended (a phone a beat behind) and a repeat are
+   * both accepted and change nothing, so a twitchy motion detector can't
+   * error or skip a step.
+   */
+  tutorialMove(socketId, payload) {
+    const playerId = this.#sockets.get(socketId);
+    const member = this.#members.get(playerId);
+    if (member?.role !== 'player') return { ok: false, error: ERRORS.NOT_PLAYER };
+    const room = this.#rooms.get(member.code);
+    if (room?.phase !== PHASES.TUTORIAL) return { ok: false, error: ERRORS.NO_TUTORIAL };
+    if (room.pausedAt !== null) return { ok: false, error: ERRORS.PAUSED };
+    const step = payload?.step;
+    if (!Number.isInteger(step) || step < 0) return { ok: false, error: ERRORS.BAD_MOVE };
+    const { tutorial } = room;
+    if (!tutorial.learners.has(playerId)) return { ok: false, error: ERRORS.NOT_LEARNER };
+    if (step !== tutorial.step) return { ok: true, code: room.code, advanced: false };
+
+    tutorial.done.add(playerId);
+    return { ok: true, code: room.code, advanced: this.#advanceTutorial(room) };
+  }
+
+  /** Room membership, never a client-supplied code, scopes the shared sound control. */
+  setSound(socketId, payload) {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    const room = member && this.#rooms.get(member.code);
+    if (!room || (member.role !== 'host' && !room.players.has(member.id))) return { ok: false, error: ERRORS.NO_ROOM };
+    if (typeof payload?.muted !== 'boolean' || (payload.initialize !== undefined && payload.initialize !== true)) {
+      return { ok: false, error: 'bad-sound' };
+    }
+    if (payload.initialize && member.role !== 'host') return { ok: false, error: ERRORS.NOT_HOST };
+    const changed = (!payload.initialize || room.soundMuted === null) && room.soundMuted !== payload.muted;
+    if (changed) room.soundMuted = payload.muted;
+    return { ok: true, code: room.code, muted: room.soundMuted, changed };
+  }
+
+  /** Only P1 can change the active match. The authenticated seat chooses its TV. */
+  gameCommandTarget(socketId, event) {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    const room = member && this.#rooms.get(member.code);
+    const player = room?.players.get(member.id);
+    if (member?.role !== 'player' || player?.slot !== 0) return { ok: false, error: 'not-game-leader' };
+    if (!isGameCommand(event, room.sport)) return { ok: false, error: 'bad-game-command' };
+    if (room.phase !== PHASES.GAME || event.gameId !== room.gameId) return { ok: false, error: 'not-playing' };
+    if (room.pausedAt !== null) return { ok: false, error: ERRORS.PAUSED };
+    if (!room.gameOptions) return { ok: false, error: 'game-loading' };
+    if (room.seenCommands.has(event.id)) return { ok: false, error: 'duplicate-command' };
+    if (room.pendingGameCommand) return { ok: false, error: 'game-command-pending' };
+    if (room.sport === 'bowling' && (room.gameState?.phase === 'rolling' || room.pendingRoll)) {
+      return { ok: false, error: 'ball-in-play' };
+    }
+    const humanOpponent = [...room.players.values()].some(seat => seat.slot === 1);
+    if (room.sport === 'tennis' && humanOpponent &&
+        (event.action.startsWith('practice-') || event.action === 'configure' &&
+          ('botDifficulty' in event.settings || 'splitView' in event.settings))) {
+      return { ok: false, error: 'solo-only' };
+    }
+    // Retain IDs for this whole lobby match, including timed-out requests: a
+    // delayed retry must never reset a match twice. Bound memory without eviction.
+    if (room.seenCommands.size >= 1024) return { ok: false, error: 'game-command-limit' };
+    room.seenCommands.add(event.id);
+    if (event.action === 'new-match') { room.inputGeneration++; room.pendingStrokes.clear(); }
+    room.pendingGameCommand = event.id;
+    const command = { id: event.id, gameId: room.gameId, action: event.action };
+    if (event.settings) command.settings = { ...event.settings };
+    if (event.format) command.format = event.format;
+    if (event.stroke) { command.stroke = event.stroke; command.hand = event.hand; }
+    return { ok: true, code: room.code, hostSocketId: this.#members.get(room.hostId)?.socketId, event: command };
+  }
+
+  finishGameCommand(code, id, gameId) {
+    const room = this.#rooms.get(code);
+    if (room && room.gameId === gameId && room.pendingGameCommand === id) room.pendingGameCommand = null;
+  }
+
+  setGameOptions(socketId, payload) {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    const room = member && this.#rooms.get(member.code);
+    if (member?.role !== 'host' || room?.hostId !== member.id) return { ok: false, error: ERRORS.NOT_HOST };
+    if (room.phase !== PHASES.GAME || payload?.gameId !== room.gameId) return { ok: false, error: 'not-playing' };
+    if (!isGameOptions(payload, room.sport)) return { ok: false, error: 'bad-game-options' };
+    const snapshot = { gameId: room.gameId, sport: room.sport };
+    if (room.sport === 'tennis') {
+      snapshot.settings = Object.fromEntries(['assistance', 'botDifficulty', 'autoMove', 'timingAssist', 'splitView', 'format']
+        .map(key => [key, payload.settings[key]]));
+      snapshot.practice = { active: payload.practice.active, stroke: payload.practice.stroke, hand: payload.practice.hand };
+      // Roster, not client data, decides whether solo-only controls are available.
+      snapshot.humanOpponent = [...room.players.values()].some(player => player.slot === 1);
+    }
+    const changed = JSON.stringify(room.gameOptions) !== JSON.stringify(snapshot);
+    room.gameOptions = snapshot;
+    return { ok: true, code: room.code, changed };
+  }
+
+  /** End only the caller's current match. Returning never releases a seat or controller setup. */
+  returnToLobby(socketId, payload, role = 'host') {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    const room = member && this.#rooms.get(member.code);
+    if (role === 'host') {
+      if (member?.role !== 'host' || room?.hostId !== member.id) return { ok: false, error: ERRORS.NOT_HOST };
+    } else if (role !== 'player' || member?.role !== 'player' || room?.players.get(member.id)?.slot !== 0) {
+      return { ok: false, error: 'not-game-leader' };
+    }
+    // A delayed request from an older game must not cancel its replacement.
+    if (![PHASES.COUNTDOWN, PHASES.VOTE, PHASES.TUTORIAL, PHASES.GAME].includes(room.phase) ||
+        typeof payload?.gameId !== 'string' || payload.gameId !== room.gameId) {
+      return { ok: false, error: 'not-playing' };
+    }
+    room.deadline = null;
+    this.#resetReady(room);
+    // Keep genuine reconnect pauses, but a missing setup no longer pauses a lobby.
+    this.#updatePause(room);
+    return { ok: true, code: room.code };
+  }
+
+  /** Shared pause never bypasses reconnect or controller setup requirements. */
+  setPaused(socketId, payload, role = 'host') {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    const room = member && this.#rooms.get(member.code);
+    if (role === 'host') {
+      if (member?.role !== 'host' || room?.hostId !== member.id) return { ok: false, error: ERRORS.NOT_HOST };
+    } else if (role !== 'player' || member?.role !== 'player' || room?.players.get(member.id)?.slot !== 0) {
+      return { ok: false, error: 'not-game-leader' };
+    }
+    if (room.phase !== PHASES.GAME || typeof payload?.gameId !== 'string' || payload.gameId !== room.gameId) {
+      return { ok: false, error: 'not-playing' };
+    }
+    if (typeof payload.paused !== 'boolean') return { ok: false, error: 'bad-pause' };
+    const changed = room.manuallyPaused !== payload.paused;
+    if (changed && payload.paused) {
+      if (room.gameState?.phase === 'complete') return { ok: false, error: 'not-playing' };
+      // Let an already-delivered reset/release finish its handshake before
+      // stopping the TV. This avoids accepting a reset whose reply was cancelled.
+      if (room.pendingGameCommand) return { ok: false, error: 'game-command-pending' };
+      if (room.pendingRoll) return { ok: false, error: 'delivery-pending' };
+    }
+    room.manuallyPaused = payload.paused;
+    this.#updatePause(room);
+    return { ok: true, code: room.code, manuallyPaused: room.manuallyPaused, paused: room.pausedAt !== null, changed };
   }
 
   setSetup(socketId, payload) {
@@ -210,9 +399,42 @@ export class RoomStore {
     }
     if (!isSwing(event)) return { ok: false, error: 'bad-swing' };
     if (room.pausedAt !== null) return { ok: false, error: ERRORS.PAUSED };
-    if (room.phase !== PHASES.TUTORIAL) return { ok: false, error: 'not-playing' };
-    return { ok: true, hostSocketId: this.#members.get(room.hostId)?.socketId,
-      event: { type: 'swing', id: event.id, label: event.label, hand: event.hand, player: player.slot + 1 } };
+    if (room.phase !== PHASES.GAME || event.gameId !== room.gameId || room.gameState?.phase === 'complete') {
+      return { ok: false, error: 'not-playing' };
+    }
+    const now = this.#now();
+    for (const [id, pending] of room.pendingStrokes) {
+      if (now - pending.at > 5000) room.pendingStrokes.delete(id);
+    }
+    if (!room.pendingStrokes.has(event.id)) room.pendingStrokes.set(event.id, { player: player.slot + 1, at: now });
+    if (room.pendingStrokes.size > 128) room.pendingStrokes.delete(room.pendingStrokes.keys().next().value);
+    return { ok: true, code: room.code, inputGeneration: room.inputGeneration, hostSocketId: this.#members.get(room.hostId)?.socketId,
+      event: { type: 'swing', id: event.id, label: event.label, hand: event.hand,
+        ...(event.power === undefined ? {} : { power: event.power }), player: player.slot + 1, gameId: room.gameId } };
+  }
+
+  /** Correlated diagnostics are private, transient feedback for a real recent input. */
+  strokeResultTarget(socketId, event) {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    const room = member && this.#rooms.get(member.code);
+    if (member?.role !== 'host') return { ok: false, error: ERRORS.NOT_HOST };
+    if (!isStrokeResult(event)) return { ok: false, error: 'bad-stroke-result' };
+    if (room.sport !== 'tennis' || room.phase !== PHASES.GAME || event.gameId !== room.gameId) {
+      return { ok: false, error: 'not-playing' };
+    }
+    if (room.pausedAt !== null) return { ok: false, error: ERRORS.PAUSED };
+    const pending = room.pendingStrokes.get(event.id);
+    if (!pending || pending.player !== event.player || this.#now() - pending.at > 5000) {
+      return { ok: false, error: 'unknown-stroke' };
+    }
+    room.pendingStrokes.delete(event.id);
+    const seat = [...room.players.entries()].find(([, player]) => player.slot + 1 === event.player);
+    const target = seat && this.#members.get(seat[0]);
+    if (!target?.socketId) return { ok: false, error: 'disconnected' };
+    return { ok: true, phoneSocketId: target.socketId, event: {
+      id: event.id, gameId: room.gameId, player: event.player, result: event.result, reason: event.reason,
+      ...(event.receivedToContactMs === undefined ? {} : { receivedToContactMs: event.receivedToContactMs }),
+    } };
   }
 
   /** Only the current TV can report contact, and only to that match's live seat. */
@@ -221,7 +443,7 @@ export class RoomStore {
     const room = member && this.#rooms.get(member.code);
     if (member?.role !== 'host' || room?.hostId !== member.id) return { ok: false, error: ERRORS.NOT_HOST };
     if (!isGameHit(event, room.sport)) return { ok: false, error: 'bad-hit' };
-    if (room.phase !== PHASES.TUTORIAL || event.gameId !== room.gameId) {
+    if (room.phase !== PHASES.GAME || event.gameId !== room.gameId) {
       return { ok: false, error: 'not-playing' };
     }
     if (room.pausedAt !== null) return { ok: false, error: ERRORS.PAUSED };
@@ -241,20 +463,29 @@ export class RoomStore {
       event: { id: event.id, gameId: room.gameId, kind: room.sport, player: event.player } };
   }
 
-  /** The TV owns bowling simulation; only its authenticated session can publish turns. */
+  /** The TV owns simulation; only its authenticated session can publish turns. */
   setGameState(socketId, payload) {
     const member = this.#members.get(this.#sockets.get(socketId));
     const room = member && this.#rooms.get(member.code);
     if (member?.role !== 'host') return { ok: false, error: ERRORS.NOT_HOST };
-    if (room.sport !== 'bowling' || room.phase !== PHASES.TUTORIAL || payload?.gameId !== room.gameId) {
+    if (room.phase !== PHASES.GAME || payload?.gameId !== room.gameId) {
       return { ok: false, error: 'not-playing' };
     }
+    if (room.sport === 'tennis') {
+      if (!isTennisState(payload)) return { ok: false, error: 'bad-game-state' };
+      room.gameState = { phase: payload.phase, server: payload.server, winner: payload.winner,
+        ...(payload.practice === undefined ? {} : { practice: payload.practice }),
+        ...(payload.serveAttempt === undefined ? {} : { serveAttempt: payload.serveAttempt }) };
+      return { ok: true, code: room.code };
+    }
+    if (room.sport !== 'bowling') return { ok: false, error: 'not-playing' };
     const { phase, currentPlayer, frame } = payload ?? {};
-    const validPlayer = phase === 'complete' ? currentPlayer === null :
-      [...room.players.values()].some(player => player.slot + 1 === currentPlayer);
-    if (!['ready', 'rolling', 'complete'].includes(phase) || !validPlayer ||
-        !Number.isInteger(frame) || frame < 1 || frame > 10) return { ok: false, error: 'bad-game-state' };
-    room.gameState = { phase, currentPlayer, frame };
+    const roster = new Set([...room.players.values()].map(player => player.slot + 1));
+    if (!isBowlingState(payload) || (phase !== 'complete' && !roster.has(currentPlayer)) ||
+        payload.winners?.some(player => !roster.has(player))) return { ok: false, error: 'bad-game-state' };
+    room.gameState = { phase, currentPlayer, frame,
+      ...(phase === 'complete' && payload.winners !== undefined
+        ? { winners: [...payload.winners], winnerScore: payload.winnerScore } : {}) };
     return { ok: true, code: room.code };
   }
 
@@ -265,8 +496,11 @@ export class RoomStore {
     if (!player || room.sport !== 'bowling') return { ok: false, error: 'not-controller' };
     if (!isRoll(event)) return { ok: false, error: 'bad-roll' };
     if (room.pausedAt !== null) return { ok: false, error: ERRORS.PAUSED };
-    if (room.phase !== PHASES.TUTORIAL) return { ok: false, error: 'not-playing' };
+    if (room.phase !== PHASES.GAME) return { ok: false, error: 'not-playing' };
     if (room.seenRolls.has(event.id)) return { ok: false, error: 'duplicate-roll' };
+    // A reset and a release must never cross in flight. The game command owns
+    // the lane until its acknowledgement (or timeout) releases this lock.
+    if (room.pendingGameCommand) return { ok: false, error: 'game-command-pending' };
     if (!room.gameState) return { ok: false, error: 'game-loading' };
     if (room.gameState.phase !== 'ready' || room.pendingRoll) return { ok: false, error: 'not-ready-to-roll' };
     if (room.gameState.currentPlayer !== player.slot + 1) return { ok: false, error: 'not-your-turn' };
@@ -278,22 +512,29 @@ export class RoomStore {
         player: player.slot + 1, gameId: room.gameId } };
   }
 
-  finishRollDelivery(code, id) {
+  finishRollDelivery(code, id, gameId) {
     const room = this.#rooms.get(code);
-    if (room?.pendingRoll === id) room.pendingRoll = null;
+    if (room && room.gameId === gameId && room.pendingRoll === id) room.pendingRoll = null;
   }
 
   /**
-   * Moves on to the tutorial once the countdown's deadline has passed.
-   * Returns null and changes nothing otherwise, so a stale or early timer is
-   * harmless.
+   * Opens the tutorial vote once the countdown's deadline has passed, or starts
+   * the game for a sport without a tutorial. Returns null and changes nothing
+   * otherwise, so a stale or early tick is harmless.
    */
   finishCountdown(code) {
     const room = this.#rooms.get(code);
     if (room?.phase !== PHASES.COUNTDOWN || room.pausedAt !== null || this.#now() < room.deadline) return null;
-    room.phase = PHASES.TUTORIAL;
-    room.deadline = null;
-    return { code };
+    this.#clearReady(room);
+    if (!hasTutorial(room.sport)) {
+      room.phase = PHASES.GAME;
+      room.deadline = null;
+      return { code };
+    }
+    room.phase = PHASES.VOTE;
+    room.deadline = this.#now() + VOTE_MS;
+    room.vote = { picks: new Map() };
+    return { code, msLeft: VOTE_MS };
   }
 
   /** What the TV and phones render. Null when the room doesn't exist. */
@@ -310,9 +551,10 @@ export class RoomStore {
       .map(member => ({ name: member.role === 'host' ? 'TV' : room.players.get(member.id)?.name,
         msLeft: Math.max(0, this.#graceMs - (this.#now() - member.disconnectedAt)) }));
     return { code: room.code, sport: room.sport, phase: room.phase, players, countdown,
-      paused: room.pausedAt !== null, reconnecting,
+      vote: this.#voteView(room), tutorial: this.#tutorialView(room),
+      paused: room.pausedAt !== null, manuallyPaused: room.manuallyPaused, reconnecting,
       setupPending: players.filter(player => isController(room.sport, player.slot) && !player.setup).map(player => player.name),
-      gameId: room.gameId, gameState: room.gameState };
+      gameId: room.gameId, gameState: room.gameState, soundMuted: room.soundMuted, gameOptions: room.gameOptions };
   }
 
   /** The code this id is hosting, or null. */
@@ -350,10 +592,15 @@ export class RoomStore {
     const leavingSlot = room.players.get(id)?.slot;
     room.players.delete(id);
     this.#updatePause(room);
-    // A player leaving ends this match; temporary drops keep their reserved seat.
-    if (room.phase === PHASES.TUTORIAL && isController(room.sport, leavingSlot)) {
+    // A controller leaving ends this match, the vote and tutorial before it
+    // included; temporary drops keep their reserved seat.
+    if ((room.phase === PHASES.GAME || PREGAME.has(room.phase)) && isController(room.sport, leavingSlot)) {
       room.phase = PHASES.LOBBY;
       this.#clearReady(room);
+    } else if (room.phase === PHASES.TUTORIAL && room.tutorial.learners.delete(id)) {
+      // A watcher has no seat in the game; the step may have waited only on them.
+      room.tutorial.done.delete(id);
+      this.#advanceTutorial(room);
     }
     // Any seat change before play cancels the countdown and asks the remaining
     // players to confirm again. Tennis needs P1 before a new match can start.
@@ -393,9 +640,9 @@ export class RoomStore {
   }
 
   #updatePause(room) {
-    const missing = [...this.#members.values()].some(member => member.code === room.code && member.disconnectedAt !== null) ||
-      (room.phase === PHASES.TUTORIAL && [...room.players.values()].some(player => isController(room.sport, player.slot) && !player.setup));
-    if (missing && room.pausedAt === null) room.pausedAt = this.#now();
+    const missing = room.manuallyPaused || [...this.#members.values()].some(member => member.code === room.code && member.disconnectedAt !== null) ||
+      (NEEDS_SETUP.has(room.phase) && [...room.players.values()].some(player => isController(room.sport, player.slot) && !player.setup));
+    if (missing && room.pausedAt === null) { room.pausedAt = this.#now(); room.inputGeneration++; room.pendingStrokes.clear(); }
     else if (!missing && room.pausedAt !== null) {
       if (room.deadline !== null) room.deadline += this.#now() - room.pausedAt;
       room.pausedAt = null;
@@ -451,9 +698,13 @@ export class RoomStore {
     return [...this.#rooms.values()].filter(room => room.phase === PHASES.COUNTDOWN).map(room => room.code);
   }
 
+  get voteCodes() {
+    return [...this.#rooms.values()].filter(room => room.phase === PHASES.VOTE).map(room => room.code);
+  }
+
   /** Rooms whose snapshots need a fresh reconnect countdown. */
   get reconnectingCodes() {
-    return [...this.#rooms.values()].filter(room => room.pausedAt !== null).map(room => room.code);
+    return [...new Set([...this.#members.values()].filter(member => member.disconnectedAt !== null).map(member => member.code))];
   }
 
   #clearReady(room) {
@@ -461,11 +712,75 @@ export class RoomStore {
   }
 
   #resetReady(room) {
+    room.inputGeneration++;
     this.#clearReady(room);
+    room.manuallyPaused = false;
     room.gameId = null; room.gameState = null; room.pendingRoll = null; room.seenRolls.clear();
     room.seenHits.clear(); room.lastHitAt.clear();
+    room.pendingStrokes.clear();
+    room.gameOptions = null; room.seenCommands.clear(); room.pendingGameCommand = null;
+    room.vote = null; room.tutorial = null;
     room.phase = room.players.size >= READY_AT_PLAYERS &&
       (room.sport === 'bowling' || [...room.players.values()].some(player => player.slot === 0)) ? PHASES.READY : PHASES.LOBBY;
+  }
+
+  /** Any Yes means the tutorial. Picks are frozen by slot for the reveal. */
+  #resolveVote(room) {
+    const { picks } = room.vote;
+    const frozen = [...room.players.entries()]
+      .map(([id, { slot }]) => {
+        if (!picks.has(id)) return { slot, pick: PICKS.NONE };
+        return { slot, pick: picks.get(id) ? PICKS.YES : PICKS.NO };
+      })
+      .sort((a, b) => a.slot - b.slot);
+    const learners = new Set([...picks.keys()].filter((id) => picks.get(id) && room.players.has(id)));
+    room.vote = { picks: frozen };
+    room.deadline = null;
+    if (learners.size === 0) {
+      room.phase = PHASES.GAME;
+      return;
+    }
+    room.phase = PHASES.TUTORIAL;
+    room.tutorial = { step: 0, learners, done: new Set() };
+  }
+
+  /**
+   * Starts the next step once every learner has done this one, and the game
+   * after the last step or once no learners are left. Returns whether
+   * anything moved.
+   */
+  #advanceTutorial(room) {
+    const { tutorial } = room;
+    const waiting = [...tutorial.learners].some((id) => !tutorial.done.has(id));
+    if (waiting && tutorial.learners.size > 0) return false;
+    tutorial.step += 1;
+    tutorial.done.clear();
+    if (tutorial.learners.size === 0 || tutorial.step >= TUTORIAL_MOVES[room.sport].length) {
+      room.phase = PHASES.GAME;
+      room.tutorial = null;
+    }
+    return true;
+  }
+
+  #tutorialView(room) {
+    if (room.phase !== PHASES.TUTORIAL || !room.tutorial) return null;
+    const slots = (ids) => [...ids].map((id) => room.players.get(id)?.slot)
+      .filter((slot) => slot !== undefined).sort((a, b) => a - b);
+    return {
+      step: room.tutorial.step,
+      moves: [...TUTORIAL_MOVES[room.sport]],
+      learners: slots(room.tutorial.learners),
+      done: slots(room.tutorial.done),
+    };
+  }
+
+  /** While the vote is open, only who has voted. Never what they picked. */
+  #voteView(room) {
+    if (!room.vote) return null;
+    if (room.phase !== PHASES.VOTE) return { picks: room.vote.picks.map((entry) => ({ ...entry })) };
+    const voted = [...room.vote.picks.keys()].map((id) => room.players.get(id)?.slot)
+      .filter((slot) => slot !== undefined).sort((a, b) => a - b);
+    return { msLeft: Math.max(0, room.deadline - (room.pausedAt ?? this.#now())), voted };
   }
 
   /** Lowest open seat, so a seat freed by a leaver is the next one filled. */

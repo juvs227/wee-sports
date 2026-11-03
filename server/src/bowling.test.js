@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { io } from 'socket.io-client';
-import { EVENTS, PROTOCOL_VERSION, PHASES, isRoll } from '@wee/shared/protocol.js';
+import { EVENTS, PROTOCOL_VERSION, PHASES, isRoll, isBowlingState } from '@wee/shared/protocol.js';
 import { createGameServer } from './app.js';
 import { RoomStore } from './RoomStore.js';
 
@@ -18,7 +18,6 @@ function readyBowling(count = 4) {
       assert.equal(store.setSetup(`p${index + 1}`, { setup: index % 2 ? 'motion' : 'buttons' }).ok, true);
       assert.equal(store.setReady(`p${index + 1}`, { ready: true }).ok, true);
     }
-    assert.equal(store.start('tv').ok, true);
     clock.now += 5000;
     assert.deepEqual(store.finishCountdown(room.code), { code: room.code });
     return store.lobby(room.code).gameId;
@@ -34,7 +33,7 @@ test('bowling supports setup for all four seats and requires each controller bef
   }
   const gameId = start();
   assert.equal(typeof gameId, 'string');
-  assert.equal(store.lobby(room.code).phase, PHASES.TUTORIAL);
+  assert.equal(store.lobby(room.code).phase, PHASES.GAME);
   assert.deepEqual(store.lobby(room.code).setupPending, []);
   assert.equal(store.setSetup('p4', { setup: null }).ok, true);
   assert.equal(store.lobby(room.code).paused, true);
@@ -65,6 +64,52 @@ test('only the current authenticated TV can publish valid bowling turns for this
   assert.equal(store.setGameState('tv-new', state).ok, true);
 });
 
+test('bowling result validation accepts ties and legacy completion, rejects incomplete or active results', () => {
+  const complete = { phase: 'complete', currentPlayer: null, frame: 10 };
+  assert.equal(isBowlingState(complete), true);
+  assert.equal(isBowlingState({ ...complete, winners: [1, 2, 3, 4], winnerScore: 0 }), true);
+  assert.equal(isBowlingState({ ...complete, winners: [1], winnerScore: 300 }), true);
+  for (const change of [{ winners: [] }, { winners: [1] }, { winnerScore: 100 },
+    { winners: [1, 1], winnerScore: 100 }, { winners: [0], winnerScore: 100 },
+    { winners: [5], winnerScore: 100 }, { winners: ['1'], winnerScore: 100 },
+    { winners: [1.5], winnerScore: 100 }, { winners: null, winnerScore: 100 },
+    { winners: [1], winnerScore: -1 }, { winners: [1], winnerScore: 301 },
+    { winners: [1], winnerScore: 1.5 }, { winners: [1], winnerScore: NaN },
+    { winners: [1], winnerScore: '100' }, { frame: 9 }]) {
+    assert.equal(isBowlingState({ ...complete, ...change }), false, JSON.stringify(change));
+  }
+  for (const phase of ['ready', 'rolling']) {
+    assert.equal(isBowlingState({ phase, currentPlayer: 1, frame: 1 }), true);
+    assert.equal(isBowlingState({ phase, currentPlayer: 1, frame: 1, winners: [1], winnerScore: 100 }), false);
+  }
+});
+
+test('only the current TV publishes roster-based winners and a replay removes old results', () => {
+  const { store, room, start } = readyBowling(2);
+  const gameId = start();
+  const result = { gameId, phase: 'complete', currentPlayer: null, frame: 10,
+    winners: [1, 2], winnerScore: 145, names: ['Untrusted winner'], arbitrary: true };
+  assert.equal(store.setGameState('p1', result).error, 'not-host');
+  assert.equal(store.setGameState('unknown', result).error, 'not-host');
+  assert.equal(store.setGameState('tv', { ...result, gameId: 'old-match' }).error, 'not-playing');
+  assert.equal(store.setGameState('tv', { ...result, winners: [3] }).error, 'bad-game-state');
+  assert.equal(store.lobby(room.code).gameState, null);
+  assert.equal(store.setGameState('tv', result).ok, true);
+  assert.deepEqual(store.lobby(room.code).gameState, {
+    phase: 'complete', currentPlayer: null, frame: 10, winners: [1, 2], winnerScore: 145,
+  });
+  result.winners.push(4);
+  assert.deepEqual(store.lobby(room.code).gameState.winners, [1, 2], 'snapshot owns a copy of winner seats');
+  assert.equal(store.setGameState('tv', { ...result, phase: 'ready', currentPlayer: 1, frame: 1 }).error, 'bad-game-state');
+  assert.deepEqual(store.lobby(room.code).gameState.winners, [1, 2], 'invalid updates preserve the previous result');
+  assert.equal(store.resume('tv-new', { v, code: room.code, role: 'host', token: room.token }).ok, true);
+  assert.equal(store.setGameState('tv', { ...result, winners: [1] }).error, 'not-host');
+  assert.equal(store.setGameState('tv-new', { gameId, phase: 'ready', currentPlayer: 1, frame: 1 }).ok, true);
+  assert.deepEqual(store.lobby(room.code).gameState, { phase: 'ready', currentPlayer: 1, frame: 1 });
+  assert.equal(store.setGameState('tv-new', { gameId, phase: 'complete', currentPlayer: null, frame: 10 }).ok, true);
+  assert.deepEqual(store.lobby(room.code).gameState, { phase: 'complete', currentPlayer: null, frame: 10 });
+});
+
 test('roll validation rejects malformed, nonfinite and out-of-range values', () => {
   const { store, start } = readyBowling(1);
   const gameId = start();
@@ -93,9 +138,9 @@ test('bowling stamps authenticated seat and game, locks pending delivery and rej
   assert.equal(delivered.hostSocketId, 'tv');
   assert.deepEqual(delivered.event, { ...roll('own-seat'), player: 4, gameId });
   assert.equal(store.rollTarget('p4', roll('next')).error, 'not-ready-to-roll');
-  store.finishRollDelivery(room.code, 'unrelated-id');
+  store.finishRollDelivery(room.code, 'unrelated-id', gameId);
   assert.equal(store.rollTarget('p4', roll('next')).error, 'not-ready-to-roll');
-  store.finishRollDelivery(room.code, 'own-seat');
+  store.finishRollDelivery(room.code, 'own-seat', gameId);
   assert.equal(store.rollTarget('p4', roll('own-seat')).error, 'duplicate-roll');
   store.setGameState('tv', { gameId, phase: 'rolling', currentPlayer: 4, frame: 1 });
   assert.equal(store.rollTarget('p4', roll('next')).error, 'not-ready-to-roll');
@@ -142,7 +187,6 @@ async function socketFixture(t) {
       assert.equal((await send(phone, EVENTS.PLAYER_SETUP, { setup: 'buttons' })).ok, true);
       assert.equal((await send(phone, EVENTS.PLAYER_READY, { ready: true })).ok, true);
     }
-    assert.equal((await send(host, EVENTS.HOST_START)).ok, true);
     clock.now += 5000; store.finishCountdown(created.code);
     const gameId = store.lobby(created.code).gameId;
     const state = (currentPlayer = 1, phase = 'ready') => send(host, EVENTS.HOST_GAME_STATE, { gameId, phase, currentPlayer, frame: 1 });

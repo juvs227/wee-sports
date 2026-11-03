@@ -1,4 +1,5 @@
 import { WebSocket, WebSocketServer } from 'ws';
+import { isSwing } from '../shared/protocol.js';
 
 export function attachRelay(server) {
   const relay = new WebSocketServer({ noServer: true, maxPayload: 4096 });
@@ -25,13 +26,11 @@ export function attachRelay(server) {
     client.on('message', (data, binary) => {
       try {
         const event = JSON.parse(data.toString());
-        if (binary || client.role !== 'phone' || event.type !== 'swing' ||
-            !['Forehand', 'Backhand'].includes(event.label) ||
-            !['Right', 'Left'].includes(event.hand) ||
-            typeof event.id !== 'string' || event.id.length > 100) {
+        if (binary || client.role !== 'phone' || !isSwing(event)) {
           throw new Error('Invalid swing message');
         }
-        const message = JSON.stringify({ type: 'swing', id: event.id, label: event.label, hand: event.hand });
+        const message = JSON.stringify({ type: 'swing', id: event.id, label: event.label, hand: event.hand,
+          ...(event.power === undefined ? {} : { power: event.power }) });
         let receivers = 0;
         for (const peer of relay.clients) {
           if (peer.role === 'game' && peer.room === client.room && peer.readyState === WebSocket.OPEN) {

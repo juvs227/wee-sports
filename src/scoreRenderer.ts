@@ -1,4 +1,4 @@
-import type { Score } from './World/scoreSystem';
+import type { Score } from './Tennis/scoreSystem';
 
 export type TennisScore = 0 | 15 | 30 | 40 | "Adv" | "Win";
 

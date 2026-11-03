@@ -1,32 +1,118 @@
-/** The lobby session and game stay mounted when changing view or reconnecting. */
-import { sportName } from '../lib/sports.js';
-import { PrototypeFrame } from './PrototypeFrame.jsx';
+/**
+ * The TV during the tutorial, one move at a time. Read from across a room, so
+ * everything is big.
+ *
+ * The server owns the steps. A step ends when every player who voted Yes has
+ * done its move on their phone; the others watch along. Nobody touches the TV.
+ *
+ * Seat colors (--p1..--p4) are identity only. Progress never uses color: it
+ * is the border style (dashed while waiting, solid once done), an icon, and a
+ * word.
+ */
 
-export function TvTutorial({ lobby, paused, onClose, error, immersive = true, fullscreen = false, onToggleView }) {
-  const bowling = lobby.sport === 'bowling';
+import { sportName } from '../lib/sports.js';
+import { GRIP_TIP, tutorialMove } from '../lib/tutorials.js';
+import { CheckIcon } from './icons.jsx';
+import { MoveDemo } from './MoveDemo.jsx';
+
+const CARD = {
+  doing: { label: 'Your turn', Icon: null },
+  done: { label: 'Done', Icon: CheckIcon },
+  watching: { label: 'Watching', Icon: null },
+};
+
+export function TvTutorial({ lobby }) {
+  const { step, moves, learners, done } = lobby.tutorial;
+  const move = tutorialMove(lobby.sport, moves[step]);
+
+  const cards = lobby.players.map(({ slot, name }) => {
+    let state = 'watching';
+    if (learners.includes(slot)) state = done.includes(slot) ? 'done' : 'doing';
+    return { slot, name, state };
+  });
+  const waitingOn = cards.filter((card) => card.state === 'doing');
+
+  const status =
+    waitingOn.length > 0
+      ? `Step ${step + 1} of ${moves.length}: ${move.name}. Waiting for ${waitingOn
+          .map((card) => card.name)
+          .join(', ')}.`
+      : `Step ${step + 1} of ${moves.length}: ${move.name}. Everyone did it!`;
+
   return (
-    <main className={`game-session${immersive ? ' game-session--immersive' : ''}`}>
-      <header className="game-session__bar">
-        <div className="game-session__identity"><span className="game-session__brand">wee.</span>
-          <h1>{sportName(lobby.sport)}</h1><span className="game-session__room">{lobby.code}</span></div>
-        <div className="game-session__actions">
-          <span className="game-session__mode">{bowling ? `${lobby.players.length} ${lobby.players.length === 1 ? 'player' : 'players'} · 10 frames` : lobby.players.some(player => player.slot === 1) ? '2 players · head to head' : 'Solo · vs bot'}</span>
-          <details className="game-session__menu">
-            <summary>Game options</summary>
-            <div className="game-session__menu-panel">
-              <p>{bowling ? 'Hold your phone securely. When it’s your turn, make an underhand swing. Watch your release on the lane.' : 'P1 is blue. P2 is red. Swing to serve, then swing as the ball approaches your side.'}</p>
-              <button type="button" onClick={onClose}>Close lobby</button>
-            </div>
-          </details>
-          <button type="button" className="game-session__view" onClick={onToggleView}>
-            {immersive ? fullscreen ? 'Exit full screen' : 'Windowed view' : 'Full screen'}
-          </button>
+    <main className="tutorial">
+      <header className="tutorial__head">
+        <div className="tutorial__intro">
+          <p className="tutorial__eyebrow">
+            {sportName(lobby.sport)} tutorial · Step {step + 1} of {moves.length}
+          </p>
+          {/* Keyed by step, so each new move gets its own entrance. */}
+          <h1 key={step} className="tutorial__title">
+            {move.name}
+          </h1>
+          <p className="tutorial__cue">{move.cue}</p>
         </div>
+
+        <ol className="tutorial__steps" aria-label="Tutorial steps">
+          {moves.map((id, index) => {
+            let state = 'next';
+            if (index < step) state = 'done';
+            else if (index === step) state = 'current';
+            return (
+              <li
+                key={id}
+                className="tutorial-step"
+                data-state={state}
+                aria-current={state === 'current' ? 'step' : undefined}
+              >
+                {state === 'done' ? <CheckIcon className="tutorial-step__icon" /> : null}
+                {tutorialMove(lobby.sport, id).name}
+              </li>
+            );
+          })}
+        </ol>
       </header>
-      {error ? <p className="game-session__error" role="alert">{error}</p> : null}
-      <PrototypeFrame code={lobby.code} players={lobby.players} paused={paused} sport={lobby.sport} gameId={lobby.gameId} gameState={lobby.gameState}
-        pauseMessage={lobby.reconnecting?.length ? `Waiting for ${lobby.reconnecting.map(member => member.name).join(', ')} to reconnect.`
-          : lobby.setupPending?.length ? `Waiting for ${lobby.setupPending.join(', ')} to finish controller setup.` : undefined} />
+
+      <section key={step} className="tutorial__body">
+        <div className="tutorial__demo">
+          <MoveDemo move={moves[step]} label={`How to do a ${move.name.toLowerCase()}: ${move.cue}`} />
+        </div>
+        <div className="tutorial__text">
+          <ol className="tutorial__how">
+            {move.how.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ol>
+          <p className="tutorial__tip">{GRIP_TIP}</p>
+        </div>
+      </section>
+
+      <ul className="tutorial__players">
+        {cards.map(({ slot, name, state }) => {
+          const { label, Icon } = CARD[state];
+          return (
+            <li
+              key={slot}
+              className="tutorial-card"
+              data-state={state}
+              style={{ '--player': `var(--p${slot + 1})` }}
+            >
+              <span className="seat__badge" data-slot={slot}>
+                P{slot + 1}
+              </span>
+              <span className="tutorial-card__name">{name}</span>
+              <span className="tutorial-card__status">
+                {Icon ? <Icon className="tutorial-card__icon" /> : null}
+                {label}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+
+      <p className="visually-hidden" role="status" aria-live="polite">
+        {status}
+      </p>
     </main>
   );
 }

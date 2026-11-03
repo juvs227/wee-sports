@@ -7,6 +7,7 @@ dist/
 *.log
 stress-results/
 build/
+*.tsbuildinfo
 .phone-build/
 /node_modules
 /node_modules/

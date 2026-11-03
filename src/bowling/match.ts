@@ -106,12 +106,13 @@ export class BowlingMatch {
     const pins = this.standing.length - remaining.length;
     const frame = this.frames[this.turn][this.frame];
     const before = [...frame];
+    const spare = remaining.length === 0 && ((before.length === 1 && before[0] !== 10) ||
+      (this.frame === 9 && before.length === 2 && before[0] === 10 && before[1] !== 10));
     const result = {
       player: this.participants[this.turn].player, pins,
-      strike: pins === 10 && (before.length === 0 ||
-        (this.frame === 9 && before[0] === 10 && (before.length === 1 || before[1] === 10))),
-      spare: remaining.length === 0 && ((before.length === 1 && before[0] !== 10) ||
-        (this.frame === 9 && before.length === 2 && before[0] === 10 && before[1] !== 10)),
+      // A fresh tenth-frame fill rack can earn X too. A gutter then ten remains /.
+      strike: pins === 10 && !spare,
+      spare,
     };
     frame.push(pins);
     this.standing = [...remaining];

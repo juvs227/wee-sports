@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { io } from 'socket.io-client';
-import { EVENTS, PROTOCOL_VERSION, isTennisHit, isGameHit } from '@wee/shared/protocol.js';
+import { EVENTS, PROTOCOL_VERSION, VOTE_SECONDS, isTennisHit, isGameHit } from '@wee/shared/protocol.js';
 import { RoomStore } from './RoomStore.js';
 import { createGameServer } from './app.js';
 
@@ -17,9 +17,10 @@ function game(sport = 'tennis') {
   const phone = store.join('phone', { v, code: host.code, name: 'Player' });
   store.setSetup('phone', { setup: 'motion' });
   store.setReady('phone', { ready: true });
-  store.start('tv');
   now = 5000;
   store.finishCountdown(host.code);
+  now += VOTE_SECONDS * 1000;
+  store.expireVote(host.code);
   const hit = { id: 'contact-one', gameId: store.lobby(host.code).gameId, player: 1 };
   return { store, host, phone, hit, advance: milliseconds => { now += milliseconds; } };
 }
@@ -110,8 +111,8 @@ for (const sport of ['tennis', 'bowling']) test(`${sport}: real socket feedback 
   const seat = await send(phone, EVENTS.PLAYER_JOIN, { v, code: room.code, name: 'Player' });
   await send(phone, EVENTS.PLAYER_SETUP, { setup: 'motion' });
   await send(phone, EVENTS.PLAYER_READY, { ready: true });
-  await send(host, EVENTS.HOST_START);
   now = 5000; store.finishCountdown(room.code);
+  now += VOTE_SECONDS * 1000; store.expireVote(room.code);
   const hit = { id: 'actual-contact', gameId: store.lobby(room.code).gameId, player: 1 };
   if (sport === 'bowling') await send(host, EVENTS.HOST_GAME_STATE,
     { gameId: hit.gameId, phase: 'rolling', frame: 1, currentPlayer: 1 });

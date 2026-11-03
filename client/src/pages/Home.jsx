@@ -5,6 +5,7 @@ import { BallMark } from '../components/icons.jsx';
 import { HowItWorks } from '../components/HowItWorks.jsx';
 import { JoinBox } from '../components/JoinBox.jsx';
 import { CreateTile, SportTile } from '../components/SportTile.jsx';
+import { ThemeToggle } from '../components/ThemeToggle.jsx';
 import { errorText } from '../lib/errors.js';
 import { request, useConnection } from '../lib/socket.js';
 import { saveToken } from '../lib/reconnect.js';
@@ -54,9 +55,10 @@ export default function Home() {
             <span className="wordmark__wee">Wee</span> Sports
           </span>
         </a>
-        <a className="topbar__link" href="#how">
-          How it works
-        </a>
+        <div className="topbar__actions">
+          <a className="topbar__link" href="#how">How it works</a>
+          <ThemeToggle />
+        </div>
       </header>
 
       <main className="page">

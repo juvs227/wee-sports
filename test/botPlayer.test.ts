@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import { strict as assert } from 'node:assert';
-import { chooseBotStroke, type BotStroke } from '../src/World/botPlayer.ts';
+import { chooseBotStroke, type BotStroke } from '../src/Tennis/botPlayer.ts';
 
 const position = { x: 0, y: 0, z: -10 };
 const forehand: BotStroke = { backhand: false, duration: 0.3, offset: { x: 0.5, y: 1, z: 0 } };

@@ -11,18 +11,18 @@ import { PHASES, isController } from '@wee/shared/protocol.js';
 import { CheckIcon } from './icons.jsx';
 
 /**
- * In 'all-ready' the server has cleared the flags, but everyone was ready to
- * get there, so every card is drawn as ready. The lobby's Play button takes it
- * from here.
+ * Shown through the ready check and the countdown that follows it. Players
+ * stay ready during the countdown, and anyone who backs out cancels it, so
+ * the cards keep showing who is ready.
  */
 export function TvReady({ lobby }) {
-  const checking = lobby.phase === PHASES.READY;
-  const players = lobby.players.map((player) => ({ ...player, ready: !checking || player.ready }));
+  const counting = lobby.phase === PHASES.COUNTDOWN;
+  const { players } = lobby;
   const readyCount = players.filter((player) => player.ready).length;
-  const title = checking ? 'Press Ready on your phone' : 'Everyone’s ready! Press Play';
+  const title = counting ? 'Everyone’s ready!' : 'Press Ready on your phone';
 
   return (
-    <section className="ready" data-all-ready={!checking}>
+    <section className="ready" data-counting={counting}>
       <div className="ready__head">
         <h2 className="ready__title">{title}</h2>
         <p className="ready__count" aria-hidden="true">
@@ -54,7 +54,7 @@ export function TvReady({ lobby }) {
       </ul>
 
       <p className="visually-hidden" role="status" aria-live="polite">
-        {checking ? `${readyCount} of ${lobby.players.length} players ready.` : title}
+        {counting ? title : `${readyCount} of ${lobby.players.length} players ready.`}
       </p>
     </section>
   );

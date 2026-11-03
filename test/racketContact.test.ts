@@ -3,8 +3,8 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { contactWindowCrossed, sweptRacketContact, RacketHitbox } from '../src/World/components/racketContact.ts';
-import { createBall, hitBall, serveBall, updateBallMotion, type BallUserData } from '../src/World/components/ball.ts';
+import { contactWindowCrossed, sweptRacketContact, RacketHitbox } from '../src/Tennis/components/racketContact.ts';
+import { createBall, hitBall, serveBall, updateBallMotion, type BallUserData } from '../src/Tennis/components/ball.ts';
 
 const box = new THREE.Box3(new THREE.Vector3(-0.4, -0.3, -0.04), new THREE.Vector3(0.4, 0.3, 0.04));
 const identity = new THREE.Matrix4();
@@ -26,6 +26,33 @@ test('moving racket can cross a stationary ball, including scaled racket poses',
         new THREE.Vector3(0, 0, 0.05), new THREE.Vector3(0, 0, 0.05), 0.1), true);
     assert.equal(sweptRacketContact(box, small, small,
         new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 1), 0.1), false);
+});
+
+test('successive rotated and scaled sweeps share no previous hit state and never mutate their inputs', () => {
+    const originalBox = box.clone();
+    for (let shot = 0; shot < 120; shot++) {
+        const scale = .1 + (shot % 7) / 5;
+        const rotation = new THREE.Quaternion().setFromEuler(new THREE.Euler(shot * .17, shot * .09, -.2));
+        const previous = new THREE.Matrix4().compose(new THREE.Vector3(shot % 4, .4, -3), rotation,
+            new THREE.Vector3(scale, scale * .8, scale * 1.2));
+        const current = new THREE.Matrix4().compose(new THREE.Vector3(shot % 4 + .2, .5, -2.8), rotation,
+            new THREE.Vector3(scale, scale * .8, scale * 1.2));
+        const previousValues = previous.toArray(), currentValues = current.toArray();
+        for (const [x, expected] of [[0, true], [2, false]] as const) {
+            const from = new THREE.Vector3(x, 0, -2).applyMatrix4(previous);
+            const to = new THREE.Vector3(x, 0, 2).applyMatrix4(current);
+            const fromValues = from.toArray(), toValues = to.toArray();
+            assert.equal(sweptRacketContact(box, previous, current, from, to, .01), expected);
+            assert.deepEqual(from.toArray(), fromValues);
+            assert.deepEqual(to.toArray(), toValues);
+        }
+        assert.deepEqual(previous.toArray(), previousValues);
+        assert.deepEqual(current.toArray(), currentValues);
+        assert.deepEqual(box, originalBox);
+        // A singular pose following a hit must not reuse the previous sweep.
+        assert.equal(sweptRacketContact(box, previous, new THREE.Matrix4().makeScale(0, 0, 0),
+            new THREE.Vector3(), new THREE.Vector3(), .1), false);
+    }
 });
 
 test('contact window excludes wind-up and recovery, and catches a crossed boundary', () => {

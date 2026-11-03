@@ -24,6 +24,15 @@ function replay(samples, hand, options = {}) {
   return { events, stream };
 }
 const actions = events => events.filter(event => event.label !== 'Unknown');
+// Detection lag after peak in the original base-game fast mode (ed0b85e).
+// These are offline recording measurements, not network/render latency.
+const previousFastLag = {
+  'two-forehands-one-backhand': [133, 150, 134],
+  'four-backhands': [100, 84, 117, 115],
+  'left-mixed': [184, 117, 183, 113],
+  'left-four-backhands-new': [117, 200, 84, 117],
+  'left-four-forehands': [183, 251, 184, 183],
+};
 for (const [name, hand, expected] of cases) {
   test(`team recording keeps every stroke, label and peak with return suppression: ${name}`, () => {
     const data = JSON.parse(readFileSync(new URL(`./fixtures/team-motion/${name}.json`, import.meta.url)));
@@ -38,6 +47,7 @@ for (const [name, hand, expected] of cases) {
       if (fast) {
         assert.ok(actual.every(event => event.fast));
         assert.ok(actual.every((event, index) => event.endMs < complete[index].endMs));
+        assert.ok(actual.every((event, index) => event.endMs - event.peakTimeMs < previousFastLag[name][index]));
       }
       assert.equal(actions(stream.analyze(true)).length, 0, 'final flush cannot deliver a latched stroke twice');
       assert.deepEqual(stream.analyze(true), []);
