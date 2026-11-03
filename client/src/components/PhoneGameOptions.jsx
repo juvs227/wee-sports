@@ -33,6 +33,11 @@ export function PhoneGameOptions({ lobby, slot, disabled }) {
   const locked = disabled || lobby.paused || !playing || !available || slot !== 0 || busy;
   const active = playing || lobby.phase === PHASES.COUNTDOWN;
   const returnLocked = disabled || !active || !lobby.gameId || slot !== 0 || busy;
+  const pauseLocked = disabled || !playing || !lobby.gameId || slot !== 0 || busy || (completed && !lobby.manuallyPaused);
+  // Another controller or the TV may change pause after this action succeeds.
+  // Keep errors, but only show a pause acknowledgement for its current state.
+  const statusMessage = typeof message === 'string' ? message :
+    message.manuallyPaused === Boolean(lobby.manuallyPaused) && message.paused === Boolean(lobby.paused) ? message.text : '';
   useEffect(() => {
     setMessage(''); setConfirmRestart(false); setConfirmReturn(false);
     setResultMode(false);
@@ -72,6 +77,17 @@ export function PhoneGameOptions({ lobby, slot, disabled }) {
     if (result?.ok) { setConfirmReturn(false); dialog.current?.close(); }
     else setMessage(errorText(result?.error));
   }
+  async function togglePause() {
+    if (pauseLocked || pending.current) return;
+    const gameId = lobby.gameId;
+    pending.current = true; setBusy(true); setMessage('');
+    const result = await request(EVENTS.PLAYER_PAUSE, { gameId, paused: !lobby.manuallyPaused });
+    pending.current = false; setBusy(false);
+    if (currentGame.current !== gameId) return;
+    setMessage(result?.ok ? { manuallyPaused: Boolean(result.manuallyPaused), paused: Boolean(result.paused),
+      text: result.manuallyPaused ? 'Game paused.' : result.paused
+        ? 'Still waiting for everyone to reconnect and finish setup.' : 'Game resumed.' } : errorText(result?.error));
+  }
   const configure = (name, value) => command('configure', { settings: { [name]: value } });
   return <>
     <button type="button" className="phone-options-toggle" aria-label="Game options" aria-haspopup="dialog"
@@ -91,17 +107,22 @@ export function PhoneGameOptions({ lobby, slot, disabled }) {
           {winnerNames.length > 1 ? <p>{winnerNames.join(' & ')}</p> : null}
           {!tennis && Number.isInteger(lobby.gameState?.winnerScore) ? <p className="phone-match-result__score">{lobby.gameState.winnerScore}<span>points</span></p> : null}
           <p>{slot === 0 ? 'Another round?' : 'Player 1 can start the next game.'}</p>
-          {lobby.paused || disabled ? <p role="status">Reconnect everyone to play again.</p> : null}
+          {lobby.paused || disabled ? <p role="status">{lobby.manuallyPaused ? 'Resume the game to play again.' : 'Reconnect everyone to play again.'}</p> : null}
           {slot === 0 ? <button type="button" className="btn btn--primary" disabled={locked}
             onClick={() => command('new-match', tennis ? { format: settings?.format ?? 'full' } : {})}>{busy ? 'Starting…' : 'Play again'}</button> : null}
-          <p className="phone-options-message" role="status">{message}</p>
+          <p className="phone-options-message" role="status">{statusMessage}</p>
           <button type="button" className="btn btn--ghost" onClick={() => dialog.current?.close()}>{slot === 0 ? 'Not now' : 'Keep watching'}</button>
         </div> : <>
         <div className="phone-game-options__appearance"><span>Light / dark mode</span><ThemeToggle /></div>
+        {playing && (!completed || lobby.manuallyPaused) ? <div className="phone-options-pause">
+          {slot === 0 ? <button type="button" className="btn btn--secondary" disabled={pauseLocked}
+            onClick={togglePause}>{lobby.manuallyPaused ? 'Resume game' : 'Pause game'}</button> : null}
+          {lobby.manuallyPaused ? <p role="status">Game paused. Player 1 or the TV can resume.</p> : null}
+        </div> : null}
         {!playing ? <p className="stub__muted">Match options will be ready when play starts.</p>
           : slot !== 0 ? <p className="stub__muted">Player 1 manages shared match settings. Your sound button still controls the TV sound.</p>
           : !available ? <p role="status">Waiting for the TV’s game settings…</p> : <>
-            {lobby.paused || disabled ? <p role="status">Settings resume when everyone is connected and ready.</p> : null}
+            {lobby.paused || disabled ? <p role="status">{lobby.manuallyPaused ? 'Resume play to change match settings.' : 'Settings resume when everyone is connected and ready.'}</p> : null}
             <fieldset disabled={locked}>
               {tennis ? <>
                 <label>Playing assistance<select value={settings.assistance} onChange={event => configure('assistance', event.target.value)}>
@@ -130,9 +151,11 @@ export function PhoneGameOptions({ lobby, slot, disabled }) {
               </details>
             </fieldset>
           </>}
-        <p className="phone-options-message" role="status">{busy ? 'Updating the game…' : message}</p>
+        <p className="phone-options-message" role="status">{busy ? 'Updating the game…' : statusMessage}</p>
         <button type="button" className="btn btn--primary phone-options-done" onClick={() => dialog.current?.close()}>Back to play</button>
         </>}
+        {resultMode && lobby.manuallyPaused && slot === 0 ? <button type="button" className="btn btn--secondary"
+          disabled={pauseLocked} onClick={togglePause}>Resume game</button> : null}
         {slot === 0 && active ? <section className="phone-options-section phone-options-return" aria-label="Return to lobby">
           <button type="button" className="btn btn--secondary" disabled={returnLocked}
             aria-describedby={confirmReturn ? 'phone-return-explanation' : undefined} onClick={returnToLobby}>

@@ -4,7 +4,7 @@ import { ScoreSystem } from '../src/Tennis/scoreSystem';
 // Theme behavior is covered independently; these fixtures model game/relay APIs.
 vi.mock('../src/theme.js', () => ({}));
 
-const runtime = vi.hoisted(() => ({ world: null, close: vi.fn(),
+const runtime = vi.hoisted(() => ({ world: null, onSwing: null, close: vi.fn(),
   sound: { mountButton: vi.fn(), play: vi.fn(), setActive: vi.fn(), dispose: vi.fn() } }));
 vi.mock('../src/audio/sportsAudio', () => ({ createSportsAudio: () => runtime.sound }));
 vi.mock('../src/Tennis/World', () => ({ World: class {
@@ -27,7 +27,7 @@ vi.mock('../src/Tennis/World', () => ({ World: class {
   getSettings() { return { ...this.settings }; }
 } }));
 vi.mock('../src/Controllers/inputController', () => ({ InputController: class {} }));
-vi.mock('../src/network/swingConnection.js', () => ({ connectSwings: () => ({ close: runtime.close }) }));
+vi.mock('../src/network/swingConnection.js', () => ({ connectSwings: options => { runtime.onSwing = options.onSwing; return { close: runtime.close }; } }));
 
 let listeners;
 let parent;
@@ -90,6 +90,64 @@ test('restoring a solo game from browser history asks the lobby for fresh state 
   expect(runtime.world.start).not.toHaveBeenCalled();
   state({});
   expect(runtime.world.start).toHaveBeenCalledOnce();
+});
+
+test('tennis P requests the current room pause without locally changing play or overriding server state', async () => {
+  await import('../src/main.ts');
+  const key = overrides => listeners.get('keydown')({ key: 'p', preventDefault: vi.fn(), ...overrides });
+  key({});
+  expect(parent.postMessage).not.toHaveBeenCalled();
+  state({}); runtime.world.start.mockClear(); runtime.world.stop.mockClear(); parent.postMessage.mockClear();
+  const event = { key: 'p', preventDefault: vi.fn() };
+  listeners.get('keydown')(event);
+  expect(event.preventDefault).toHaveBeenCalledOnce();
+  expect(parent.postMessage).toHaveBeenCalledExactlyOnceWith({ type: 'wee:pause-toggle', gameId: 'solo-match' }, location.origin);
+  expect(runtime.world.stop).not.toHaveBeenCalled();
+  for (const ignored of [{ key: 'Escape' }, { repeat: true }, { ctrlKey: true }, { target: { tagName: 'INPUT' } }]) key(ignored);
+  expect(parent.postMessage).toHaveBeenCalledTimes(1);
+  state({ paused: true, manuallyPaused: true });
+  expect(runtime.world.stop).toHaveBeenCalledOnce();
+  expect(document.getElementById('coach').textContent).toContain('resume on your phone or TV');
+  parent.postMessage.mockClear(); key({ key: 'P' });
+  expect(parent.postMessage).toHaveBeenCalledExactlyOnceWith({ type: 'wee:pause-toggle', gameId: 'solo-match' }, location.origin);
+  expect(runtime.world.start).not.toHaveBeenCalled();
+  state({ gameId: 'new-game' }); parent.postMessage.mockClear(); key({});
+  expect(parent.postMessage).toHaveBeenCalledWith({ type: 'wee:pause-toggle', gameId: 'new-game' }, location.origin);
+  listeners.get('pagehide')({ persisted: false });
+  expect(listeners.has('keydown')).toBe(false);
+});
+
+test('hidden tennis ignores unpaused snapshots and input until pageshow receives fresh lobby state', async () => {
+  await import('../src/main.ts'); state({});
+  const swing = { type: 'swing', id: 'held-input', label: 'Forehand', hand: 'Right', player: 1 };
+  listeners.get('pagehide')({ persisted: true });
+  runtime.world.start.mockClear(); parent.postMessage.mockClear();
+  state({}); runtime.onSwing(swing); command({ action: 'new-match', format: 'quick' });
+  expect(runtime.world.start).not.toHaveBeenCalled();
+  expect(runtime.world.swing).not.toHaveBeenCalled();
+  expect(runtime.world.configure).not.toHaveBeenCalled();
+  expect(commandResults().at(-1).result).toEqual({ ok: false, error: 'paused' });
+  const messages = parent.postMessage.mock.calls.length;
+  listeners.get('keydown')({ key: 'p', preventDefault: vi.fn() });
+  expect(parent.postMessage).toHaveBeenCalledTimes(messages);
+  listeners.get('pageshow')({ persisted: true });
+  expect(parent.postMessage).toHaveBeenLastCalledWith({ type: 'wee:bridge-ready' }, location.origin);
+  runtime.onSwing(swing);
+  expect(runtime.world.start).not.toHaveBeenCalled(); expect(runtime.world.swing).not.toHaveBeenCalled();
+  state({ paused: true, manuallyPaused: true }); runtime.onSwing(swing);
+  expect(runtime.world.start).not.toHaveBeenCalled(); expect(runtime.world.swing).not.toHaveBeenCalled();
+  state({}); runtime.onSwing(swing);
+  expect(runtime.world.start).toHaveBeenCalledOnce(); expect(runtime.world.swing).toHaveBeenCalledExactlyOnceWith(swing);
+  expect(runtime.world.startRound).not.toHaveBeenCalled();
+});
+
+test('tennis stops when its lobby no longer has an active game', async () => {
+  await import('../src/main.ts'); state({}); runtime.world.stop.mockClear();
+  state({ gameId: null, playing: false });
+  expect(runtime.world.stop).toHaveBeenCalledOnce();
+  parent.postMessage.mockClear();
+  listeners.get('keydown')({ key: 'p', preventDefault: vi.fn() });
+  expect(parent.postMessage).not.toHaveBeenCalled();
 });
 
 test('serve status reaches the phone only on a state change and is refreshed after reconnect', async () => {

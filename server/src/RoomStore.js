@@ -110,8 +110,8 @@ export class RoomStore {
     }
     if (!code) return { ok: false, error: ERRORS.SERVER_BUSY };
 
-    this.#rooms.set(code, { code, sport, hostId, phase: PHASES.LOBBY, players: new Map(), deadline: null, pausedAt: null,
-      gameId: null, gameState: null, pendingRoll: null, seenRolls: new Set(),
+    this.#rooms.set(code, { code, sport, hostId, phase: PHASES.LOBBY, players: new Map(), deadline: null, pausedAt: null, manuallyPaused: false,
+      gameId: null, inputGeneration: 0, gameState: null, pendingRoll: null, seenRolls: new Set(),
       seenHits: new Set(), lastHitAt: new Map(), pendingStrokes: new Map(), soundMuted: null,
       gameOptions: null, seenCommands: new Set(), pendingGameCommand: null });
     const memberId = this.#addSession(hostId, code, 'host');
@@ -211,6 +211,7 @@ export class RoomStore {
     // delayed retry must never reset a match twice. Bound memory without eviction.
     if (room.seenCommands.size >= 1024) return { ok: false, error: 'game-command-limit' };
     room.seenCommands.add(event.id);
+    if (event.action === 'new-match') { room.inputGeneration++; room.pendingStrokes.clear(); }
     room.pendingGameCommand = event.id;
     const command = { id: event.id, gameId: room.gameId, action: event.action };
     if (event.settings) command.settings = { ...event.settings };
@@ -279,6 +280,32 @@ export class RoomStore {
     return { ok: true, code: room.code };
   }
 
+  /** Shared pause never bypasses reconnect or controller setup requirements. */
+  setPaused(socketId, payload, role = 'host') {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    const room = member && this.#rooms.get(member.code);
+    if (role === 'host') {
+      if (member?.role !== 'host' || room?.hostId !== member.id) return { ok: false, error: ERRORS.NOT_HOST };
+    } else if (role !== 'player' || member?.role !== 'player' || room?.players.get(member.id)?.slot !== 0) {
+      return { ok: false, error: 'not-game-leader' };
+    }
+    if (room.phase !== PHASES.TUTORIAL || typeof payload?.gameId !== 'string' || payload.gameId !== room.gameId) {
+      return { ok: false, error: 'not-playing' };
+    }
+    if (typeof payload.paused !== 'boolean') return { ok: false, error: 'bad-pause' };
+    const changed = room.manuallyPaused !== payload.paused;
+    if (changed && payload.paused) {
+      if (room.gameState?.phase === 'complete') return { ok: false, error: 'not-playing' };
+      // Let an already-delivered reset/release finish its handshake before
+      // stopping the TV. This avoids accepting a reset whose reply was cancelled.
+      if (room.pendingGameCommand) return { ok: false, error: 'game-command-pending' };
+      if (room.pendingRoll) return { ok: false, error: 'delivery-pending' };
+    }
+    room.manuallyPaused = payload.paused;
+    this.#updatePause(room);
+    return { ok: true, code: room.code, manuallyPaused: room.manuallyPaused, paused: room.pausedAt !== null, changed };
+  }
+
   setSetup(socketId, payload) {
     const member = this.#members.get(this.#sockets.get(socketId));
     const room = member && this.#rooms.get(member.code);
@@ -308,7 +335,7 @@ export class RoomStore {
     }
     if (!isSwing(event)) return { ok: false, error: 'bad-swing' };
     if (room.pausedAt !== null) return { ok: false, error: ERRORS.PAUSED };
-    if (room.phase !== PHASES.TUTORIAL || room.gameState?.phase === 'complete') {
+    if (room.phase !== PHASES.TUTORIAL || event.gameId !== room.gameId || room.gameState?.phase === 'complete') {
       return { ok: false, error: 'not-playing' };
     }
     const now = this.#now();
@@ -317,9 +344,9 @@ export class RoomStore {
     }
     if (!room.pendingStrokes.has(event.id)) room.pendingStrokes.set(event.id, { player: player.slot + 1, at: now });
     if (room.pendingStrokes.size > 128) room.pendingStrokes.delete(room.pendingStrokes.keys().next().value);
-    return { ok: true, hostSocketId: this.#members.get(room.hostId)?.socketId,
+    return { ok: true, code: room.code, inputGeneration: room.inputGeneration, hostSocketId: this.#members.get(room.hostId)?.socketId,
       event: { type: 'swing', id: event.id, label: event.label, hand: event.hand,
-        ...(event.power === undefined ? {} : { power: event.power }), player: player.slot + 1 } };
+        ...(event.power === undefined ? {} : { power: event.power }), player: player.slot + 1, gameId: room.gameId } };
   }
 
   /** Correlated diagnostics are private, transient feedback for a real recent input. */
@@ -453,7 +480,7 @@ export class RoomStore {
       .map(member => ({ name: member.role === 'host' ? 'TV' : room.players.get(member.id)?.name,
         msLeft: Math.max(0, this.#graceMs - (this.#now() - member.disconnectedAt)) }));
     return { code: room.code, sport: room.sport, phase: room.phase, players, countdown,
-      paused: room.pausedAt !== null, reconnecting,
+      paused: room.pausedAt !== null, manuallyPaused: room.manuallyPaused, reconnecting,
       setupPending: players.filter(player => isController(room.sport, player.slot) && !player.setup).map(player => player.name),
       gameId: room.gameId, gameState: room.gameState, soundMuted: room.soundMuted, gameOptions: room.gameOptions };
   }
@@ -536,9 +563,9 @@ export class RoomStore {
   }
 
   #updatePause(room) {
-    const missing = [...this.#members.values()].some(member => member.code === room.code && member.disconnectedAt !== null) ||
+    const missing = room.manuallyPaused || [...this.#members.values()].some(member => member.code === room.code && member.disconnectedAt !== null) ||
       (room.phase === PHASES.TUTORIAL && [...room.players.values()].some(player => isController(room.sport, player.slot) && !player.setup));
-    if (missing && room.pausedAt === null) { room.pausedAt = this.#now(); room.pendingStrokes.clear(); }
+    if (missing && room.pausedAt === null) { room.pausedAt = this.#now(); room.inputGeneration++; room.pendingStrokes.clear(); }
     else if (!missing && room.pausedAt !== null) {
       if (room.deadline !== null) room.deadline += this.#now() - room.pausedAt;
       room.pausedAt = null;
@@ -596,7 +623,7 @@ export class RoomStore {
 
   /** Rooms whose snapshots need a fresh reconnect countdown. */
   get reconnectingCodes() {
-    return [...this.#rooms.values()].filter(room => room.pausedAt !== null).map(room => room.code);
+    return [...new Set([...this.#members.values()].filter(member => member.disconnectedAt !== null).map(member => member.code))];
   }
 
   #clearReady(room) {
@@ -604,7 +631,9 @@ export class RoomStore {
   }
 
   #resetReady(room) {
+    room.inputGeneration++;
     this.#clearReady(room);
+    room.manuallyPaused = false;
     room.gameId = null; room.gameState = null; room.pendingRoll = null; room.seenRolls.clear();
     room.seenHits.clear(); room.lastHitAt.clear();
     room.pendingStrokes.clear();

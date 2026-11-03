@@ -984,6 +984,9 @@
 .phone-options-confirm { display: flex; flex-wrap: wrap; gap: 8px; }
 .phone-options-return { padding-top: 16px; }
 .phone-options-return p { margin: 12px 0; line-height: 1.5; }
+.phone-options-pause { margin: 16px 0; }
+.phone-options-pause .btn { width: 100%; }
+.phone-options-pause p { margin: 12px 0; font-size: .85rem; color: var(--text-muted); }
 .phone-options-message { font-size: .85rem; color: var(--accent-ink); margin: 12px 0; min-height: 1.5em; }
 .phone-options-done { width: 100%; }
 .phone-game-options--result { border-color: var(--accent-ink); }

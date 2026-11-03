@@ -4,7 +4,7 @@
  * link, and seats that fill in live.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { EVENTS, PHASES, playerCapacity } from '@wee/shared/protocol.js';
 import { QrCode } from '../components/QrCode.jsx';
@@ -32,6 +32,8 @@ export default function HostStub() {
   const [startError, setStartError] = useState(null);
   const [returning, setReturning] = useState(false);
   const returnPending = useRef(false);
+  const [pausing, setPausing] = useState(false);
+  const pausePending = useRef(false);
   const currentGame = useRef(lobby?.gameId);
   currentGame.current = lobby?.gameId;
 
@@ -107,6 +109,16 @@ export default function HostStub() {
     else setStartError(result?.error ?? 'disconnected');
   }
 
+  const togglePause = useCallback(async () => {
+    if (reconnecting || returning || !lobby?.gameId || lobby.phase !== PHASES.TUTORIAL || pausePending.current) return;
+    const gameId = lobby.gameId;
+    pausePending.current = true; setPausing(true); setStartError(null);
+    const result = await request(EVENTS.HOST_PAUSE, { gameId, paused: !lobby.manuallyPaused });
+    pausePending.current = false; setPausing(false);
+    if (currentGame.current !== gameId) return;
+    if (!result?.ok) setStartError(result?.error ?? 'disconnected');
+  }, [reconnecting, returning, lobby?.gameId, lobby?.phase, lobby?.manuallyPaused]);
+
   if (ended || (!lobby && !reconnecting)) {
     return (
       <main className="stub host-lobby">
@@ -127,7 +139,8 @@ export default function HostStub() {
   // Keep the game mounted through a temporary drop, so its local state survives.
   if (lobby?.phase === PHASES.TUTORIAL) return <TvTutorial lobby={lobby}
     onAudio={audio.onAudio}
-    onReturnToLobby={returnToLobby} returning={returning} returnDisabled={reconnecting}
+    onReturnToLobby={returnToLobby} returning={returning} returnDisabled={reconnecting || pausing}
+    onPauseToggle={togglePause} pauseDisabled={reconnecting || pausing || returning || (lobby.gameState?.phase === 'complete' && !lobby.manuallyPaused)}
     immersive={immersive} fullscreen={fullscreen} onToggleView={immersive ? leaveGameView : enterGameView}
     paused={reconnecting || lobby.paused} error={startError ? errorText(startError) : null} onClose={async () => {
       if (await leave()) navigate('/');

@@ -1,7 +1,52 @@
 # Branch integration — November 2, 2026
 
-Target: `update-homepage`. Changes are selectively adapted from the fetched
-branches below; these branches were not merged wholesale. `main` is unchanged.
+Target: `update-homepage`. Teammate gameplay changes are selectively adapted
+from the branches below rather than merged wholesale. The `main` branch is
+unchanged.
+
+## Follow-up branch check
+
+`updated-menu` advanced from `2fdc60b` to `ccf8b66` with six commits:
+
+| Commit | Teammate change |
+| --- | --- |
+| `eb5b97e` | Reset uses a callback instead of importing the tennis world. |
+| `83b952f` | Correct pause-overlay background. |
+| `a49bf5c` | Bowling pause/resume and page-suspension handling. |
+| `29896d4` | Anchor the pause controls inside the game; fix bowling layout. |
+| `d4760c6` | Use P instead of Escape so pausing does not exit fullscreen. |
+| `ccf8b66` | Update the runtime shortcut test. |
+
+`base-game` remains at `4e6795d`; it has no new commits since the prior port.
+Neither branch introduces new physics or scoring algorithms in this follow-up.
+
+The pause behavior is adapted to the combined app: Player 1's phone options and
+the existing TV display menu control a server-authorized pause for either sport.
+The TV's P shortcut also works while the embedded game has focus. Pausing does
+not discard a match or controller setup. Resuming a manual pause cannot override
+a disconnected device or unfinished controller setup. The current reset/replay
+and return-to-lobby actions remain in use rather than adding a second reset path.
+Hidden game pages stay stopped until page restoration receives fresh lobby state.
+
+### Rebase and main readiness
+
+Do not rebase this published feature branch onto `base-game`. Compatible changes
+are already adapted; replaying the history would also encounter older package,
+workspace and documentation changes that were deliberately excluded. A read-only
+merge simulation at `93675c7` found seven conflicting paths against `base-game`,
+ten against `updated-menu`, and one `.gitignore` conflict against `origin/main`.
+
+Commit `e54e97d` incorporates `origin/main` (`4c98b55`) into this feature branch,
+resolving the ignore conflict by retaining the existing broader rules. Its tree
+is identical to its first parent: no gameplay changes or local edits were lost.
+This does not merge the feature into `main`. The comparison with main spans
+over 200 files, including earlier platform, game, asset and test work. Passing
+tests and a clean merge are evidence for review, not a replacement for teammate
+review and real-phone/two-player playtesting.
+
+Git's [rebase documentation](https://git-scm.com/docs/git-rebase#_recovering_from_upstream_rebase)
+also explains why rewriting a shared upstream can force downstream collaborators
+to repair their histories.
 
 ## Included
 
@@ -24,11 +69,10 @@ branches below; these branches were not merged wholesale. `main` is unchanged.
 
 - The current Park Club court, lower camera, `src/Tennis` folder, phone settings,
   new-match/replay commands, calibration restoration and winner cards remain.
-- The incoming standalone pause overlay stops only its local tennis world.
-  Importing it would leave phones/server unaware of the pause and restore an
-  obsolete `src/World` import. It is not added. Reconnect pause continues to
-  stop play through the existing shared lobby state. A future manual pause
-  should use that same server-authorized state for both sports.
+- The incoming overlay now supports both games through callbacks, but it still
+  pauses locally rather than telling the phones/server. Its behavior is adapted
+  to shared lobby state and current controls; its complete older game entry
+  points and additional standalone overlay are not copied over this UI.
 - `game-menu` is older than `updated-menu`, so it is not integrated separately.
 - `base-game`'s documentation commit also changes dependency major versions,
   removes workspaces and removes integrated development/deployment/test scripts.

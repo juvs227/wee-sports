@@ -3,6 +3,55 @@
 Implemented on `update-homepage`. The team's models, stroke classifier, racket
 hitboxes and gravity remain in place. No changes were merged into `main`.
 
+## Latest menu and input follow-up
+
+The six additional `updated-menu` commits through `ccf8b66` add reusable menu
+callbacks, bowling pause support, anchored overlay fixes and the P shortcut.
+Their pause behavior is now integrated through the shared lobby: Player 1's
+phone and the TV can pause/resume either sport, while the existing Park Club
+presentation and reset/replay controls remain. P works with either the TV page
+or its game frame focused; Escape continues to belong to fullscreen.
+
+Manual pause retains the match and controller setup. Clearing it cannot bypass
+a disconnected player or missing setup. Pause waits for an already-sent reset
+or bowling release to finish its acknowledgement before stopping the game.
+Returning to the lobby clears manual pause. Manual-only pauses do not trigger
+the repeated snapshots needed for a real reconnect countdown.
+
+Browser-history suspension now remains separate from lobby pause: a game page
+cannot resume while suspended just because a lobby message arrives. Restoring
+an embedded game requests fresh state before accepting inputs. Shortcut handlers
+ignore editable fields, modifiers and held-key repeats and are removed at teardown.
+
+Tennis swings now carry their current game ID through the phone, server and TV.
+A mismatched replacement-game input or acknowledgement is rejected. Real-time
+swing delivery allows at most 80 ms of transport wait per hop and then uses
+volatile delivery with explicit busy feedback; it does not retry emitted inputs.
+Ordinary readiness/settings requests retain their reliable delivery. This
+addresses stale-delivery behavior, not sensor recognition, shot physics or a
+promise of zero network delay. See [response evidence](tennis-response.md).
+
+`base-game` has no additional commits since the previous port. See
+[branch integration](branch-integration.md) for the exact new commits and the
+recommendation to keep the published feature history instead of rebasing it
+onto the older base branch.
+
+Validation: **362 game + 110 platform tests passed (472 total)**, including two
+additional phone regressions after live testing found a stale pause notice
+following TV resume. The game suite was rerun after that correction; platform
+code was unchanged after the full run. TypeScript, lint, diff checks
+and the final production build passed; the existing Three.js bundle-size warning
+remains. Real local Socket.IO probes delivered all 104 inputs exactly once for
+each transport. See the response document for timings and measurement limits.
+
+Live testing of the built app verified phone pause, TV P resume and P with the
+tennis iframe focused, retaining the score and setup. Bowling paused an accepted
+delivery, resumed it and recorded six pins in the same frame. The corrected
+phone notice cleared when the TV resumed, and pause controls fit at 390 × 844.
+Both browser error logs were empty. Live inputs used desktop button fallback;
+physical phone sensors and two human players remain device playtests. Temporary
+tabs and the server were closed afterward.
+
 ## Branch integration and scoring review
 
 Adapted `updated-menu`'s return-to-lobby behavior to the existing TV display

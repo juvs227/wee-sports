@@ -11,7 +11,7 @@ function game() {
   store.setSetup('phone', { setup: 'motion' }); store.setReady('phone', { ready: true });
   store.start('tv'); now = 5000; store.finishCountdown(code);
   const gameId = store.lobby(code).gameId;
-  const input = id => store.swingTarget('phone', { type: 'swing', id, label: 'Forehand', hand: 'Right', power: .5 });
+  const input = id => store.swingTarget('phone', { type: 'swing', id, gameId, label: 'Forehand', hand: 'Right', power: .5 });
   const result = { id: 'stroke', gameId, player: 1, result: 'hit', reason: 'Good contact', receivedToContactMs: 84 };
   return { store, code, input, result, advance: value => { now += value; } };
 }

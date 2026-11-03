@@ -16,8 +16,8 @@ Team manuals: [build/run](manuals/BUILD.md), [testing](manuals/TESTING.md),
 `main` and the team's scoring, model, and game-logic updates from `base-game`.
 
 Comparison checked November 2: this branch retains the team's base-game scoring
-and assets, adapts return-to-lobby work from `updated-menu` (`2fdc60b`) to the
-current phone controls, and adds shared-import compatibility fixes from
+and assets, adapts return-to-lobby and shared pause work from `updated-menu`
+(`ccf8b66`) to the current phone/TV controls, and adds shared-import compatibility fixes from
 `base-game`. Its unrelated dependency/workspace changes are excluded.
 `game-menu` contains older menu work. Tutorial voting remains separate work;
 its old protocol needs adapting before merging. See the branch-integration
@@ -88,6 +88,12 @@ HTTPS origin to the server; its QR is discovered at runtime.
    network reconnect keeps calibration. A new address needs its own permission
    and setup. Leaving an active seat ends the match and returns
    everyone to the lobby. Closing the lobby ends it for everyone.
+
+Player 1 can also pause either game from **Game options** on the phone. The TV's
+display menu and **P** key pause/resume the same match, including when the court
+or lane has keyboard focus. Resume preserves the score and controller setup;
+it still waits for disconnected players to return. Escape remains fullscreen's
+shortcut.
 
 The default tennis sensor mode uses the team's **fast confirmation** from
 `experiment/early-swing-prediction` (`80ec8f7`). It confirms the direction after

@@ -151,6 +151,7 @@ export default function JoinStub() {
             <PrototypeFrame code={seat.code} controller player={seat.slot + 1} sport={seat.sport} gameId={seat.gameId} gameState={seat.gameState}
               playing={phase === PHASES.TUTORIAL}
               paused={phase !== PHASES.TUTORIAL || reconnecting || seat.paused}
+              manuallyPaused={Boolean(lobby.manuallyPaused && !reconnecting && !lobby.reconnecting?.length && !lobby.setupPending?.length)}
               showPause={reconnecting} />
           </>
         ) : null}

@@ -84,6 +84,9 @@ export const EVENTS = {
   /** TV or P1 -> server: { gameId }. End this match while keeping the lobby and controller setup. */
   HOST_RETURN_TO_LOBBY: 'host:return-to-lobby',
   PLAYER_RETURN_TO_LOBBY: 'player:return-to-lobby',
+  /** Current TV/P1 -> server: { gameId, paused }. Explicit, shared manual pause. */
+  HOST_PAUSE: 'host:pause',
+  PLAYER_PAUSE: 'player:pause',
   /** Phone -> server: give the seat back. */
   PLAYER_LEAVE: 'player:leave',
   /** Phone -> server: { ready: boolean }. Can be toggled until everyone is ready. Ack: { ok }. */

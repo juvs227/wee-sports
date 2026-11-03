@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { io } from 'socket.io-client';
+import { sendSwingRequest } from '../../../src/network/swingRequest.js';
 
 /**
  * One connection per tab, shared by every page, so moving between pages never
@@ -22,6 +23,11 @@ export function request(event, payload) {
       resolve(err ? { ok: false, error: 'timeout' } : response);
     });
   });
+}
+
+/** Gameplay input uses a separate transient path; settings/ready stay reliable. */
+export function requestSwing(event, payload, current) {
+  return sendSwingRequest(socket, event, payload, current);
 }
 
 /** 'connecting' | 'online' | 'offline'. Socket.io keeps retrying while offline. */

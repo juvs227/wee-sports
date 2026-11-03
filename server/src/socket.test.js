@@ -83,10 +83,11 @@ test('lobby swings reach only their TV, reject extra phones and stale sessions, 
   await send(host, EVENTS.HOST_START);
   now += 5000; store.finishCountdown(room.code);
   assert.equal(store.lobby(room.code).phase, PHASES.TUTORIAL);
+  event.gameId = store.lobby(room.code).gameId;
   assert.equal((await send(outsider, EVENTS.PLAYER_SWING, event)).error, 'not-controller');
   assert.equal((await send(phone, EVENTS.PLAYER_SWING, { ...event, label: 'bad' })).error, 'bad-swing');
   assert.equal((await send(phone, EVENTS.PLAYER_SWING, event)).receivers, 1);
-  assert.deepEqual(received, [{ type: 'swing', id: 'one', label: 'Forehand', hand: 'Right', player: 1 }]);
+  assert.deepEqual(received, [{ type: 'swing', id: 'one', gameId: event.gameId, label: 'Forehand', hand: 'Right', player: 1 }]);
   assert.equal((await send(second, EVENTS.PLAYER_SWING, { ...event, id: 'p2', player: 1 })).ok, true);
   assert.equal(received[1].player, 2);
   assert.deepEqual(otherReceived, []);

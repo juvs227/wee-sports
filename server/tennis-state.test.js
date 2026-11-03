@@ -24,7 +24,7 @@ test('only the current host can publish validated tennis serve/match status', ()
   }
   expect(store.setGameState('tv', { ...status, phase: 'complete', winner: 2 }).ok).toBe(true);
   expect(store.lobby(code).gameState.winner).toBe(2);
-  const swing = { type: 'swing', id: 'late-swing', hand: 'Right', label: 'Forehand' };
+  const swing = { type: 'swing', id: 'late-swing', gameId, hand: 'Right', label: 'Forehand' };
   expect(store.swingTarget('phone', swing)).toMatchObject({ ok: false, error: 'not-playing' });
   expect(store.setGameState('tv', { ...status, phase: 'prepare' }).ok).toBe(true);
   expect(store.lobby(code).gameState.phase).toBe('prepare');

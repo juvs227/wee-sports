@@ -1,11 +1,20 @@
 /** The lobby session and game stay mounted when changing view or reconnecting. */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { sportName } from '../lib/sports.js';
 import { PrototypeFrame } from './PrototypeFrame.jsx';
+import { shouldTogglePause } from '../../../src/network/pauseShortcut.js';
 
 export function TvTutorial({ lobby, paused, onClose, error, immersive = true, fullscreen = false, onToggleView, onAudio,
-  onReturnToLobby, returning = false, returnDisabled = false }) {
+  onReturnToLobby, returning = false, returnDisabled = false, onPauseToggle, pauseDisabled = false }) {
   const [confirmReturn, setConfirmReturn] = useState(false);
+  useEffect(() => {
+    const keydown = event => {
+      if (pauseDisabled || !onPauseToggle || !shouldTogglePause(event)) return;
+      event.preventDefault(); void onPauseToggle();
+    };
+    window.addEventListener('keydown', keydown);
+    return () => window.removeEventListener('keydown', keydown);
+  }, [onPauseToggle, pauseDisabled]);
   return (
     <main className={`game-session${immersive ? ' game-session--immersive' : ''}`}>
       <header className="game-session__bar">
@@ -22,6 +31,8 @@ export function TvTutorial({ lobby, paused, onClose, error, immersive = true, fu
               <button type="button" className="game-session__view" onClick={onToggleView}>
                 {immersive ? fullscreen ? 'Exit full screen' : 'Windowed view' : 'Full screen'}
               </button>
+              {onPauseToggle ? <button type="button" disabled={pauseDisabled} onClick={onPauseToggle}
+                aria-keyshortcuts="P">{lobby.manuallyPaused ? 'Resume game' : 'Pause game'} · P</button> : null}
               {onReturnToLobby ? <div className="game-session__return">
                 <button type="button" disabled={returnDisabled || returning}
                   aria-describedby={confirmReturn ? 'tv-return-explanation' : undefined}
@@ -38,9 +49,10 @@ export function TvTutorial({ lobby, paused, onClose, error, immersive = true, fu
       </header>
       {error ? <p className="game-session__error" role="alert">{error}</p> : null}
       <PrototypeFrame code={lobby.code} players={lobby.players} paused={paused} sport={lobby.sport} gameId={lobby.gameId} gameState={lobby.gameState}
-        onAudio={onAudio}
+        onAudio={onAudio} manuallyPaused={lobby.manuallyPaused} onPauseToggle={pauseDisabled ? undefined : onPauseToggle}
         pauseMessage={lobby.reconnecting?.length ? `Waiting for ${lobby.reconnecting.map(member => member.name).join(', ')} to reconnect.`
-          : lobby.setupPending?.length ? `Waiting for ${lobby.setupPending.join(', ')} to finish controller setup.` : undefined} />
+          : lobby.setupPending?.length ? `Waiting for ${lobby.setupPending.join(', ')} to finish controller setup.`
+            : lobby.manuallyPaused ? 'Game paused · resume on Player 1’s phone or press P on the TV.' : undefined} />
     </main>
   );
 }

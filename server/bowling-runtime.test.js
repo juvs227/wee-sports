@@ -69,6 +69,58 @@ test('invalid, stale, paused, rolling and foreign-origin commands cannot reset a
   expect(runtime.world.reset).not.toHaveBeenCalled();
 });
 
+test('bowling P requests server pause/resume for the current game without resetting or locally resuming', async () => {
+  await import('../src/bowlingMain.ts'); parent.postMessage.mockClear();
+  const key = overrides => listeners.get('keydown')({ key: 'p', preventDefault: vi.fn(), ...overrides });
+  key({}); expect(parent.postMessage).not.toHaveBeenCalled();
+  state({}); runtime.world.start.mockClear(); runtime.world.stop.mockClear(); parent.postMessage.mockClear();
+  const event = { key: 'p', preventDefault: vi.fn() };
+  listeners.get('keydown')(event);
+  expect(event.preventDefault).toHaveBeenCalledOnce();
+  expect(parent.postMessage).toHaveBeenCalledExactlyOnceWith({ type: 'wee:pause-toggle', gameId: 'bowl-one' }, location.origin);
+  expect(runtime.world.stop).not.toHaveBeenCalled();
+  for (const ignored of [{ key: 'Escape' }, { repeat: true }, { metaKey: true }, { target: { tagName: 'SELECT' } }]) key(ignored);
+  expect(parent.postMessage).toHaveBeenCalledTimes(1);
+  state({ paused: true, manuallyPaused: true });
+  expect(runtime.world.stop).toHaveBeenCalledOnce();
+  expect(document.getElementById('roll-status').textContent).toContain('resume on your phone or TV');
+  parent.postMessage.mockClear(); key({ key: 'P' });
+  expect(parent.postMessage).toHaveBeenCalledExactlyOnceWith({ type: 'wee:pause-toggle', gameId: 'bowl-one' }, location.origin);
+  expect(runtime.world.start).not.toHaveBeenCalled(); expect(runtime.world.reset).not.toHaveBeenCalled();
+  listeners.get('pagehide')({ persisted: false });
+  expect(listeners.has('keydown')).toBe(false);
+});
+
+test('hidden bowling cannot resume or release a ball until pageshow receives a fresh unpaused snapshot', async () => {
+  await import('../src/bowlingMain.ts'); state({});
+  const roll = () => receive({ type: 'wee:game-roll', event: { id: 'held-roll', gameId: 'bowl-one', player: 1, power: .6, aim: 0, spin: 0 } });
+  listeners.get('pagehide')({ persisted: true }); runtime.world.start.mockClear();
+  state({}); roll(); command({});
+  expect(runtime.world.start).not.toHaveBeenCalled(); expect(runtime.world.roll).not.toHaveBeenCalled();
+  expect(runtime.world.reset).not.toHaveBeenCalled(); expect(result()).toEqual({ ok: false, error: 'paused' });
+  parent.postMessage.mockClear();
+  listeners.get('keydown')({ key: 'p', preventDefault: vi.fn() });
+  expect(parent.postMessage).not.toHaveBeenCalled();
+  listeners.get('pageshow')({ persisted: true });
+  expect(parent.postMessage).toHaveBeenLastCalledWith({ type: 'wee:bridge-ready' }, location.origin);
+  roll(); expect(runtime.world.roll).not.toHaveBeenCalled(); expect(runtime.world.start).not.toHaveBeenCalled();
+  state({ paused: true, manuallyPaused: true }); roll();
+  expect(runtime.world.roll).not.toHaveBeenCalled(); expect(runtime.world.start).not.toHaveBeenCalled();
+  state({}); roll();
+  expect(runtime.world.start).toHaveBeenCalledOnce(); expect(runtime.world.roll).toHaveBeenCalledOnce();
+  expect(runtime.world.reset).not.toHaveBeenCalled();
+});
+
+test('bowling stops when a lobby snapshot no longer contains an active game', async () => {
+  await import('../src/bowlingMain.ts'); state({}); runtime.world.stop.mockClear();
+  state({ gameId: null, playing: false });
+  expect(runtime.world.stop).toHaveBeenCalledOnce();
+  expect(document.getElementById('roll').disabled).toBe(true);
+  parent.postMessage.mockClear();
+  listeners.get('keydown')({ key: 'p', preventDefault: vi.fn() });
+  expect(parent.postMessage).not.toHaveBeenCalled();
+});
+
 test('strike callout expires once and a repeated state does not show it again', async () => {
   await import('../src/bowlingMain.ts'); state({});
   runtime.match.record([]); runtime.world.onState(runtime.world.getState());

@@ -2,6 +2,7 @@ import {BowlingWorld, BowlingState} from './bowling/World';
 import {awaitingBonus, createRollCallouts, frameMarks} from './bowling/scoreboard';
 import {isGameCommand} from '../shared/protocol.js';
 import {createSportsAudio} from './audio/sportsAudio';
+import {shouldTogglePause} from './network/pauseShortcut.js';
 import '../client/src/styles/tokens.css';
 import './gameHud.css';
 import './bowling.css';
@@ -12,6 +13,9 @@ const embedded = window.parent !== window;
 const el = (id: string): HTMLElement => document.getElementById(id)!;
 let world: BowlingWorld | null = null;
 let gameId: string | null = null;
+let lobbyPaused = embedded;
+let pageSuspended = false;
+let manuallyPaused = false;
 let paused = embedded;
 let connected = false;
 const sound = embedded ? null : createSportsAudio('bowling');
@@ -63,7 +67,7 @@ function render(state: BowlingState): void {
   el('frame-label').textContent = state.complete ? 'Final · 10 frames' : `Frame ${state.frame} / 10 · Ball ${state.ball}`;
   const last = state.lastRoll;
   const result = last ? last.strike ? 'Strike!' : last.spare ? 'Spare!' : `${last.pins} ${last.pins === 1 ? 'pin' : 'pins'} down` : '';
-  const cue = paused ? 'Paused · waiting for controllers' : state.complete ? 'Final scores' : state.phase === 'rolling' ? `${player?.name} · ball in play` :
+  const cue = paused ? manuallyPaused ? 'Paused · resume on your phone or TV' : 'Paused · waiting for controllers' : state.complete ? 'Final scores' : state.phase === 'rolling' ? `${player?.name} · ball in play` :
     `${result ? `${result} · ` : ''}${player?.name}, ${last?.player === state.currentPlayer ? 'roll again' : 'your turn'}`;
   if (el('roll-status').textContent !== cue) el('roll-status').textContent = cue;
   const body = el('score-body'); body.replaceChildren();
@@ -123,7 +127,7 @@ function create(players: Array<{player: number; name: string}>): void {
   world.onPinHit = player => {
     if (!paused && connected && gameId) post({type: 'wee:game-hit', player, gameId});
   };
-  if (!paused) world.start();
+  syncWorldState();
   render(world.getState());
   publishOptions();
 }
@@ -140,9 +144,16 @@ function receive(event: MessageEvent): void {
     const wasPaused = paused;
     const wasConnected = connected;
     connected = data.connected === true;
-    paused = data.paused || !connected || !data.playing;
+    lobbyPaused = data.paused || !connected || !data.playing || typeof data.gameId !== 'string';
+    manuallyPaused = data.manuallyPaused === true;
+    paused = lobbyPaused || pageSuspended;
     sound?.setActive(!paused);
-    if (typeof data.gameId !== 'string') return;
+    if (typeof data.gameId !== 'string') {
+      gameId = null;
+      syncWorldState();
+      if (world && wasPaused !== paused) render(world.getState());
+      return;
+    }
     if (!world || gameId !== data.gameId) {
       const players = (Array.isArray(data.players) ? data.players : []).map((p: {slot: number; name: string}) => ({player: p.slot + 1, name: p.name}));
       if (!players.length) return;
@@ -155,7 +166,7 @@ function receive(event: MessageEvent): void {
         console.error(error); return;
       }
     }
-    if (paused) world!.stop(); else world!.start();
+    syncWorldState();
     // Publish after reconnect even when pinfall did not change, without a snapshot feedback loop.
     if (wasPaused !== paused || wasConnected !== connected) render(world!.getState());
     if (wasConnected !== connected) publishOptions();
@@ -195,12 +206,24 @@ for (const label of [...Array.from({length: 10}, (_, i) => String(i + 1)), 'Tota
 el('replay').onclick = () => { if (!paused) newMatch(); };
 el('roll').onclick = () => {
   const player = world?.getState().currentPlayer;
-  if (!world || !player) return;
+  if (!world || !player || paused) return;
   const value = (id: string): number => Number((el(id) as HTMLInputElement).value);
   world.roll({player, aim: value('aim'), spin: value('spin'), power: value('power')});
 };
 el('aim').oninput = () => world?.setAim(Number((el('aim') as HTMLInputElement).value));
+function syncWorldState(): void {
+  paused = lobbyPaused || pageSuspended;
+  sound?.setActive(!paused);
+  if (paused) world?.stop();
+  else world?.start();
+}
+function pauseShortcut(event: KeyboardEvent): void {
+  if (!embedded || !gameId || pageSuspended || !shouldTogglePause(event)) return;
+  event.preventDefault();
+  post({type: 'wee:pause-toggle', gameId});
+}
 window.addEventListener('message', receive);
+window.addEventListener('keydown', pauseShortcut);
 try {
   if (!embedded) { create([{player: 1, name: 'Player 1'}]); el('local-controls').hidden = false; el('help').textContent = 'Aim, choose your curve and power, then roll. X = strike · / = spare · ten frames to make your mark.'; }
   post({type: 'wee:bridge-ready'});
@@ -211,12 +234,19 @@ try {
 }
 window.addEventListener('pagehide', event => {
   clearCallout();
-  audioEvent('stop'); sound?.setActive(false);
-  if (event.persisted) world?.stop();
-  else { window.removeEventListener('message', receive); world?.dispose(); sound?.dispose(); }
+  audioEvent('stop');
+  pageSuspended = true;
+  syncWorldState();
+  if (!event.persisted) {
+    window.removeEventListener('message', receive);
+    window.removeEventListener('keydown', pauseShortcut);
+    world?.dispose(); sound?.dispose();
+  }
 });
 window.addEventListener('pageshow', event => {
   if (!event.persisted) return;
+  pageSuspended = false;
+  if (embedded) lobbyPaused = true;
+  syncWorldState();
   if (embedded) post({type: 'wee:bridge-ready'});
-  else { sound?.setActive(!paused); if (!paused) world?.start(); }
 });

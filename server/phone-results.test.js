@@ -151,3 +151,86 @@ test('a failed return retains its confirmation and tells the player why', async 
   expect(f.text()).toContain('Reconnecting… Keep this page open.');
   expect(f.button('End match and return').props.disabled).toBe(false);
 });
+
+test('P1 pause is explicit, coalesced and remains resumable while shared play is paused', async () => {
+  const f = mount();
+  let finish;
+  h.request.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  const click = f.button('Pause game').props.onClick;
+  const first = click(); click();
+  expect(h.request).toHaveBeenCalledExactlyOnceWith(EVENTS.PLAYER_PAUSE, { gameId: 'game-1', paused: true });
+  finish({ ok: true, manuallyPaused: true, paused: true }); await first;
+  f.render({ lobby: { ...tennis(), manuallyPaused: true, paused: true } });
+  expect(f.button('Resume game').props.disabled).toBe(false);
+  expect(f.text()).toContain('Game paused. Player 1 or the TV can resume.');
+  h.request.mockResolvedValue({ ok: true, manuallyPaused: false, paused: true });
+  await f.button('Resume game').props.onClick();
+  f.render({ lobby: { ...tennis(), manuallyPaused: false, paused: true } });
+  expect(h.request).toHaveBeenLastCalledWith(EVENTS.PLAYER_PAUSE, { gameId: 'game-1', paused: false });
+  expect(f.text()).toContain('Still waiting for everyone to reconnect and finish setup.');
+});
+
+test('TV pause changes clear stale phone acknowledgements without closing the dialog or hiding errors', async () => {
+  const f = mount();
+  const paused = { ...tennis(), manuallyPaused: true, paused: true };
+  h.request.mockResolvedValue({ ok: true, manuallyPaused: true, paused: true });
+  await f.button('Pause game').props.onClick(); f.render({ lobby: paused });
+  expect(f.text()).toContain('Game paused.');
+  f.dialog.close.mockClear();
+  f.render({ lobby: { ...tennis(), manuallyPaused: false } });
+  expect(f.button('Pause game').props.disabled).toBe(false);
+  expect(f.text()).not.toContain('Game paused.');
+  expect(f.dialog.close).not.toHaveBeenCalled();
+
+  h.request.mockResolvedValue({ ok: false, error: 'delivery-pending' });
+  await f.button('Pause game').props.onClick(); f.render();
+  f.render({ lobby: paused });
+  expect(f.text()).toContain('Your roll is reaching the TV.');
+  expect(f.dialog.close).not.toHaveBeenCalled();
+});
+
+test('a late pause acknowledgement cannot contradict a newer TV resume', async () => {
+  const f = mount();
+  let finish;
+  h.request.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  const first = f.button('Pause game').props.onClick();
+  f.render({ lobby: { ...tennis(), manuallyPaused: true, paused: true } });
+  f.render({ lobby: { ...tennis(), manuallyPaused: false } });
+  finish({ ok: true, manuallyPaused: true, paused: true }); await first; f.render();
+  expect(f.text()).not.toContain('Game paused.');
+  expect(f.button('Pause game').props.disabled).toBe(false);
+});
+
+test('pause is unavailable to P2, offline controllers, countdowns and already completed games', () => {
+  const f = mount(tennis(), 1);
+  expect(f.button('Pause game')).toBeUndefined();
+  f.render({ slot: 0, disabled: true });
+  expect(f.button('Pause game').props.disabled).toBe(true);
+  f.render({ disabled: false, lobby: { ...tennis(), phase: PHASES.COUNTDOWN } });
+  expect(f.button('Pause game')).toBeUndefined();
+  f.update({ phase: 'complete', winner: 2, server: 1 }, { phase: PHASES.TUTORIAL });
+  expect(f.button('Pause game')).toBeUndefined();
+});
+
+test('completion racing a pause cannot trap replay behind a missing resume control', async () => {
+  const f = mount({ ...tennis(), paused: true, manuallyPaused: true,
+    gameState: { phase: 'complete', winner: 1, server: 1 } });
+  expect(f.button('Resume game').props.disabled).toBe(false);
+  h.request.mockResolvedValue({ ok: true, manuallyPaused: false, paused: false });
+  await f.button('Resume game').props.onClick();
+  f.update({ phase: 'complete', winner: 1, server: 1 }, { paused: false, manuallyPaused: false });
+  expect(f.button('Play again').props.disabled).toBe(false);
+});
+
+test('a failed pause reports why and a stale pause reply does not update the next game', async () => {
+  const f = mount();
+  h.request.mockResolvedValue({ ok: false, error: 'delivery-pending' });
+  await f.button('Pause game').props.onClick(); f.render();
+  expect(f.text()).toContain('Your roll is reaching the TV.');
+  let finish;
+  h.request.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  const first = f.button('Pause game').props.onClick();
+  f.render({ lobby: { ...tennis(), gameId: 'new-game' } }); f.render();
+  finish({ ok: false, error: 'timeout' }); await first; f.render();
+  expect(f.text()).not.toContain("Couldn't reach");
+});

@@ -1,5 +1,58 @@
 # Tennis response and strength
 
+## November 2 branch integration: transport and stale input
+
+This follow-up did not reproduce a progressively slower third hit. It did find
+two delivery risks: lobby swings had no current-game identifier, and normal
+Socket.IO emission could buffer input despite a comment saying otherwise.
+An initial attempt to reject every busy transport immediately also dropped a
+healthy polling stroke while a routine TV status broadcast occupied its response.
+That behavior is covered by the new transport regression and was corrected.
+
+Lobby tennis input now carries the server's current game ID through phone,
+server and TV. Each sending hop permits one stroke to wait for transport
+writability for at most **80 ms**, allowing a normal polling handoff. An already
+writable connection has no intentional wait. A longer stall or additional waiting
+stroke receives an explicit `network-busy` result, shown on the phone. Settings,
+readiness and other reliable commands retain their ordinary delivery path.
+
+The phone-to-server and server-to-TV waits are separate: congestion can add up to
+**160 ms of permitted local waiting** across both hops. A late timer does not
+extend the send deadline, although a blocked event loop can delay the rejection.
+After emission, swings use volatile delivery with no automatic retry. Before
+forwarding a waiting stroke, the server rechecks current phone/TV ownership and
+the game; pause, resume or Play again during that wait cancels the old input.
+The bridge likewise invalidates pending waits on its lifecycle changes, rejects
+old game messages and ignores acknowledgements belonging to a replacement game.
+Standalone prototype clients retain their legacy swing shape.
+
+Validation on this Mac used real Socket.IO clients and the lobby server, with
+104 strokes per transport at 250 ms intervals, across multiple heartbeats and
+with concurrent TV status broadcasts. These are **local delivery acknowledgement
+round trips**, excluding sensor recognition, browser rendering and racket contact.
+
+| Transport | Delivered exactly once | Median | p95 | Third / last stroke |
+| --- | --- | --- | --- | --- |
+| WebSocket | 104 / 104 | 1.90 ms | 2.73 ms | 2.01 / 1.86 ms |
+| HTTP polling | 104 / 104 | 12.38 ms | 16.82 ms | 9.54 / 15.46 ms |
+
+Additional regressions cover persistent congestion without replay, bounded pending
+input without bursts, pause/resume and same-ID replay during a wait, replacement
+phone/TV sessions, old game input/late replies, timeout cleanup, and the phone's
+manual-pause cue without recalibration. Physics, motion thresholds, power mapping,
+scoring and contact assistance are unchanged by this transport update.
+
+This is not a zero-latency guarantee or a physical phone measurement. Packets
+already accepted by a network transport can still arrive late, including within
+the same game; the wait deadline is not an end-to-end packet-age limit. Real
+Wi-Fi, phone sensor cadence, device load and hosted-server distance still need
+the stage measurements described below. A delivery acknowledgement means the
+TV received the stroke, not that it hit the ball.
+
+References: Socket.IO documents [offline buffering](https://socket.io/docs/v4/client-offline-behavior/),
+[volatile events](https://socket.io/docs/v4/emitting-events/#volatile-events),
+and [acknowledgement timeouts](https://socket.io/docs/v4/emitting-events/#with-timeout).
+
 ## November 2 follow-up: repeated returns
 
 The reported third-hit slowdown was not consistently reproduced in local tests.

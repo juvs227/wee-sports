@@ -37,7 +37,7 @@ test('HTTP phone tennis buttons deliver through the lobby without randomUUID', (
     addEventListener: (_type, fn) => listeners.add(fn), removeEventListener: (_type, fn) => listeners.delete(fn) });
   const connection = connectSwings({ room: 'lobby-CCCC', role: 'phone' });
   for (const listener of listeners) listener({ source: parent, origin: location.origin,
-    data: { type: 'wee:lobby-state', connected: true, paused: false } });
+    data: { type: 'wee:lobby-state', connected: true, paused: false, playing: true, gameId: 'game-a' } });
   expect(connection.sendSwing('Forehand', 'Right')).toBe(true);
   expect(connection.sendSwing('Backhand', 'Left')).toBe(true);
   const strokes = messages.filter(message => message.type === 'wee:player-swing');

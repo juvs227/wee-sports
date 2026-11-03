@@ -4,6 +4,7 @@ import type { BallUserData } from './Tennis/components/ball';
 import { pointReasonLabel } from './Tennis/tennisRules';
 import { connectSwings } from './network/swingConnection.js';
 import { createInputId } from './network/inputId.js';
+import { shouldTogglePause } from './network/pauseShortcut.js';
 import { createSportsAudio } from './audio/sportsAudio';
 import { isGameCommand } from '../shared/protocol.js';
 import '../client/src/styles/tokens.css';
@@ -25,6 +26,9 @@ async function main(): Promise<void> {
     const world = new World(container as HTMLElement);
     const embedded = window.parent !== window;
     let lobbyPaused = embedded;
+    let pageSuspended = false;
+    let manuallyPaused = false;
+    let paused = embedded;
     let activeGameId: string | null = null;
     let publishedState = '';
     let publishedOptions = '';
@@ -39,7 +43,7 @@ async function main(): Promise<void> {
     let humanOpponent = false;
     world.setSplitScreen(true);
     if (!embedded) world.start();
-    new InputController(input => world.setPlayerInput(lobbyPaused ? { moveX: 0, moveZ: 0 } : input, 1));
+    new InputController(input => world.setPlayerInput(paused ? { moveX: 0, moveZ: 0 } : input, 1));
 
     const params = new URLSearchParams(location.search);
     const room = params.get('room') || createInputId().slice(0, 8);
@@ -95,9 +99,9 @@ async function main(): Promise<void> {
     // Standalone prototypes retain their own explicit sound control.
     const sound = embedded ? null : createSportsAudio('tennis');
     sound?.mountButton(el('court-options'));
-    sound?.setActive(!lobbyPaused);
+    sound?.setActive(!paused);
     const playSound = (event: string): void => {
-        if (lobbyPaused) return;
+        if (paused) return;
         if (embedded && activeGameId) window.parent.postMessage({ type: 'wee:game-audio', sport: 'tennis', gameId: activeGameId, event }, location.origin);
         else sound?.play(event);
     };
@@ -127,12 +131,12 @@ async function main(): Promise<void> {
         feedbackUntil = performance.now() + 1400;
     };
     world.onBallHit = player => {
-        if (embedded && activeGameId && !lobbyPaused) {
+        if (embedded && activeGameId && !paused) {
             window.parent.postMessage({ type: 'wee:game-hit', player, gameId: activeGameId }, location.origin);
         }
     };
     const publishOptions = (): void => {
-        if (!embedded || !activeGameId || lobbyPaused) return;
+        if (!embedded || !activeGameId || paused) return;
         const practice = world.getPracticeState();
         const options = {type: 'wee:game-options', gameId: activeGameId, sport: 'tennis',
             settings: {...world.getSettings(), splitView: humanOpponent || split.checked},
@@ -188,10 +192,10 @@ async function main(): Promise<void> {
         const waiting = ballData.isWaitingForServe || ballData.waitingForRacketHit;
         // A set celebration never follows the ball into the next live rally.
         if (!waiting) setResultUntil = 0;
-        el('set-result').hidden = lobbyPaused || practice.active || Boolean(score.matchWinner) || now >= setResultUntil;
+        el('set-result').hidden = paused || practice.active || Boolean(score.matchWinner) || now >= setResultUntil;
         el('server-1').hidden = Boolean(score.matchWinner) || servingPlayer !== 0;
         el('server-2').hidden = Boolean(score.matchWinner) || servingPlayer !== 1;
-        const coach = lobbyPaused ? 'Match paused · waiting for controllers'
+        const coach = paused ? manuallyPaused ? 'Match paused · resume on your phone or TV' : 'Match paused · waiting for controllers'
             : practice.active ? `Practice · return the feed · ${practice.returns}/${practice.attempts} returned · streak ${practice.streak}`
             : score.matchWinner ? `${names[score.matchWinner === 'player1' ? 0 : 1]} wins${embedded ? ' · New match on your phone' : ''}`
             : result && performance.now() < resultUntil ? result
@@ -210,12 +214,12 @@ async function main(): Promise<void> {
                 : score.completedSets.map(set => winner === 0 ? `${set.player1}–${set.player2}` : `${set.player2}–${set.player1}`).join(' · '));
             setText('match-replay-prompt', embedded ? 'Play again? Choose on your phone.' : 'Ready for another match?');
         }
-        (el('play-again') as HTMLButtonElement).disabled = lobbyPaused;
-        for (const id of ['new-match', 'practice-start', 'practice-stop']) (el(id) as HTMLButtonElement).disabled = lobbyPaused;
+        (el('play-again') as HTMLButtonElement).disabled = paused;
+        for (const id of ['new-match', 'practice-start', 'practice-stop']) (el(id) as HTMLButtonElement).disabled = paused;
         el('practice-start').hidden = practice.active;
         el('practice-stop').hidden = !practice.active;
         el('practice-progress').textContent = practice.active ? `${practice.returns} / ${practice.attempts} returned · streak ${practice.streak} · best ${practice.bestStreak}` : '';
-        if (embedded && activeGameId && !lobbyPaused) {
+        if (embedded && activeGameId && !paused) {
             const state = { type: 'wee:tennis-state', gameId: activeGameId,
                 phase: practice.active ? 'rally' : score.matchWinner ? 'complete' : waiting
                     ? ballData.serveDelayRemaining > 0 ? 'prepare' : 'serve' : 'rally',
@@ -237,28 +241,28 @@ async function main(): Promise<void> {
         queueMicrotask(updateScore);
     };
     world.onStrokeResult = result => {
-        if (embedded && activeGameId && !lobbyPaused) window.parent.postMessage({
+        if (embedded && activeGameId && !paused) window.parent.postMessage({
             ...result, type: 'wee:stroke-result', gameId: activeGameId,
         }, location.origin);
     };
     el('new-match').onclick = () => {
-        if (lobbyPaused) return;
+        if (paused) return;
         playSound('stop');
         world.stopPractice();
         world.configure({ format: (el('match-format') as HTMLSelectElement).value as 'full' | 'quick' });
         world.startRound(); playSound('start'); updateScore();
     };
     el('practice-start').onclick = () => {
-        if (lobbyPaused || humanOpponent) return;
+        if (paused || humanOpponent) return;
         world.startPractice(
             (el('practice-stroke') as HTMLSelectElement).value as 'forehand' | 'backhand' | 'alternate',
             (el('practice-hand') as HTMLSelectElement).value as 'Right' | 'Left',
         );
         updateScore();
     };
-    el('practice-stop').onclick = () => { if (!lobbyPaused) { world.stopPractice(); updateScore(); } };
+    el('practice-stop').onclick = () => { if (!paused) { world.stopPractice(); updateScore(); } };
     el('play-again').onclick = () => {
-        if (lobbyPaused) return;
+        if (paused) return;
         playSound('stop');
         world.startRound();
         playSound('start');
@@ -267,7 +271,7 @@ async function main(): Promise<void> {
     function runCommand(command: TennisCommand): {ok: boolean; error?: string} {
         if (!isGameCommand(command, 'tennis')) return {ok: false, error: 'bad-game-command'};
         if (!activeGameId || command.gameId !== activeGameId) return {ok: false, error: 'stale-game'};
-        if (lobbyPaused) return {ok: false, error: 'paused'};
+        if (paused) return {ok: false, error: 'paused'};
         const previous = deliveredCommands.get(command.id);
         if (previous) return previous;
         if (humanOpponent && (command.action.startsWith('practice-') ||
@@ -331,42 +335,56 @@ async function main(): Promise<void> {
         el('practice-controls').hidden = humanOpponent;
         (el('bot-level') as HTMLSelectElement).disabled = humanOpponent;
         el('match-mode').textContent = p2 ? 'Tennis · head to head' : 'Tennis · solo';
-        lobbyPaused = event.data.paused || !event.data.connected;
-        sound?.setActive(!lobbyPaused);
-        if (lobbyPaused) {
+        lobbyPaused = event.data.paused || !event.data.connected || event.data.playing === false || !activeGameId;
+        manuallyPaused = event.data.manuallyPaused === true;
+        syncWorldState();
+        updateScore();
+    };
+    function syncWorldState(): void {
+        paused = lobbyPaused || pageSuspended;
+        sound?.setActive(!paused);
+        if (paused) {
             publishedState = '';
             publishedOptions = '';
             world.setPlayerInput({ moveX: 0, moveZ: 0 }, 1);
             world.setPlayerInput({ moveX: 0, moveZ: 0 }, 2);
             world.stop();
         } else world.start();
-        updateScore();
+    }
+    const pauseShortcut = (event: KeyboardEvent): void => {
+        if (!embedded || !activeGameId || pageSuspended || !shouldTogglePause(event)) return;
+        event.preventDefault();
+        // The server owns pause state, including reconnect/setup restrictions.
+        window.parent.postMessage({type: 'wee:pause-toggle', gameId: activeGameId}, location.origin);
     };
     window.addEventListener('message', receiveState);
+    window.addEventListener('keydown', pauseShortcut);
     updateScore();
     const scoreTimer = window.setInterval(updateScore, 250);
     const connection = connectSwings({ room, role: 'game',
         onStatus: text => { el('connection').textContent = text; },
-        onSwing: event => { if (!lobbyPaused) world.swing(event); },
+        onSwing: event => { if (!paused) world.swing(event); },
     });
     window.addEventListener('pagehide', event => {
         if (embedded && activeGameId) playSound('stop');
-        sound?.setActive(false);
-        publishedState = '';
-        if (event.persisted) { world.stop(); return; }
+        pageSuspended = true;
+        syncWorldState();
+        if (event.persisted) return;
         window.clearInterval(scoreTimer);
         window.removeEventListener('message', receiveState);
+        window.removeEventListener('keydown', pauseShortcut);
         connection.close();
         world.dispose();
         sound?.dispose();
     });
     window.addEventListener('pageshow', event => {
         if (!event.persisted) return;
-        if (embedded) {
-            // Restoring from browser history does not reload the iframe. Ask
-            // the parent for current pause/connection state before resuming.
-            window.parent.postMessage({ type: 'wee:bridge-ready' }, location.origin);
-        } else { sound?.setActive(true); world.start(); }
+        pageSuspended = false;
+        // Ignore snapshots received while hidden: restoring must first confirm
+        // that this game still exists and that every participant can resume.
+        if (embedded) lobbyPaused = true;
+        syncWorldState();
+        if (embedded) window.parent.postMessage({ type: 'wee:bridge-ready' }, location.origin);
     });
 }
 

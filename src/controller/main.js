@@ -33,6 +33,7 @@ if (embedded && window.ResizeObserver) {
 
 let connected = !embedded;
 let lobbyPaused = embedded;
+let manuallyPaused = false;
 let gameActive = !embedded;
 let enabled = false;
 let permissionPending = false;
@@ -155,7 +156,8 @@ function renderPlayState() {
     help = 'Keep this page open. Your controller will reconnect automatically.';
   } else if (gameActive && lobbyPaused) {
     state = 'paused'; status = 'Match paused'; title = 'Hang tight';
-    help = 'Waiting for everyone to reconnect and finish setup.';
+    help = manuallyPaused ? 'Player 1 or the TV can resume the match from game options.'
+      : 'Waiting for everyone to reconnect and finish setup.';
   } else if (setupError) {
     state = 'paused'; status = 'Setup needed'; title = 'Setup not saved';
     help = 'Open Controller settings and calibrate again, or reconnect.';
@@ -247,7 +249,8 @@ function controls() {
 }
 function deliveryResult(event, kind = 'swing') {
   element('delivery').textContent = event.ok === false
-    ? event.error === 'game-loading' ? 'The game is loading. Try again when it appears on the TV.'
+    ? event.error === 'network-busy' ? 'Connection busy. This swing was not sent; try your next swing when it clears.'
+      : event.error === 'game-loading' ? 'The game is loading. Try again when it appears on the TV.'
       : event.error === 'not-your-turn' || event.error === 'roll-rejected' ? 'Wait until the TV and your controller show your turn.'
       : `The ${kind} was not accepted. Wait for the game to reconnect, then try again.`
     : event.receivers ? Number.isFinite(event.roundTripMs)
@@ -490,6 +493,7 @@ window.addEventListener('message', event => {
   wasConnected = connected;
   gameActive = data.playing === true;
   lobbyPaused = data.paused;
+  manuallyPaused = data.manuallyPaused === true;
   if (lobbyPaused || !connected) { pendingTimings.clear(); strokeNoticeUntil = 0; }
   if (lobbyPaused || !connected || !gameActive) stop('Paused. Motion will resume when the match is ready.');
   startMotion();

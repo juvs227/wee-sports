@@ -53,7 +53,7 @@ test('the lobby forwards bounded strength only from the authenticated playing se
   store.start('tv');
   now += COUNTDOWN_SECONDS * 1000;
   store.finishCountdown(code);
-  const event = { type: 'swing', id: 'one', label: 'Forehand', hand: 'Right' };
+  const event = { type: 'swing', id: 'one', gameId: store.lobby(code).gameId, label: 'Forehand', hand: 'Right' };
   expect(isSwing(event)).toBe(true); // Old clients still work.
   expect(store.swingTarget('phone', { ...event, power: .3, player: 2 }).event)
     .toEqual({ ...event, power: .3, player: 1 });

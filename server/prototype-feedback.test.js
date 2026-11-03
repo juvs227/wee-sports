@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { EVENTS } from '../shared/protocol.js';
 
 const h = vi.hoisted(() => ({ refs: [], effects: [], refIndex: 0, reuseRefs: false, socketHandlers: new Map(),
-  emit: vi.fn(), request: vi.fn(async () => ({ ok: true })), connection: 'online' }));
+  emit: vi.fn(), requestSwing: vi.fn(async () => ({ ok: true })), request: vi.fn(async () => ({ ok: true })), connection: 'online' }));
 vi.mock('react', async () => ({ ...(await vi.importActual('react')),
   useRef(value) {
     if (h.reuseRefs) return h.refs[h.refIndex++];
@@ -11,7 +11,7 @@ vi.mock('react', async () => ({ ...(await vi.importActual('react')),
   useState(value) { return [value, () => {}]; },
   useEffect(effect, deps) { h.effects.push({ effect, deps }); },
 }));
-vi.mock('../client/src/lib/socket.js', () => ({ request: h.request, useConnection: () => h.connection,
+vi.mock('../client/src/lib/socket.js', () => ({ request: h.request, requestSwing: h.requestSwing, useConnection: () => h.connection,
   socket: { connected: true, volatile: { emit: h.emit },
     on(name, fn) { h.socketHandlers.set(name, fn); }, off(name) { h.socketHandlers.delete(name); } } }));
 import { PrototypeFrame } from '../client/src/components/PrototypeFrame.jsx';
@@ -218,3 +218,63 @@ test.each([{ controller: true, sport: 'bowling' }, { sport: 'tennis' }])(
     expect(h.request).not.toHaveBeenCalled();
   },
 );
+
+test('tennis input crosses only the current playing frame and uses the unbuffered request path', async () => {
+  const f = mount({controller: true});
+  const event = {type: 'swing', id: 'swing-a', gameId: 'match-a', label: 'Forehand', hand: 'Right'};
+  await f.receive({type: 'wee:player-swing', event: {...event, gameId: 'old'}});
+  expect(h.requestSwing).not.toHaveBeenCalled();
+  await f.receive({type: 'wee:player-swing', event});
+  expect(h.requestSwing).toHaveBeenCalledExactlyOnceWith(EVENTS.PLAYER_SWING, event, expect.any(Function));
+  expect(f.contentWindow.postMessage).toHaveBeenLastCalledWith({type: 'wee:swing-ack', gameId: 'match-a', result: {ok: true, id: 'swing-a'}}, window.location.origin);
+  f.rerender({playing: false});
+  await f.receive({type: 'wee:player-swing', event});
+  expect(h.requestSwing).toHaveBeenCalledOnce();
+});
+
+test('a pending phone swing loses its delivery scope after pause and resume', async () => {
+  const f = mount({controller: true});
+  const event = {type: 'swing', id: 'waiting', gameId: 'match-a', label: 'Forehand', hand: 'Right'};
+  let finish;
+  h.requestSwing.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const pending = f.receive({type: 'wee:player-swing', event});
+  const current = h.requestSwing.mock.calls[0][2];
+  expect(current()).toBe(true);
+  f.rerender({paused: true}); f.rerender({paused: false});
+  expect(current()).toBe(false);
+  finish({ok: false, error: 'not-playing'}); await pending;
+});
+
+test('late tennis acknowledgements and forwarded inputs cannot affect a replacement game', async () => {
+  const f = mount({controller: true});
+  const event = {type: 'swing', id: 'swing-a', gameId: 'match-a', label: 'Forehand', hand: 'Right'};
+  let finish;
+  h.requestSwing.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const pending = f.receive({type: 'wee:player-swing', event});
+  f.rerender({gameId: 'match-b'}); f.contentWindow.postMessage.mockClear();
+  finish({ok: true}); await pending;
+  expect(f.contentWindow.postMessage).not.toHaveBeenCalled();
+  f.unmount();
+  h.refs = []; h.effects = []; h.refIndex = 0; h.reuseRefs = false;
+  const tv = mount(), ack = vi.fn(); tv.contentWindow.postMessage.mockClear();
+  h.socketHandlers.get(EVENTS.GAME_SWING)({...event, gameId: 'old'}, ack);
+  expect(ack).toHaveBeenLastCalledWith({ok: false});
+  expect(tv.contentWindow.postMessage).not.toHaveBeenCalled();
+  h.socketHandlers.get(EVENTS.GAME_SWING)(event, ack);
+  expect(tv.contentWindow.postMessage).toHaveBeenCalledExactlyOnceWith({type: 'wee:game-swing', event}, window.location.origin);
+});
+
+test('pause shortcut uses the trusted current game and can request resume while paused', async () => {
+  const onPauseToggle = vi.fn();
+  const f = mount({onPauseToggle, paused: true, manuallyPaused: true});
+  const message = {type: 'wee:pause-toggle', gameId: 'match-a'};
+  await f.receive(message, {source: {}}); await f.receive(message, {origin: 'https://wrong.test'});
+  await f.receive({...message, gameId: 'old'});
+  expect(onPauseToggle).not.toHaveBeenCalled();
+  await f.receive(message); expect(onPauseToggle).toHaveBeenCalledOnce();
+  expect(f.contentWindow.postMessage).toHaveBeenCalledWith(expect.objectContaining({type: 'wee:lobby-state', manuallyPaused: true}), window.location.origin);
+  f.rerender({playing: false}); await f.receive(message);
+  expect(onPauseToggle).toHaveBeenCalledOnce();
+  f.rerender({playing: true, controller: true}); await f.receive(message);
+  expect(onPauseToggle).toHaveBeenCalledOnce();
+});

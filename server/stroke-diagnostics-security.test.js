@@ -15,7 +15,7 @@ function fixture() {
     store.finishCountdown(host.code);
     const gameId = store.lobby(host.code).gameId;
     return { host, phone, gameId,
-      input: id => store.swingTarget(`${prefix}-phone`, { type: 'swing', id, label: 'Forehand', hand: 'Right' }),
+      input: id => store.swingTarget(`${prefix}-phone`, { type: 'swing', id, gameId, label: 'Forehand', hand: 'Right' }),
       result: id => ({ id, gameId, player: 1, result: 'hit', reason: 'Good contact', receivedToContactMs: 20 }),
     };
   }

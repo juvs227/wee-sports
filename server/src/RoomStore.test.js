@@ -430,7 +430,7 @@ test('setup gates readiness, cancels a countdown, and pauses a running match unt
   store.setSetup('p1', { setup: null });
   assert.equal(store.lobby(code).paused, true);
   assert.deepEqual(store.lobby(code).setupPending, ['Red']);
-  const stroke = { type: 'swing', id: 'one', label: 'Forehand', hand: 'Right' };
+  const stroke = { type: 'swing', id: 'one', gameId: store.lobby(code).gameId, label: 'Forehand', hand: 'Right' };
   assert.equal(store.swingTarget('p0', stroke).error, 'paused');
   store.setSetup('p1', { setup: 'buttons' });
   assert.equal(store.lobby(code).paused, false);

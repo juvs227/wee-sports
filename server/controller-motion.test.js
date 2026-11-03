@@ -124,6 +124,20 @@ async function calibrate() {
   for (let i = 0; i < 110; i++) tick();
 }
 
+test('manual pause explains resume and preserves calibration; reconnect keeps its own cue', async () => {
+  await import('../src/controller/main.js');
+  await calibrate();
+  state({playing: true, paused: false, sport: 'tennis', gameId: 'match-a'});
+  state({playing: true, paused: true, manuallyPaused: true, gameId: 'match-a'});
+  expect(elements.get('play-help').textContent).toContain('resume');
+  expect(elements.get('setup-panel').hidden).toBe(true);
+  state({playing: true, paused: false, manuallyPaused: false, gameId: 'match-a'});
+  expect(elements.get('setup-panel').hidden).toBe(true);
+  expect(permission).toHaveBeenCalledOnce();
+  state({playing: true, paused: true, manuallyPaused: false, gameId: 'match-a'});
+  expect(elements.get('play-help').textContent).toContain('reconnect');
+});
+
 test('live sport switching keeps motion setup and permission while discarding the old sport input', async () => {
   await import('../src/controller/main.js');
   await calibrate();

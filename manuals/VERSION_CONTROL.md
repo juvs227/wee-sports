@@ -40,3 +40,17 @@ current adapted controller and its regression fixtures.
 randomized placement and older service rules. It is not imported over the
 current deterministic assistance and service-box rules. `ready-check` and
 `tutorial-vote` remain separate tutorial-flow work requiring protocol adaptation.
+
+## Follow-up through `updated-menu` at `ccf8b66`
+
+Six newer menu commits add callback-based reset, bowling pause/resume, anchored
+overlay fixes and P as the shortcut instead of Escape. The combined app adapts
+pause to authenticated shared lobby state and existing TV/phone controls; it
+does not replace the current gameplay entry points or physics. `base-game`
+remains at `4e6795d`. See the [detailed comparison](../docs/branch-integration.md).
+
+Keep this published branch's history. Rebasing onto `base-game` would replay
+existing work against intentionally excluded dependency/workspace changes.
+`e54e97d` synchronizes `origin/main` into this feature branch, retaining the
+broader ignore rules with no source-tree change. Do not merge this feature into
+`main` without the team's separate review and real-device playtest.
