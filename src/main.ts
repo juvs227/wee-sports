@@ -34,8 +34,6 @@ async function main(): Promise<void> {
     let publishedOptions = '';
     let lastResult = '';
     let resultUntil = 0;
-    let strokeFeedback = '';
-    let feedbackUntil = 0;
     let announcedSets = 0;
     let setResultUntil = 0;
     const deliveredCommands = new Map<string, {ok: boolean; error?: string}>();
@@ -57,12 +55,12 @@ async function main(): Promise<void> {
     panel.setAttribute('aria-label', 'Tennis scoreboard');
     panel.setAttribute('data-embedded', String(embedded));
     panel.innerHTML = `<div class="tennis-scorestrip"><span class="visually-hidden" id="match-mode">Tennis · solo</span>
-        <div class="tennis-seat" id="seat-1" data-player="1"><span class="tennis-player-name" id="name-1"></span><strong id="points-1" aria-label="Player 1 points">0</strong><span class="tennis-serving" id="server-1" aria-label="Serving"></span></div>
+        <div class="tennis-seat" id="seat-1" data-player="1"><span class="tennis-player-name" id="name-1"></span><strong id="points-1" aria-label="Player 1 points">0</strong><span class="tennis-serving" id="server-1" role="img" aria-label="Serving"></span></div>
         <div class="tennis-score-context"><strong id="score-format">Set 1</strong><span id="games-progress">Games 0–0</span><span id="sets-progress">Sets 0–0</span></div>
-        <div class="tennis-seat" id="seat-2" data-player="2"><span class="tennis-serving" id="server-2" aria-label="Serving"></span><strong id="points-2" aria-label="Player 2 points">0</strong><span class="tennis-player-name" id="name-2"></span></div>
+        <div class="tennis-seat" id="seat-2" data-player="2"><span class="tennis-serving" id="server-2" role="img" aria-label="Not serving" data-serving="false"></span><strong id="points-2" aria-label="Player 2 points">0</strong><span class="tennis-player-name" id="name-2"></span></div>
       </div>
       <p id="completed-sets" class="visually-hidden"></p>
-      <p id="coach" class="tennis-coach" role="status" aria-live="polite">Swing as the ball approaches your side.</p>
+      <p id="coach" class="tennis-coach" hidden role="status" aria-live="polite">Swing as the ball approaches your side.</p>
       <section id="set-result" class="tennis-set-result" role="status" aria-live="polite" hidden><span class="result-eyebrow" id="set-result-label"></span><strong id="set-winner"></strong><span id="set-result-score"></span><p id="set-next"></p></section>
       <section id="match-result" class="game-result-card" role="status" aria-live="polite" hidden>
         <div class="game-result-emblem" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 5h12v7c0 5-2.5 8-6 8s-6-3-6-8V5Zm0 2H5v4c0 4 3 6 6 6m11-10h5v4c0 4-3 6-6 6M16 20v6m-5 2h10"/></svg></div>
@@ -126,10 +124,6 @@ async function main(): Promise<void> {
     controllerUrl.searchParams.set('room', room);
     link.href = controllerUrl.href;
     link.hidden = embedded;
-    world.onSwingFeedback = message => {
-        strokeFeedback = message.replace(/Player ([12])/g, (_, number: string) => names[Number(number) - 1]);
-        feedbackUntil = performance.now() + 1400;
-    };
     world.onBallHit = player => {
         if (embedded && activeGameId && !paused) {
             window.parent.postMessage({ type: 'wee:game-hit', player, gameId: activeGameId }, location.origin);
@@ -193,14 +187,18 @@ async function main(): Promise<void> {
         // A set celebration never follows the ball into the next live rally.
         if (!waiting) setResultUntil = 0;
         el('set-result').hidden = paused || practice.active || Boolean(score.matchWinner) || now >= setResultUntil;
-        el('server-1').hidden = Boolean(score.matchWinner) || servingPlayer !== 0;
-        el('server-2').hidden = Boolean(score.matchWinner) || servingPlayer !== 1;
+        for (const index of [0, 1]) {
+            const indicator = el(`server-${index + 1}`);
+            const serving = !score.matchWinner && servingPlayer === index;
+            indicator.dataset.serving = String(serving);
+            indicator.setAttribute('aria-label', `${names[index]}: ${serving ? 'Serving' : 'Not serving'}`);
+        }
         const coach = paused ? manuallyPaused ? 'Match paused · resume on your phone or TV' : 'Match paused · waiting for controllers'
             : practice.active ? `Practice · return the feed · ${practice.returns}/${practice.attempts} returned · streak ${practice.streak}`
             : score.matchWinner ? `${names[score.matchWinner === 'player1' ? 0 : 1]} wins${embedded ? ' · New match on your phone' : ''}`
             : result && performance.now() < resultUntil ? result
             : waiting ? `${serve.status === 'let' ? 'Let · replay serve · ' : serve.status === 'first-fault' ? 'Fault · second serve · ' : ''}${names[servingPlayer]}, ${ballData.serveDelayRemaining > 0 ? 'serve next' : 'serve when ready'} · ${serve.side === 'deuce' ? 'right' : 'left'} side`
-            : performance.now() < feedbackUntil && strokeFeedback ? strokeFeedback : 'Rally · watch the ball';
+            : 'Rally · watch the ball';
         if (el('coach').textContent !== coach) el('coach').textContent = coach;
         el('match-result').hidden = practice.active || !score.matchWinner;
         if (score.matchWinner) {

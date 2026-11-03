@@ -95,3 +95,12 @@ This prototype demonstrates a full end-to-end multiplayer web application:
 - **Host / Display (TV/Laptop):** Connects to the local Vite/Node server, renders the 3D court/lane using Three.js and Cannon-es physics running at 120Hz, and displays an auto-generated QR code for phone pairing.
 - **Controller (Smartphone):** Scanning the QR code opens the phone controller over a secure HTTPS tunnel. Reading device gyroscope/accelerometer motion data, it streams calibrated swing and roll inputs back to the host via WebSockets.
 - **Full Flow:** Players pair their phones, calibrate motion, select Tennis or Bowling, and play an active match with live motion detection, score tracking, and automated bot or 2-player support.
+
+## Play with built assets
+
+Run `npm run play` to build once and serve the production assets on port 5173.
+Stop an existing server on that port first. This avoids Vite development serving
+overhead, but does not alter motion detection thresholds or network latency.
+For phone sensors, keep using a trusted HTTPS tunnel or deployment and provide
+its origin through `PUBLIC_GAME_URL` when needed. The bottom tennis swing-status
+pill is hidden; scores and the serving marker remain in the top scoreboard.
