@@ -1,5 +1,6 @@
 import {BowlingWorld, BowlingState} from './bowling/World';
 import {formatFrame} from './bowling/match';
+import {Menu} from './Overlay/Menu';
 import '../client/src/styles/tokens.css';
 import './bowling.css';
 
@@ -7,10 +8,32 @@ const embedded = window.parent !== window;
 const el = (id: string): HTMLElement => document.getElementById(id)!;
 let world: BowlingWorld | null = null;
 let gameId: string | null = null;
+let lobbyPaused = embedded;
+let menuPaused = false;
+let pageSuspended = false;
 let paused = embedded;
 let connected = false;
 const delivered = new Set<string>();
 const post = (message: object): void => { if (embedded) window.parent.postMessage(message, location.origin); };
+
+function syncWorldState(): void {
+  paused = lobbyPaused || menuPaused || pageSuspended;
+  if (paused) world?.stop();
+  else world?.start();
+}
+
+const menu = new Menu({
+  onPauseChange: value => {
+    menuPaused = value;
+    syncWorldState();
+    if (world) render(world.getState());
+  },
+  onReset: () => {
+    delivered.clear();
+    world?.reset();
+  },
+  onQuit: embedded ? () => post({type: 'wee:return-to-lobby'}) : undefined,
+});
 
 function render(state: BowlingState): void {
   const player = state.players.find(p => p.player === state.currentPlayer);
@@ -47,7 +70,7 @@ function create(players: Array<{player: number; name: string}>): void {
   world.onPinHit = player => {
     if (!paused && connected && gameId) post({type: 'wee:game-hit', player, gameId});
   };
-  if (!paused) world.start();
+  syncWorldState();
   render(world.getState());
 }
 function receive(event: MessageEvent): void {
@@ -57,8 +80,12 @@ function receive(event: MessageEvent): void {
     const wasPaused = paused;
     const wasConnected = connected;
     connected = data.connected === true;
-    paused = data.paused || !connected || !data.playing;
-    if (typeof data.gameId !== 'string') return;
+    lobbyPaused = data.paused || !connected || !data.playing;
+    if (typeof data.gameId !== 'string') {
+      syncWorldState();
+      if (world && wasPaused !== paused) render(world.getState());
+      return;
+    }
     if (!world || gameId !== data.gameId) {
       const players = (Array.isArray(data.players) ? data.players : []).map((p: {slot: number; name: string}) => ({player: p.slot + 1, name: p.name}));
       if (!players.length) return;
@@ -70,7 +97,7 @@ function receive(event: MessageEvent): void {
         console.error(error); return;
       }
     }
-    if (paused) world!.stop(); else world!.start();
+    syncWorldState();
     // Publish after reconnect even when pinfall did not change, without a snapshot feedback loop.
     if (wasPaused !== paused || wasConnected !== connected) render(world!.getState());
   } else if (data?.type === 'wee:game-roll') {
@@ -108,5 +135,22 @@ try {
   el('roll-status').textContent = 'Enable hardware acceleration in your browser, then reload.';
   console.error(error);
 }
-window.addEventListener('pagehide', event => { if (event.persisted) world?.stop(); else { window.removeEventListener('message', receive); world?.dispose(); } });
-window.addEventListener('pageshow', event => { if (event.persisted && !paused) world?.start(); });
+window.addEventListener('pagehide', event => {
+  if (event.persisted) {
+    pageSuspended = true;
+    syncWorldState();
+  } else {
+    window.removeEventListener('message', receive);
+    menu.dispose();
+    world?.dispose();
+  }
+});
+window.addEventListener('pageshow', event => {
+  if (!event.persisted) return;
+  pageSuspended = false;
+  if (embedded) {
+    lobbyPaused = true;
+    syncWorldState();
+    post({type: 'wee:bridge-ready'});
+  } else syncWorldState();
+});
