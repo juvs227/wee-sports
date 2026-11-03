@@ -65,10 +65,10 @@ test('solo contact notifications use the current lobby match and stop while paus
   state({});
   runtime.world.onBallHit(1);
   expect(parent.postMessage).toHaveBeenLastCalledWith({ type: 'wee:game-hit', player: 1, gameId: 'solo-match' }, location.origin);
-  listeners.get('keydown')({ key: 'Escape' });
+  listeners.get('keydown')({ key: 'p' });
   runtime.world.onBallHit(1);
   expect(parent.postMessage).toHaveBeenCalledTimes(1);
-  listeners.get('keydown')({ key: 'Escape' });
+  listeners.get('keydown')({ key: 'p' });
   runtime.world.onBallHit(1);
   expect(parent.postMessage).toHaveBeenLastCalledWith({ type: 'wee:game-hit', player: 1, gameId: 'solo-match' }, location.origin);
   parent.postMessage.mockClear();
