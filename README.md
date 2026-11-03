@@ -88,3 +88,10 @@ An actual link printed in the terminal like ``https://rarity-underfoot-finale.ng
 That is all the setup required to run the system. Cloudflare and ngrok are not
 needed for local play (with keyboard control); ngrok is only needed for phone access outside your local
 network.
+
+## Operational Use Case
+
+This prototype demonstrates a full end-to-end multiplayer web application:
+- **Host / Display (TV/Laptop):** Connects to the local Vite/Node server, renders the 3D court/lane using Three.js and Cannon-es physics running at 120Hz, and displays an auto-generated QR code for phone pairing.
+- **Controller (Smartphone):** Scanning the QR code opens the phone controller over a secure HTTPS tunnel. Reading device gyroscope/accelerometer motion data, it streams calibrated swing and roll inputs back to the host via WebSockets.
+- **Full Flow:** Players pair their phones, calibrate motion, select Tennis or Bowling, and play an active match with live motion detection, score tracking, and automated bot or 2-player support.
