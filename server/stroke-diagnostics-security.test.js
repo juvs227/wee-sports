@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { RoomStore } from './src/RoomStore.js';
-import { COUNTDOWN_SECONDS, PROTOCOL_VERSION as v } from '../shared/protocol.js';
+import { COUNTDOWN_SECONDS, PROTOCOL_VERSION as v, VOTE_SECONDS } from '../shared/protocol.js';
 
 function fixture() {
   let now = 0;
@@ -10,9 +10,10 @@ function fixture() {
     const phone = store.join(`${prefix}-phone`, { v, code: host.code, name: 'Player' });
     store.setSetup(`${prefix}-phone`, { setup: 'motion' });
     store.setReady(`${prefix}-phone`, { ready: true });
-    store.start(`${prefix}-tv`);
     now += COUNTDOWN_SECONDS * 1000;
     store.finishCountdown(host.code);
+    now += VOTE_SECONDS * 1000;
+    store.expireVote(host.code);
     const gameId = store.lobby(host.code).gameId;
     return { host, phone, gameId,
       input: id => store.swingTarget(`${prefix}-phone`, { type: 'swing', id, gameId, label: 'Forehand', hand: 'Right' }),

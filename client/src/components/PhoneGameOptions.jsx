@@ -22,7 +22,7 @@ export function PhoneGameOptions({ lobby, slot, disabled }) {
   const [hand, setHand] = useState('Right');
   const options = lobby.gameOptions;
   const available = options?.gameId === lobby.gameId && isGameOptions(options, lobby.sport);
-  const playing = lobby.phase === PHASES.TUTORIAL;
+  const playing = lobby.phase === PHASES.GAME;
   const tennis = lobby.sport === 'tennis';
   const settings = options?.settings;
   const completed = playing && lobby.gameState?.phase === 'complete';
@@ -31,7 +31,8 @@ export function PhoneGameOptions({ lobby, slot, disabled }) {
     (tennis && player === 2 ? 'Bot' : `Player ${player}`));
   const resultTitle = winnerNames.length > 1 ? 'A shared victory!' : winnerNames.length ? `${winnerNames[0]} wins!` : 'Game complete';
   const locked = disabled || lobby.paused || !playing || !available || slot !== 0 || busy;
-  const active = playing || lobby.phase === PHASES.COUNTDOWN;
+  // P1 can end the match from the countdown, the tutorial vote and the tutorial too.
+  const active = playing || [PHASES.COUNTDOWN, PHASES.VOTE, PHASES.TUTORIAL].includes(lobby.phase);
   const returnLocked = disabled || !active || !lobby.gameId || slot !== 0 || busy;
   const pauseLocked = disabled || !playing || !lobby.gameId || slot !== 0 || busy || (completed && !lobby.manuallyPaused);
   // Another controller or the TV may change pause after this action succeeds.

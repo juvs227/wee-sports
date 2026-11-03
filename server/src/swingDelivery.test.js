@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {setTimeout as delay} from 'node:timers/promises';
 import {io} from 'socket.io-client';
-import {EVENTS, PROTOCOL_VERSION as v} from '../../shared/protocol.js';
+import {EVENTS, PROTOCOL_VERSION as v, VOTE_SECONDS} from '../../shared/protocol.js';
 import {sendSwingRequest} from '../../src/network/swingRequest.js';
 import {createGameServer} from './app.js';
 import {RoomStore} from './RoomStore.js';
@@ -25,8 +25,9 @@ async function fixture(t, transport = 'websocket') {
   const seat = await send(phone, EVENTS.PLAYER_JOIN, {v, code: room.code, name: 'P1'});
   await send(phone, EVENTS.PLAYER_SETUP, {setup: 'buttons'});
   const start = async () => {
-    await send(phone, EVENTS.PLAYER_READY, {ready: true}); await send(tv, EVENTS.HOST_START);
+    await send(phone, EVENTS.PLAYER_READY, {ready: true});
     now += 5000; store.finishCountdown(room.code);
+    now += VOTE_SECONDS * 1000; store.expireVote(room.code);
     return store.lobby(room.code).gameId;
   };
   const gameId = await start();

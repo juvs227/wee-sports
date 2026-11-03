@@ -6,7 +6,7 @@
  */
 
 /** Bumped when a message shape changes incompatibly. */
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 /** A dropped connection keeps its seat for one minute. */
 export const RECONNECT_MS = 60_000;
@@ -29,8 +29,10 @@ export const NAME_MAX = 12;
 
 /** One controller can play the current tennis prototype against the bot. */
 export const READY_AT_PLAYERS = 1;
-/** The 5, 4, 3, 2, 1 after the TV presses Play. */
+/** The 5, 4, 3, 2, 1 that starts by itself once every player is ready. */
 export const COUNTDOWN_SECONDS = 5;
+/** How long the tutorial vote stays open. Anyone who hasn't voted by then counts as No. */
+export const VOTE_SECONDS = 20;
 
 /** Sports a lobby can be opened for. Art and copy live in client/src/lib/sports.js. */
 export const OPEN_SPORTS = ['tennis', 'bowling'];
@@ -40,30 +42,58 @@ export function isController(sport, slot) {
 }
 
 /**
+ * The moves each sport's tutorial teaches, in order, one step per move. A step
+ * ends when every player who voted Yes has done its move. A sport with no
+ * entry skips the vote and goes straight from the countdown to the game. Art
+ * and copy live in client/src/lib/tutorials.js.
+ */
+export const TUTORIAL_MOVES = {
+  tennis: ['forehand', 'backhand', 'serve'],
+};
+
+export function hasTutorial(sport) {
+  return Object.hasOwn(TUTORIAL_MOVES, sport);
+}
+
+/**
  * Where a lobby is:
  *
- *   'lobby' -> 'ready' -> 'all-ready' -> (TV presses Play) -> 'countdown' -> 'tutorial'
+ *   'lobby' -> 'ready' -> (everyone ready) -> 'countdown' -> 'vote' -> 'tutorial' | 'game'
+ *   'tutorial' -> (every Yes voter did every move) -> 'game'
  *
- * Seat changes before play reset readiness; an empty P1 seat waits in 'lobby'.
+ * Nobody touches the TV: phones press Ready, vote, and do the tutorial moves.
+ * A sport without TUTORIAL_MOVES goes from 'countdown' straight to 'game'.
+ * Un-readying during the countdown cancels it back to 'ready'. Seat changes
+ * before the game reset readiness; an empty P1 seat waits in 'lobby'.
  */
 export const PHASES = {
   LOBBY: 'lobby',
   READY: 'ready',
-  ALL_READY: 'all-ready',
   COUNTDOWN: 'countdown',
+  VOTE: 'vote',
   TUTORIAL: 'tutorial',
+  GAME: 'game',
 };
 
 /**
  * Every lobby snapshot below has this shape:
  *
  *   { code, sport, phase, players: [{ slot, name, ready, setup }], countdown,
- *     paused, reconnecting: [{ name, msLeft }], setupPending: [name] }
+ *     vote, tutorial, paused, reconnecting: [{ name, msLeft }], setupPending: [name] }
  *
  * Create/join/resume acknowledgements additionally contain a private token
  * and role. Never send those fields in LOBBY_UPDATE or include them in a URL.
  *
- * ready is always false outside the 'ready' phase. countdown is null except
+ * vote is null until the vote opens. While it is open it says who has voted
+ * but not what they picked: { msLeft, voted: [slot] }. Once resolved, it
+ * reveals every pick: { picks: [{ slot, pick: 'yes' | 'no' | 'none' }] }.
+ *
+ * tutorial is null except in 'tutorial', where it is
+ * { step, moves, learners: [slot], done: [slot] }. moves is the sport's
+ * TUTORIAL_MOVES and step indexes it. learners are the players who voted Yes;
+ * done is which of them have done the current step's move.
+ *
+ * ready can only be true in 'ready' and 'countdown'. countdown is null except
  * in 'countdown', where it is { msLeft }: time remaining, not a timestamp, so
  * clock skew between devices doesn't matter.
  */
@@ -79,8 +109,6 @@ export const EVENTS = {
   LOBBY_GET: 'lobby:get',
   /** Phone -> server: take a seat. Ack: { ok, slot, name, ...snapshot }. */
   PLAYER_JOIN: 'player:join',
-  /** TV -> server: Play, once everyone is ready. Starts the countdown. Ack: { ok }. */
-  HOST_START: 'host:start',
   /** TV or P1 -> server: { gameId }. End this match while keeping the lobby and controller setup. */
   HOST_RETURN_TO_LOBBY: 'host:return-to-lobby',
   PLAYER_RETURN_TO_LOBBY: 'player:return-to-lobby',
@@ -89,8 +117,19 @@ export const EVENTS = {
   PLAYER_PAUSE: 'player:pause',
   /** Phone -> server: give the seat back. */
   PLAYER_LEAVE: 'player:leave',
-  /** Phone -> server: { ready: boolean }. Can be toggled until everyone is ready. Ack: { ok }. */
+  /**
+   * Phone -> server: { ready: boolean }. Toggles during the ready check and the
+   * countdown. The last player to ready up starts the countdown; un-readying
+   * during it cancels it. Ack: { ok }.
+   */
   PLAYER_READY: 'player:ready',
+  /** Phone -> server: { watch: boolean }. One final vote per player. Ack: { ok }. */
+  TUTORIAL_VOTE: 'tutorial:vote',
+  /**
+   * Phone -> server: { step }. This learner did the move for that step. Repeats
+   * and a step that has already ended are harmless. Ack: { ok }.
+   */
+  TUTORIAL_MOVE: 'tutorial:move',
   /** Controller setup is reported by each phone before it can become ready. */
   PLAYER_SETUP: 'player:setup',
   /** Current TV or seated phone -> shared TV sound preference for this lobby. */
@@ -239,10 +278,22 @@ export const ERRORS = {
   NO_READY_CHECK: 'no-ready-check',
   BAD_READY: 'bad-ready',
   NOT_HOST: 'not-host',
-  NOT_ALL_READY: 'not-all-ready',
+  NO_VOTE: 'no-vote',
+  BAD_VOTE: 'bad-vote',
+  ALREADY_VOTED: 'already-voted',
+  NO_TUTORIAL: 'no-tutorial',
+  NOT_LEARNER: 'not-learner',
+  BAD_MOVE: 'bad-move',
   BAD_SESSION: 'bad-session',
   ALREADY_IN_ROOM: 'already-in-room',
   PAUSED: 'paused',
+};
+
+/** What a resolved vote shows for each player. */
+export const PICKS = {
+  YES: 'yes',
+  NO: 'no',
+  NONE: 'none',
 };
 
 export function isRoomCode(value) {

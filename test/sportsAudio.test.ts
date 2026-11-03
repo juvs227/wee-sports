@@ -133,13 +133,13 @@ test('one TV audio context survives countdown into actual game effects', async (
   session.countdown(1);
   session.countdown(2);
   expect(h.sources).toHaveLength(5);
-  session.update({gameId: 'match-one', phase: 'tutorial', paused: false});
+  session.update({gameId: 'match-one', phase: 'game', paused: false});
   expect(h.sources).toHaveLength(6); // One start cue.
   session.gameEvent('serve');
   expect(h.sources).toHaveLength(7);
-  session.update({gameId: 'match-one', phase: 'tutorial', paused: true});
+  session.update({gameId: 'match-one', phase: 'game', paused: true});
   session.gameEvent('hit');
-  session.update({gameId: 'match-one', phase: 'tutorial', paused: false});
+  session.update({gameId: 'match-one', phase: 'game', paused: false});
   expect(h.sources).toHaveLength(7); // Reconnect has no repeated start/hit.
   expect(h.createContext).toHaveBeenCalledTimes(1);
   sound.dispose();
@@ -152,7 +152,7 @@ test('restored matches do not replay start, skipped countdowns do not catch up, 
     setActive: vi.fn(),
   };
   const session = createTvAudioSession(sound);
-  session.update({gameId: 'restored', phase: 'tutorial', paused: false});
+  session.update({gameId: 'restored', phase: 'game', paused: false});
   expect(sound.play).not.toHaveBeenCalled();
   session.update({gameId: 'fresh', phase: 'countdown', paused: false});
   session.countdown(5);
@@ -162,8 +162,8 @@ test('restored matches do not replay start, skipped countdowns do not catch up, 
     'countdown',
     'countdown-2',
   ]);
-  session.update({gameId: 'fresh', phase: 'tutorial', paused: true});
-  session.update({gameId: 'fresh', phase: 'tutorial', paused: false});
+  session.update({gameId: 'fresh', phase: 'game', paused: true});
+  session.update({gameId: 'fresh', phase: 'game', paused: false});
   expect(sound.play).toHaveBeenCalledTimes(2);
   session.gameEvent('roll');
   session.gameEvent('roll-end');

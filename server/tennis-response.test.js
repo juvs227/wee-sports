@@ -1,7 +1,7 @@
 import { test, expect } from 'vitest';
 import { createSwingStream } from '../src/controller/swingStream.js';
 import { tennisPower } from '../src/controller/tennisPower.js';
-import { isSwing, PROTOCOL_VERSION, COUNTDOWN_SECONDS } from '../shared/protocol.js';
+import { isSwing, PROTOCOL_VERSION, COUNTDOWN_SECONDS, VOTE_SECONDS } from '../shared/protocol.js';
 import { RoomStore } from './src/RoomStore.js';
 
 function detect(ratesAt, fast = true) {
@@ -50,9 +50,10 @@ test('the lobby forwards bounded strength only from the authenticated playing se
   store.join('phone', { v: PROTOCOL_VERSION, code, name: 'Player' });
   store.setSetup('phone', { setup: 'motion' });
   store.setReady('phone', { ready: true });
-  store.start('tv');
   now += COUNTDOWN_SECONDS * 1000;
   store.finishCountdown(code);
+  now += VOTE_SECONDS * 1000;
+  store.expireVote(code);
   const event = { type: 'swing', id: 'one', gameId: store.lobby(code).gameId, label: 'Forehand', hand: 'Right' };
   expect(isSwing(event)).toBe(true); // Old clients still work.
   expect(store.swingTarget('phone', { ...event, power: .3, player: 2 }).event)

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { io } from 'socket.io-client';
-import { EVENTS, PHASES, PROTOCOL_VERSION as v } from '../../shared/protocol.js';
+import { EVENTS, PHASES, PROTOCOL_VERSION as v, VOTE_SECONDS } from '../../shared/protocol.js';
 import { RoomStore } from './RoomStore.js';
 import { createGameServer } from './app.js';
 
@@ -17,8 +17,10 @@ function fixture(sport = 'tennis', count = 2) {
   });
   function start(countdown = false) {
     for (let i = 0; i < count; i++) assert.equal(store.setReady(`p${i + 1}`, { ready: true }).ok, true);
-    assert.equal(store.start('tv').ok, true);
-    if (!countdown) { clock.now += 5000; store.finishCountdown(room.code); }
+    if (!countdown) {
+      clock.now += 5000; store.finishCountdown(room.code);
+      clock.now += VOTE_SECONDS * 1000; store.expireVote(room.code);
+    }
     return store.lobby(room.code).gameId;
   }
   return { store, room, seats, clock, start };
@@ -39,7 +41,7 @@ for (const sport of ['tennis', 'bowling']) for (const role of ['host', 'player']
     assert.deepEqual(lobby.players, players);
     assert.equal(lobby.gameId, null); assert.equal(lobby.gameState, null); assert.equal(lobby.gameOptions, null);
     assert.equal(lobby.countdown, null); assert.equal(lobby.soundMuted, true); assert.equal(lobby.paused, false);
-    assert.equal(store.start('tv').error, 'not-all-ready');
+    assert.equal(lobby.players.some(player => player.ready), false);
     assert.equal(store.setGameState('tv', result).error, 'not-playing');
     const replacementId = start();
     assert.notEqual(replacementId, gameId);
@@ -161,8 +163,8 @@ test('real sockets: both return events broadcast to their room, survive TV recon
   }
   async function start(host = tv) {
     await send(p1, EVENTS.PLAYER_READY, { ready: true }); await send(p2, EVENTS.PLAYER_READY, { ready: true });
-    assert.equal((await send(host, EVENTS.HOST_START)).ok, true);
     now += 5000; store.finishCountdown(room.code);
+    now += VOTE_SECONDS * 1000; store.expireVote(room.code);
     return store.lobby(room.code).gameId;
   }
   const gameId = await start();

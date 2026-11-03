@@ -18,6 +18,9 @@ import {
   normalizeCode,
 } from '@wee/shared/protocol.js';
 import { PhoneReady } from '../components/PhoneReady.jsx';
+import { PhoneTutorial } from '../components/PhoneTutorial.jsx';
+import { PhoneVote } from '../components/PhoneVote.jsx';
+import { useRevealHold } from '../lib/useRevealHold.js';
 import { errorText } from '../lib/errors.js';
 import { request } from '../lib/socket.js';
 import { useReconnect } from '../lib/useReconnect.js';
@@ -62,6 +65,8 @@ export default function JoinStub() {
   }, [needsSecurePage, phoneLinkLoading, secureUrl]);
   const { snapshot: seat, reconnecting, ended, storageWarning, accept, leave: leaveSession } = useReconnect('player', code);
   const lobby = seat;
+  // Holds the vote's reveal on screen for a moment; a cancelled vote has none.
+  const revealing = useRevealHold(lobby?.phase) && Boolean(lobby?.vote?.picks);
   const [error, setError] = useState(null);
   const [joining, setJoining] = useState(false);
   const canJoin = !openingSecurePage && isRoomCode(code) && cleanName(name) !== '' && !joining;
@@ -91,7 +96,7 @@ export default function JoinStub() {
   if (seat) {
     const players = lobby?.players ?? [];
     const phase = lobby?.phase ?? PHASES.LOBBY;
-    const playing = phase === PHASES.TUTORIAL;
+    const playing = phase === PHASES.GAME && !revealing;
     const lobbyOptions = (
       <>
         <h2>In this lobby</h2>
@@ -141,16 +146,21 @@ export default function JoinStub() {
         </div>
         {playing ? null : phase === PHASES.LOBBY ? (
           <p className="stub__status">Waiting for a player to join the P1 controller seat…</p>
+        ) : phase === PHASES.VOTE || revealing ? (
+          // Keyed by game, so a fresh vote forgets this phone's last pick.
+          <PhoneVote key={lobby.gameId} lobby={lobby} slot={seat.slot} />
+        ) : phase === PHASES.TUTORIAL ? (
+          <PhoneTutorial key={lobby.tutorial.step} lobby={lobby} slot={seat.slot} />
         ) : (
-          <PhoneReady lobby={lobby} slot={seat.slot} disabled={reconnecting || (lobby.paused && phase !== PHASES.TUTORIAL)} />
+          <PhoneReady lobby={lobby} slot={seat.slot} disabled={reconnecting || lobby.paused} />
         )}
 
         {reconnecting || lobby.reconnecting?.length ? <ReconnectNotice lobby={lobby} reconnecting={reconnecting} /> : null}
         {isController(seat.sport, seat.slot) ? (
           <>
             <PrototypeFrame code={seat.code} controller player={seat.slot + 1} sport={seat.sport} gameId={seat.gameId} gameState={seat.gameState}
-              playing={phase === PHASES.TUTORIAL}
-              paused={phase !== PHASES.TUTORIAL || reconnecting || seat.paused}
+              playing={phase === PHASES.GAME}
+              paused={phase !== PHASES.GAME || reconnecting || seat.paused}
               manuallyPaused={Boolean(lobby.manuallyPaused && !reconnecting && !lobby.reconnecting?.length && !lobby.setupPending?.length)}
               showPause={reconnecting} />
           </>

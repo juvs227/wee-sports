@@ -27,7 +27,7 @@ export function createTvAudioSession(sound: AudioOutput) {
     sound.setActive(!next.paused);
     if (next.phase === 'countdown' && next.gameId) countedGame = next.gameId;
     if (
-      next.phase === 'tutorial' &&
+      next.phase === 'game' &&
       next.gameId &&
       startedGame !== next.gameId
     ) {
@@ -35,7 +35,7 @@ export function createTvAudioSession(sound: AudioOutput) {
       startedGame = next.gameId;
       if (!next.paused && countedGame === next.gameId) sound.play('start');
     }
-    if (next.phase !== 'countdown' && next.phase !== 'tutorial') sound.stop();
+    if (next.phase !== 'countdown' && next.phase !== 'game') sound.stop();
     state = next;
   }
 
@@ -66,7 +66,7 @@ export function createTvAudioSession(sound: AudioOutput) {
       sound.stop(event === 'roll-end' ? 'roll' : undefined);
       return;
     }
-    if (!state.gameId || state.phase !== 'tutorial' || state.paused) return;
+    if (!state.gameId || state.phase !== 'game' || state.paused) return;
     sound.play(event);
   }
 

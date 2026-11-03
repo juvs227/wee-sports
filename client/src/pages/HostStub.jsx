@@ -9,8 +9,10 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { EVENTS, PHASES, playerCapacity } from '@wee/shared/protocol.js';
 import { QrCode } from '../components/QrCode.jsx';
 import { TvCountdown } from '../components/TvCountdown.jsx';
+import { TvGame } from '../components/TvGame.jsx';
 import { TvReady } from '../components/TvReady.jsx';
 import { TvTutorial } from '../components/TvTutorial.jsx';
+import { TvVote } from '../components/TvVote.jsx';
 import { ThemeToggle } from '../components/ThemeToggle.jsx';
 import { errorText } from '../lib/errors.js';
 import { usePhoneLink } from '../lib/usePhoneLink.js';
@@ -20,6 +22,7 @@ import { ReconnectNotice } from '../components/ReconnectNotice.jsx';
 import { sportName } from '../lib/sports.js';
 import { enterFullscreen, exitFullscreen, fullscreenElement } from '../lib/fullscreen.js';
 import { useTvAudio } from '../lib/useTvAudio.jsx';
+import { useRevealHold } from '../lib/useRevealHold.js';
 import '../styles/game-shell.css';
 
 export default function HostStub() {
@@ -28,7 +31,9 @@ export default function HostStub() {
   const { url, loading: phoneLinkLoading, status: phoneLinkStatus } = usePhoneLink(code);
   const { snapshot: lobby, reconnecting, ended, storageWarning, leave } = useReconnect('host', code);
   const audio = useTvAudio(lobby, reconnecting || Boolean(ended));
-  const [starting, setStarting] = useState(false);
+  // Holds the vote's reveal on screen for a moment before the tutorial or game.
+  // A vote cancelled by someone leaving has nothing to reveal.
+  const revealing = useRevealHold(lobby?.phase) && Boolean(lobby?.vote?.picks);
   const [startError, setStartError] = useState(null);
   const [returning, setReturning] = useState(false);
   const returnPending = useRef(false);
@@ -50,13 +55,13 @@ export default function HostStub() {
   function enterGameView() {
     setImmersive(true);
     requestedFullscreen.current = true;
-    // Called directly by Play / Full screen, before a network await consumes the gesture.
+    // Called directly by the Full screen button, before a network await consumes the gesture.
     void enterFullscreen(document).then(entered => {
       if (entered && !requestedFullscreen.current) void exitFullscreen(document);
     });
   }
 
-  const active = lobby?.phase === PHASES.COUNTDOWN || lobby?.phase === PHASES.TUTORIAL;
+  const active = lobby?.phase === PHASES.GAME;
   useEffect(() => {
     const changed = () => {
       const entered = Boolean(fullscreenElement(document));
@@ -83,20 +88,25 @@ export default function HostStub() {
     }
   }, [active]);
 
-  // A failed Play (say, someone left first) is old news once the phase moves.
+  // A failed request is old news once the phase moves.
   const phase = lobby?.phase;
   useEffect(() => setStartError(null), [phase]);
 
-  async function play() {
-    void audio.activateForPlay();
-    setStarting(true);
-    setStartError(null);
-    enterGameView();
-    const result = await request(EVENTS.HOST_START, {});
-    setStarting(false);
-    // On success the lobby update switches the screen to the countdown.
-    if (!result.ok) { setStartError(result.error); leaveGameView(); }
-  }
+  // Nobody presses Play on the TV any more: the phones start the countdown.
+  // Browsers only start sound after the page has been interacted with, so
+  // unlock it on the first click or key press here, and try again as the
+  // countdown starts (the click that opened this lobby usually counts).
+  const { activateForPlay } = audio;
+  useEffect(() => {
+    const unlock = () => { void activateForPlay(); };
+    window.addEventListener('pointerdown', unlock, { once: true });
+    window.addEventListener('keydown', unlock, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+  }, [activateForPlay]);
+  useEffect(() => { if (phase === PHASES.COUNTDOWN) void activateForPlay(); }, [phase, activateForPlay]);
 
   async function returnToLobby() {
     if (reconnecting || !lobby?.gameId || returnPending.current) return;
@@ -110,7 +120,7 @@ export default function HostStub() {
   }
 
   const togglePause = useCallback(async () => {
-    if (reconnecting || returning || !lobby?.gameId || lobby.phase !== PHASES.TUTORIAL || pausePending.current) return;
+    if (reconnecting || returning || !lobby?.gameId || lobby.phase !== PHASES.GAME || pausePending.current) return;
     const gameId = lobby.gameId;
     pausePending.current = true; setPausing(true); setStartError(null);
     const result = await request(EVENTS.HOST_PAUSE, { gameId, paused: !lobby.manuallyPaused });
@@ -137,7 +147,7 @@ export default function HostStub() {
   }
 
   // Keep the game mounted through a temporary drop, so its local state survives.
-  if (lobby?.phase === PHASES.TUTORIAL) return <TvTutorial lobby={lobby}
+  if (lobby?.phase === PHASES.GAME && !revealing) return <TvGame lobby={lobby}
     onAudio={audio.onAudio}
     onReturnToLobby={returnToLobby} returning={returning} returnDisabled={reconnecting || pausing}
     onPauseToggle={togglePause} pauseDisabled={reconnecting || pausing || returning || (lobby.gameState?.phase === 'complete' && !lobby.manuallyPaused)}
@@ -157,19 +167,15 @@ export default function HostStub() {
     );
   }
 
-  if (lobby.phase === PHASES.COUNTDOWN) return <div className={`game-countdown${immersive ? ' game-countdown--immersive' : ''}`}>
-    <button type="button" className="game-countdown__view" onClick={immersive ? leaveGameView : enterGameView}>
-      {immersive ? fullscreen ? 'Exit full screen' : 'Windowed view' : 'Full screen'}
-    </button>
-    <TvCountdown lobby={lobby} onTick={audio.onCountdown} />
-  </div>;
+  // The vote, then its reveal for a moment, then the tutorial if anyone asked.
+  if (lobby.phase === PHASES.VOTE || revealing) return <TvVote lobby={lobby} />;
+  if (lobby.phase === PHASES.TUTORIAL) return <TvTutorial lobby={lobby} />;
 
   const capacity = playerCapacity(lobby.sport);
   const seats = Array.from(
     { length: capacity },
     (_, slot) => lobby.players.find((player) => player.slot === slot) ?? null,
   );
-  const canPlay = lobby.phase === PHASES.ALL_READY && !starting;
 
   return (
     <main className="stub host-lobby">
@@ -225,15 +231,9 @@ export default function HostStub() {
         </p>
       ) : null}
 
+      <TvCountdown lobby={lobby} onTick={audio.onCountdown} />
+
       <div className="stub__actions">
-        <button
-          type="button"
-          className="btn btn--primary btn--play"
-          disabled={!canPlay}
-          onClick={play}
-        >
-          {starting ? 'Starting…' : 'Play'}
-        </button>
         <button type="button" className="btn btn--ghost" onClick={async () => { if (await leave()) navigate('/'); else setStartError('disconnected'); }}>
           Close lobby
         </button>

@@ -58,11 +58,14 @@ export function createGameServer({ store = new RoomStore(), origins = [], tickMs
       reply(ack, result);
       if (result.ok) broadcast(result.code);
     });
-    socket.on(EVENTS.HOST_START, (_payload, ack) => {
-      const result = store.start(socket.id);
-      reply(ack, result);
-      if (result.ok) broadcast(result.code);
-    });
+    // Phones drive the vote and the tutorial; everyone sees each vote and check mark.
+    for (const [event, method] of [[EVENTS.TUTORIAL_VOTE, 'vote'], [EVENTS.TUTORIAL_MOVE, 'tutorialMove']]) {
+      socket.on(event, (payload, ack) => {
+        const result = store[method](socket.id, payload);
+        reply(ack, result.ok ? { ok: true } : result);
+        if (result.ok) broadcast(result.code);
+      });
+    }
     for (const [event, role] of [[EVENTS.HOST_RETURN_TO_LOBBY, 'host'], [EVENTS.PLAYER_RETURN_TO_LOBBY, 'player']]) {
       socket.on(event, (payload, ack) => {
         const result = store.returnToLobby(socket.id, payload, role);
@@ -185,6 +188,7 @@ export function createGameServer({ store = new RoomStore(), origins = [], tickMs
   const timer = setInterval(() => {
     for (const result of store.expireDisconnected()) publish(result);
     for (const code of store.countdownCodes) { if (store.finishCountdown(code)) broadcast(code); }
+    for (const code of store.voteCodes) { if (store.expireVote(code)) broadcast(code); }
     for (const code of store.reconnectingCodes) broadcast(code);
   }, tickMs);
   timer.unref();

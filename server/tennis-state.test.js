@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { RoomStore } from './src/RoomStore.js';
-import { COUNTDOWN_SECONDS, PROTOCOL_VERSION as v, isTennisState } from '../shared/protocol.js';
+import { COUNTDOWN_SECONDS, PROTOCOL_VERSION as v, VOTE_SECONDS, isTennisState } from '../shared/protocol.js';
 
 test('only the current host can publish validated tennis serve/match status', () => {
   let now = 0;
@@ -9,9 +9,10 @@ test('only the current host can publish validated tennis serve/match status', ()
   store.join('phone', { v, code, name: 'Player' });
   store.setSetup('phone', { setup: 'motion' });
   store.setReady('phone', { ready: true });
-  store.start('tv');
   now += COUNTDOWN_SECONDS * 1000;
   store.finishCountdown(code);
+  now += VOTE_SECONDS * 1000;
+  store.expireVote(code);
   const { gameId } = store.lobby(code);
   const status = { gameId, phase: 'serve', server: 1, winner: null };
   expect(store.setGameState('phone', status).ok).toBe(false);

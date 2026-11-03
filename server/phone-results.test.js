@@ -20,7 +20,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 const settings = { assistance: 'standard', botDifficulty: 'standard', autoMove: true,
   timingAssist: true, splitView: true, format: 'quick' };
-const tennis = () => ({ code: 'ABCD', gameId: 'game-1', sport: 'tennis', phase: PHASES.TUTORIAL, paused: false,
+const tennis = () => ({ code: 'ABCD', gameId: 'game-1', sport: 'tennis', phase: PHASES.GAME, paused: false,
   players: [{ slot: 0, name: 'Sam' }], gameState: { phase: 'serve', winner: null, server: 1 },
   gameOptions: { gameId: 'game-1', sport: 'tennis', settings,
     practice: { active: false, stroke: 'alternate', hand: 'Right' }, humanOpponent: false } });
@@ -208,7 +208,7 @@ test('pause is unavailable to P2, offline controllers, countdowns and already co
   expect(f.button('Pause game').props.disabled).toBe(true);
   f.render({ disabled: false, lobby: { ...tennis(), phase: PHASES.COUNTDOWN } });
   expect(f.button('Pause game')).toBeUndefined();
-  f.update({ phase: 'complete', winner: 2, server: 1 }, { phase: PHASES.TUTORIAL });
+  f.update({ phase: 'complete', winner: 2, server: 1 }, { phase: PHASES.GAME });
   expect(f.button('Pause game')).toBeUndefined();
 });
 

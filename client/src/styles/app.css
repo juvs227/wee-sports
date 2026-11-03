@@ -748,9 +748,231 @@
   gap: 1rem;
 }
 
-/* Ready check: TV lobby ---------------------------------------------------------
-   Shown in place of the seat list. Seat color is identity only. Ready state is
-   the border style (dashed or solid), a check mark and a word, never
+/* Tutorial vote: TV ------------------------------------------------------------
+   Seat color is identity only. Vote state is the border style (dashed while
+   waiting, solid once in), an icon and a word, never red/green/yellow. */
+
+.vote {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1.5rem, 5vh, 3.5rem);
+  max-width: 96rem;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: clamp(1.5rem, 5vh, 4rem) var(--gutter);
+}
+
+.vote__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem 3rem;
+}
+
+.vote__title {
+  font-size: clamp(2.5rem, 6vw, 6rem);
+  font-weight: 900;
+  line-height: 1.05;
+}
+
+.vote__sub {
+  margin-top: 0.5rem;
+  color: var(--text-muted);
+  font-size: clamp(1.5rem, 3vw, 3rem);
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.vote__timer {
+  display: grid;
+  place-content: center;
+  flex: none;
+  width: clamp(7rem, 13vw, 12rem);
+  aspect-ratio: 1;
+  border: 6px solid var(--accent);
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  text-align: center;
+  line-height: 1;
+}
+
+.vote__seconds {
+  font-size: clamp(3rem, 6vw, 5.5rem);
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.vote__unit {
+  margin-top: 0.25rem;
+  color: var(--text-muted);
+  font-size: clamp(0.9rem, 1.4vw, 1.3rem);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.vote__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: clamp(1rem, 2vw, 2rem);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vote-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(0.75rem, 2vh, 1.25rem);
+  min-width: 0;
+  padding: clamp(1.5rem, 4vh, 2.75rem) 1rem;
+  border: 6px solid var(--player);
+  border-radius: var(--radius-lg);
+  /* A band of seat color across the top keeps identity even when the border is gray. */
+  background: linear-gradient(var(--player) 0 0.6rem, var(--surface) 0.6rem);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.vote-card[data-state='waiting'],
+.vote-card[data-state='none'] {
+  border-style: dashed;
+  border-color: var(--border-strong);
+  box-shadow: none;
+}
+
+.vote-card .seat__badge {
+  width: clamp(3.5rem, 6vw, 5.5rem);
+  height: clamp(3.5rem, 6vw, 5.5rem);
+  font-size: clamp(1.25rem, 2.2vw, 2rem);
+}
+
+.vote-card__name {
+  max-width: 100%;
+  font-size: clamp(1.6rem, 2.8vw, 2.75rem);
+  font-weight: 900;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.vote-card__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.6em;
+  padding: 0.3rem 1.1rem;
+  border: 3px solid transparent;
+  border-radius: var(--radius-pill);
+  font-size: clamp(1.25rem, 2.2vw, 2.1rem);
+  font-weight: 800;
+}
+
+.vote-card[data-state='waiting'] .vote-card__status,
+.vote-card[data-state='none'] .vote-card__status {
+  color: var(--text-muted);
+}
+
+/* The reveal: Yes is a filled pill, Skip an outlined one, so the two differ
+   in shape as well as icon and word. */
+.vote-card[data-state='yes'] .vote-card__status {
+  background: var(--text);
+  color: #fff;
+}
+
+.vote-card[data-state='no'] .vote-card__status {
+  border-color: var(--border-strong);
+}
+
+.vote-card__icon {
+  width: 1.2em;
+  height: 1.2em;
+  flex: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .vote-card[data-state='voted'] {
+    animation: vote-pop 420ms var(--ease);
+  }
+
+  .vote[data-open='false'] .vote__title {
+    animation: vote-pop 520ms var(--ease);
+  }
+
+  .vote[data-open='false'] .vote-card {
+    animation: vote-reveal 520ms var(--ease) both;
+  }
+
+  .vote[data-open='false'] .vote-card:nth-child(2) {
+    animation-delay: 90ms;
+  }
+
+  .vote[data-open='false'] .vote-card:nth-child(3) {
+    animation-delay: 180ms;
+  }
+
+  .vote[data-open='false'] .vote-card:nth-child(4) {
+    animation-delay: 270ms;
+  }
+}
+
+@keyframes vote-pop {
+  40% {
+    transform: scale(1.06);
+  }
+}
+
+@keyframes vote-reveal {
+  from {
+    opacity: 0;
+    transform: perspective(60rem) rotateY(80deg);
+  }
+}
+
+/* Tutorial vote: phone --------------------------------------------------------- */
+
+.phone-vote {
+  margin-top: 1.5rem;
+}
+
+.phone-vote__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.stub .phone-vote__title {
+  margin: 0;
+  font-size: 1.6rem;
+}
+
+.phone-vote__timer {
+  color: var(--accent-ink);
+  font-size: 1.6rem;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.phone-vote__buttons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.phone-vote__btn {
+  min-height: 5.5rem;
+  border-radius: var(--radius-lg);
+  font-size: 1.75rem;
+}
+
+/* Ready: TV lobby ---------------------------------------------------------------
+   The lobby's seat list, with ready state. Seat color is identity only. Ready
+   state is the border style (dashed or solid), a check mark and a word, never
    red/green/yellow. */
 
 .ready {
@@ -811,10 +1033,23 @@
   box-shadow: none;
 }
 
+/* An open seat matches .seat[data-empty]: dashed, see-through, muted. */
+.ready-card[data-empty='true'] {
+  border: 2px dashed var(--border);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+}
+
 .ready-card .seat__badge {
   width: 2.8rem;
   height: 2.8rem;
   font-size: 1.05rem;
+}
+
+.ready-card[data-empty='true'] .seat__badge {
+  background: var(--surface-sunk);
+  color: var(--text-muted);
 }
 
 .ready-card__name {
@@ -823,6 +1058,10 @@
   font-size: 1.35rem;
   font-weight: 900;
   overflow-wrap: anywhere;
+}
+
+.ready-card[data-empty='true'] .ready-card__name {
+  font-weight: 700;
 }
 
 .ready-card__status {
@@ -844,59 +1083,64 @@
   flex: none;
 }
 
+/* Play slot: TV lobby -----------------------------------------------------------
+   Sits where a Play button would. Nobody clicks it: grayed out while waiting,
+   then a big 5, 4, 3, 2, 1 once every phone is ready. */
+
+.play-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  min-height: 3.5rem;
+  padding: 0.5rem 1.6rem;
+  margin-top: 1.5rem;
+  border-radius: var(--radius-pill);
+  font-weight: 900;
+}
+
+.play-slot[data-state='waiting'] {
+  background: var(--surface-sunk);
+  color: var(--text-muted);
+}
+
+.play-slot__label {
+  font-size: 1.35rem;
+}
+
+.play-slot__hint {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.play-slot[data-state='counting'] {
+  min-width: 9rem;
+  min-height: 9rem;
+  border-radius: var(--radius-lg);
+  color: #fff;
+  background: linear-gradient(180deg, var(--accent-top), var(--accent-bottom));
+  box-shadow: var(--shadow-lift);
+}
+
+.play-slot__number {
+  font-size: 6rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .ready-card[data-ready='true'] {
     animation: ready-pop 420ms var(--ease);
   }
 
-  .ready[data-all-ready='true'] .ready__title {
-    animation: ready-pop 600ms var(--ease);
+  .play-slot__number {
+    animation: countdown-tick 700ms var(--ease);
   }
 }
 
 @keyframes ready-pop {
   40% {
     transform: scale(1.06);
-  }
-}
-
-/* Big enough to find from the couch once it lights up. */
-.btn--play {
-  min-height: 3.5rem;
-  padding-inline: 2.5rem;
-  font-size: 1.35rem;
-}
-
-/* Countdown: TV -----------------------------------------------------------------
-   Full screen. One huge number, re-keyed each second for its entrance. */
-
-.countdown {
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: clamp(0.5rem, 3vh, 2rem);
-  min-height: 100dvh;
-  padding: var(--gutter);
-  text-align: center;
-}
-
-.countdown__label {
-  color: var(--text-muted);
-  font-size: clamp(1.5rem, 3.5vw, 3.25rem);
-  font-weight: 800;
-}
-
-.countdown__number {
-  color: var(--accent-ink);
-  font-size: clamp(9rem, 45vh, 30rem);
-  font-weight: 900;
-  line-height: 0.9;
-  font-variant-numeric: tabular-nums;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .countdown__number {
-    animation: countdown-tick 700ms var(--ease);
   }
 }
 
@@ -907,14 +1151,14 @@
   }
 }
 
-/* Ready check: phone ----------------------------------------------------------- */
+/* Ready: phone ------------------------------------------------------------------ */
 
 .phone-ready {
   margin-top: 1.5rem;
 }
 
 .stub .phone-ready__title {
-  margin: 0;
+  margin: 0 0 1rem;
   font-size: 1.6rem;
 }
 
@@ -934,6 +1178,330 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Tutorial: TV ------------------------------------------------------------------
+   One move at a time: the move, a looping demo, three short lines, and who
+   still has to do it. Seat color is identity only. Progress is the border
+   style (dashed while waiting, solid once done), a check mark and a word. */
+
+.tutorial {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1rem, 3vh, 2.25rem);
+  max-width: 96rem;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: clamp(1.25rem, 4vh, 3rem) var(--gutter);
+}
+
+/* Everything, player cards included, fits on one 16:9 screen. */
+.tutorial__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem 3rem;
+}
+
+.tutorial__intro {
+  flex: 1 1 32rem;
+  min-width: 0;
+}
+
+.tutorial__eyebrow {
+  color: var(--accent-ink);
+  font-size: clamp(1rem, 1.8vw, 1.7rem);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tutorial__title {
+  margin-top: 0.25rem;
+  font-size: clamp(2.5rem, 6vw, 6rem);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.tutorial__cue {
+  margin-top: 0.6rem;
+  color: var(--text-muted);
+  font-size: clamp(1.3rem, 2.4vw, 2.4rem);
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.tutorial__steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Done is filled, current is a thick solid ring, next is dashed: three shapes. */
+.tutorial-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 1.1rem;
+  border: 3px dashed var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: clamp(1rem, 1.6vw, 1.6rem);
+  font-weight: 800;
+}
+
+.tutorial-step[data-state='current'] {
+  border: 5px solid var(--accent-top);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-weight: 900;
+}
+
+.tutorial-step[data-state='done'] {
+  border-style: solid;
+  border-color: var(--text);
+  background: var(--text);
+  color: #fff;
+}
+
+.tutorial-step__icon {
+  width: 1.1em;
+  height: 1.1em;
+  flex: none;
+}
+
+.tutorial__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(1.25rem, 3vw, 3.5rem);
+}
+
+@media (max-width: 52rem) {
+  .tutorial__body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.tutorial__demo {
+  padding: clamp(0.75rem, 2vw, 2rem);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.move-demo {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 32vh;
+}
+
+.move-demo__floor {
+  fill: var(--surface-sunk);
+}
+
+.move-demo__body {
+  fill: var(--surface-sunk);
+  stroke: var(--border-strong);
+  stroke-width: 3;
+}
+
+.move-demo__trail {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-dasharray: 2 14;
+}
+
+.move-demo__arrow {
+  fill: var(--accent-top);
+}
+
+.move-demo__ball {
+  fill: #d7f34a;
+  stroke: #9cb81f;
+  stroke-width: 2.5;
+}
+
+.move-demo__phone {
+  fill: var(--text);
+}
+
+.move-demo__screen {
+  fill: var(--accent-soft);
+}
+
+.tutorial__how {
+  display: grid;
+  gap: clamp(0.75rem, 2.2vh, 1.4rem);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: how;
+}
+
+.tutorial__how li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.9rem;
+  font-size: clamp(1.3rem, 2.1vw, 2.2rem);
+  font-weight: 800;
+  line-height: 1.25;
+  counter-increment: how;
+}
+
+.tutorial__how li::before {
+  content: counter(how);
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 1.75em;
+  height: 1.75em;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-size: 0.8em;
+  font-weight: 900;
+}
+
+.tutorial__tip {
+  margin-top: clamp(0.75rem, 2vh, 1.5rem);
+  padding: 0.8rem 1.1rem;
+  border-radius: var(--radius);
+  background: var(--surface-sunk);
+  color: var(--text-muted);
+  font-size: clamp(1rem, 1.6vw, 1.6rem);
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.tutorial__players {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: clamp(0.75rem, 1.5vw, 1.5rem);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Badge on the left, name over status, so a long name never squeezes the status. */
+.tutorial-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.15rem 0.9rem;
+  min-width: 0;
+  padding: clamp(0.7rem, 1.6vh, 1.1rem) 1.1rem;
+  border: 5px solid var(--player);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.tutorial-card[data-state='doing'] {
+  border-style: dashed;
+  border-color: var(--border-strong);
+  box-shadow: none;
+}
+
+/* Watchers aren't part of the step, so they recede. */
+.tutorial-card[data-state='watching'] {
+  border: 3px dashed var(--border);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+}
+
+.tutorial-card .seat__badge {
+  grid-row: span 2;
+  width: clamp(2.6rem, 4vw, 3.6rem);
+  height: clamp(2.6rem, 4vw, 3.6rem);
+  font-size: clamp(1rem, 1.6vw, 1.4rem);
+}
+
+.tutorial-card__name {
+  min-width: 0;
+  font-size: clamp(1.3rem, 2.2vw, 2.1rem);
+  font-weight: 900;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.tutorial-card__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: clamp(1rem, 1.6vw, 1.6rem);
+  font-weight: 800;
+}
+
+.tutorial-card[data-state='doing'] .tutorial-card__status,
+.tutorial-card[data-state='watching'] .tutorial-card__status {
+  color: var(--text-muted);
+}
+
+.tutorial-card__icon {
+  width: 1.3em;
+  height: 1.3em;
+  flex: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tutorial__title,
+  .tutorial__body {
+    animation: tutorial-in 520ms var(--ease) both;
+  }
+
+  .tutorial-card[data-state='done'] {
+    animation: ready-pop 420ms var(--ease);
+  }
+}
+
+@keyframes tutorial-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem);
+  }
+}
+
+/* Tutorial: phone --------------------------------------------------------------- */
+
+.phone-tutorial {
+  margin-top: 1.5rem;
+}
+
+.phone-tutorial__step {
+  color: var(--accent-ink);
+  font-size: 0.95rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.stub .phone-tutorial__title {
+  margin: 0.15rem 0 0;
+  font-size: 2rem;
+}
+
+.phone-tutorial__cue {
+  margin-top: 0.5rem;
+  color: var(--text-muted);
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.phone-tutorial__btn {
+  width: 100%;
+  min-height: 5.5rem;
+  margin-top: 1.25rem;
+  border-radius: var(--radius-lg);
+  font-size: 1.75rem;
+}
 /* The lobby stays mounted while the existing tennis pages run inside it. */
 .tennis-session { padding: 16px; }
 .prototype-frame { position: relative; margin: 16px 0; }
