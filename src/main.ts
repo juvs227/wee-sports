@@ -94,17 +94,16 @@ async function main(): Promise<void> {
         const ballData = world.ball.userData as BallUserData;
         const servingPlayer = ballData.servingPlayer === 'player1' ? 'P1' : 'P2';
         const serveStatus = el('serve-status');
-        const statusClass = isPaused() ? 'paused' :
-            ballData.isWaitingForServe
-                ? servingPlayer === 'P1' ? 'serving-p1' : 'serving-p2'
-                : 'rally';
+        const statusClass = ballData.isWaitingForServe
+            ? servingPlayer === 'P1' ? 'serving-p1' : 'serving-p2'
+            : isPaused() ? 'paused' : 'rally';
         serveStatus.className = statusClass;
-        serveStatus.textContent = isPaused() || !ballData.isWaitingForServe
+        serveStatus.textContent = !ballData.isWaitingForServe
             ? '' : `${servingPlayer} serving`;
         const countdown = ballData.isWaitingForServe
             ? Math.ceil(ballData.serveDelayRemaining) : 0;
         serveCountdown.textContent = countdown > 0 ? String(countdown) : '';
-        serveCountdown.classList?.toggle('visible', countdown > 0 && !isPaused());
+        serveCountdown.classList?.toggle('visible', countdown > 0);
         serveCountdown.classList?.toggle('player-1', servingPlayer === 'P1' && world.isSplitScreen);
         serveCountdown.classList?.toggle('player-2', servingPlayer === 'P2' && world.isSplitScreen);
     };
