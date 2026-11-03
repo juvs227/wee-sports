@@ -9,6 +9,8 @@ export interface BallUserData {
     pendingVelocity: THREE.Vector3;
     gravity: number;
     isWaitingForServe: boolean;   // Tracks if the ball is held/waiting
+    serveDelayRemaining: number;
+    servingPlayer: BallPlayer;
     waitingForRacketHit: boolean;
     servePosition: THREE.Vector3; // Default position to reset to
     slideTimer?: number;
@@ -37,6 +39,8 @@ export function createBall(x: number, y: number, z: number): THREE.Mesh {
         pendingVelocity: new THREE.Vector3(0, 0, 0),
         gravity: 0.006,                       // Downward pull per frame
         isWaitingForServe: true,
+        serveDelayRemaining: 3,
+        servingPlayer: 'player1',
         waitingForRacketHit: false,
         servePosition: new THREE.Vector3(x, y, z),
         bounceCount: 0,
@@ -100,6 +104,9 @@ export function resetBallForServe(
     onPointScored?.(pointWinner, pointLoser);
 
     // Reset ball state for serve
+    userData.servingPlayer = userData.servingPlayer === 'player1' ? 'player2' : 'player1';
+    userData.servePosition.z = userData.servingPlayer === 'player1' ? 10 : -10;
+    userData.serveDelayRemaining = 3;
     userData.isWaitingForServe = true;
     userData.velocity.set(0, 0, 0);
     userData.pendingVelocity.set(0, 0, 0);
@@ -138,6 +145,13 @@ export function updateBallMotion(
     if (ball.position.y <= BALL_RADIUS) {
         ball.position.y = BALL_RADIUS; // Snap to ground level
         handleGroundBounce(ball);
+        // A tennis point ends on the first out bounce or the second bounce.
+        // Waiting for the ball to roll to a stop allowed several illegal returns
+        // and made an ordinary miss look like a frozen game.
+        if (!userData.firstBounceInBounds || userData.bounceCount >= 2) {
+            resetBallForServe(ball, COURT_BOUNDS, onPointScored);
+            return;
+        }
         // If bounce velocity is low, treat it as sliding/rolling on the floor
         if (Math.abs(userData.velocity.y) < 0.04) {
             userData.velocity.y = 0;
@@ -183,7 +197,10 @@ export function handleGroundBounce(
     const zPos = ball.position.z;
 
     // Check if the bounce is inside the valid court area
-    const isInside = Math.abs(xPos) <= courtBounds.width && Math.abs(zPos) <= courtBounds.length;
+    const opponentSide = !userData.lastHitBy ||
+        (userData.lastHitBy === 'player1' ? zPos < 0 : zPos > 0);
+    const isInside = opponentSide && Math.abs(xPos) <= courtBounds.width &&
+        Math.abs(zPos) <= courtBounds.length;
 
     if (userData.bounceCount === 1) {
         // Record whether the first bounce landed inside
