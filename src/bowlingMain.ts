@@ -6,6 +6,8 @@ import './bowling.css';
 
 const embedded = window.parent !== window;
 const el = (id: string): HTMLElement => document.getElementById(id)!;
+const gameDisplay = document.getElementById('lane');
+if (!gameDisplay) throw new Error('Could not find lane element');
 let world: BowlingWorld | null = null;
 let gameId: string | null = null;
 let lobbyPaused = embedded;
@@ -22,7 +24,7 @@ function syncWorldState(): void {
   else world?.start();
 }
 
-const menu = new Menu({
+const menu = new Menu(gameDisplay, {
   onPauseChange: value => {
     menuPaused = value;
     syncWorldState();

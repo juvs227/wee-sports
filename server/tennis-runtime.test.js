@@ -27,7 +27,7 @@ beforeEach(() => {
       id,
       listeners: {},
     setAttribute: vi.fn(),
-    classList: { toggle: vi.fn() },
+    classList: { add: vi.fn(), remove: vi.fn(), toggle: vi.fn() },
     addEventListener(type, callback) { this.listeners[type] = callback; },
     removeEventListener: vi.fn(),
     appendChild: vi.fn(),
@@ -43,7 +43,7 @@ beforeEach(() => {
     setInterval, clearInterval,
   });
   vi.stubGlobal('document', {
-    querySelector: () => ({}),
+    querySelector: () => createElement(),
     createElement,
     body: { append: vi.fn(), appendChild: vi.fn() },
     getElementById(id) { if (!elements.has(id)) elements.set(id, {}); return elements.get(id); },

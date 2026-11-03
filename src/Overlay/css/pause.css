@@ -1,5 +1,9 @@
+.pause-button-anchor {
+  position: relative;
+}
+
 #pause-btn {
-  position: fixed;
+  position: absolute;
   top: 16px;
   right: 16px;
   width: 44px;

@@ -15,7 +15,7 @@ export class Menu {
     private quitButton: HTMLButtonElement;
     private pauseButton: HTMLButtonElement = document.createElement('button');
 
-    constructor(private callbacks: MenuCallbacks) {
+    constructor(private anchor: HTMLElement, private callbacks: MenuCallbacks) {
         // Set up the menu overlay
         this.menu.id = 'pause-menu';
         this.menu.className = 'overlay';
@@ -29,7 +29,7 @@ export class Menu {
                 <button id="quit">Return to Lobby</button>
             </div>
         `;
-        document.body.appendChild(this.menu);
+        this.anchor.appendChild(this.menu);
 
         // Get references to the buttons
         this.resumeButton = this.menu.querySelector('#resume')!;
@@ -50,7 +50,8 @@ export class Menu {
                 <polygon points="7,4 20,12 7,20" />
             </svg>
         `;
-        document.body.appendChild(this.pauseButton);
+        this.anchor.classList.add('pause-button-anchor');
+        this.anchor.appendChild(this.pauseButton);
 
         // Add event listeners
         window.addEventListener('keydown', this.handleKeyDown);
@@ -102,5 +103,6 @@ export class Menu {
         this.pauseButton.removeEventListener('click', this.handlePauseButton);
         this.menu.remove();
         this.pauseButton.remove();
+        this.anchor.classList.remove('pause-button-anchor');
     }
 }

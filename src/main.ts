@@ -27,7 +27,7 @@ async function main(): Promise<void> {
             world.start();
         }
     };
-    const menu = new Menu({
+    const menu = new Menu(container as HTMLElement, {
         onPauseChange: paused => {
             menuPaused = paused;
             syncWorldState();
