@@ -1,24 +1,21 @@
-import { World } from '../World/World';
 import './css/menu.css';
 import './css/pause.css';
 
+type MenuCallbacks = {
+    onPauseChange: (paused: boolean) => void;
+    onReset: () => void;
+    onQuit?: () => void;
+};
+
 export class Menu {
     private paused: boolean = false;
-    private world: World;
     private menu: HTMLDivElement = document.createElement('div');
     private resumeButton: HTMLButtonElement;
     private resetButton: HTMLButtonElement;
     private quitButton: HTMLButtonElement;
     private pauseButton: HTMLButtonElement = document.createElement('button');
 
-    constructor(
-        world: World,
-        private onPauseChange: (paused: boolean) => void,
-        private onQuit?: () => void,
-    ) {
-        // Set the world instance
-        this.world = world;
-
+    constructor(private callbacks: MenuCallbacks) {
         // Set up the menu overlay
         this.menu.id = 'pause-menu';
         this.menu.className = 'overlay';
@@ -38,7 +35,7 @@ export class Menu {
         this.resumeButton = this.menu.querySelector('#resume')!;
         this.resetButton = this.menu.querySelector('#reset')!;
         this.quitButton = this.menu.querySelector('#quit')!;
-        this.quitButton.hidden = !this.onQuit;
+        this.quitButton.hidden = !this.callbacks.onQuit;
 
         // Set up pause button
         this.pauseButton.id = 'pause-btn';
@@ -73,11 +70,11 @@ export class Menu {
 
     private readonly handleReset = (): void => {
         this.toggle();
-        this.world.reset();
+        this.callbacks.onReset();
     };
 
     private readonly handleQuit = (): void => {
-        this.onQuit?.();
+        this.callbacks.onQuit?.();
     };
 
     private readonly handlePauseButton = (): void => {
@@ -94,7 +91,7 @@ export class Menu {
         this.pauseButton.setAttribute('aria-pressed', String(this.paused));
         this.pauseButton.setAttribute('aria-label', this.paused ? 'Resume' : 'Pause');
         this.menu.hidden = !this.paused;
-        this.onPauseChange(this.paused);
+        this.callbacks.onPauseChange(this.paused);
     }
 
     public dispose(): void {

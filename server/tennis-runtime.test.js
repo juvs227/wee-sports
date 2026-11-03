@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 const runtime = vi.hoisted(() => ({ world: null, close: vi.fn() }));
 vi.mock('../src/World/World', () => ({ World: class {
   constructor() {
-    this.start = vi.fn(); this.stop = vi.fn(); this.dispose = vi.fn(); this.swing = vi.fn();
+    this.start = vi.fn(); this.stop = vi.fn(); this.dispose = vi.fn(); this.swing = vi.fn(); this.reset = vi.fn();
     this.setPlayerInput = vi.fn();
     this.ball = { userData: { isWaitingForServe: true } };
     runtime.world = this;
@@ -102,4 +102,11 @@ test('return-to-lobby menu action asks the parent to leave the immersive game vi
   quitButton.listeners.click();
   expect(parent.postMessage).toHaveBeenCalledWith(
     { type: 'wee:return-to-lobby' }, location.origin);
+});
+
+test('reset menu action closes the menu and resets the world through its callback', async () => {
+  await import('../src/main.ts');
+  const resetButton = createdElements.find(element => element.id === '#reset');
+  resetButton.listeners.click();
+  expect(runtime.world.reset).toHaveBeenCalledOnce();
 });
