@@ -8,15 +8,20 @@ Sound activation, effects and credits: [sound](docs/sound.md).
 
 Phone response/strength changes and manual testing: [tennis response](docs/tennis-response.md).
 Permanent server setup: [Railway](docs/railway.md).
+Team manuals: [build/run](manuals/BUILD.md), [testing](manuals/TESTING.md),
+[CI](manuals/CI.md), [branch integration](manuals/VERSION_CONTROL.md) and
+[bug tracking](manuals/BUG_TRACKING.md).
 
 `update-homepage` combines the homepage/lobby/reconnect work with tennis from
 `main` and the team's scoring, model, and game-logic updates from `base-game`.
 
-Comparison checked October 28: `main` is still at `3a5a72a` and was already
-included in this branch. `base-game` (`08e121f`) adds scoring and updated assets;
-those source changes are merged here. `game-menu` adds an independent Escape-key
-pause, which is kept separate so it cannot resume a game that the lobby paused.
-Tutorial voting remains separate work; its old protocol needs adapting before merging.
+Comparison checked November 2: this branch retains the team's base-game scoring
+and assets, adapts return-to-lobby work from `updated-menu` (`2fdc60b`) to the
+current phone controls, and adds shared-import compatibility fixes from
+`base-game`. Its unrelated dependency/workspace changes are excluded.
+`game-menu` contains older menu work. Tutorial voting remains separate work;
+its old protocol needs adapting before merging. See the branch-integration
+manual for the exact sources and scope.
 
 ## Run the combined app
 
@@ -57,7 +62,7 @@ HTTPS origin to the server; its QR is discovered at runtime.
 1. Choose **Tennis** or **Bowling** on the TV/laptop and scan its QR code.
    Tennis has **two playing seats**: one phone plays the bot, or two phones play
    each other. Bowling has **four playing seats**, taking turns through ten frames.
-2. Tap **Calibrate** on the phone, allow motion access, and place it still on a
+2. Tap **Enable motion** on the phone, allow motion access, and place it still on a
    table. Calibration waits for fresh gyroscope readings and a continuous still
    window. Then each player presses **Ready**. The button fallback is available
    inside controller settings for devices without sensors or desktop testing.
@@ -68,7 +73,7 @@ HTTPS origin to the server; its QR is discovered at runtime.
    the countdown ends.
 4. In tennis, the TV and phone identify the server. Swing to serve, then return
    the ball after its service bounce. Service alternates by game, or follows the
-   tie-break rotation. The TV offers practice, Quick/Full matches and independent
+   tie-break rotation. Player 1's phone options offer practice, Quick/Full matches and independent
    movement/timing and bot difficulty options. If a grip does not work with the team’s automatic classifier,
    controller settings offer an explicit forehand/backhand mapping.
 5. In bowling, use the phone to aim, make an underhand swing for power, and
@@ -79,8 +84,9 @@ HTTPS origin to the server; its QR is discovered at runtime.
    Watch the lane for pinfall, the scorecard, final rankings and **Play again**
    after the tenth frame. Sliders and the Roll button remain a fallback.
 6. A dropped connection pauses the game. Seats are held for 60 seconds. Reloading
-   a phone requires calibration again before play resumes; a temporary network
-   reconnect keeps calibration. Leaving an active seat ends the match and returns
+   a phone can reuse recent verified setup on the same website address; a temporary
+   network reconnect keeps calibration. A new address needs its own permission
+   and setup. Leaving an active seat ends the match and returns
    everyone to the lobby. Closing the lobby ends it for everyone.
 
 The default tennis sensor mode uses the team's **fast confirmation** from
@@ -104,7 +110,7 @@ whose racket hit the ball, on browsers that support vibration. Bowling gives a
 light pulse on release and a distinct double pulse when the ball first contacts
 a pin. Gutter rolls do not trigger pin-impact feedback, and multiple colliding
 pins cannot repeatedly buzz the phone. Game sound plays on the TV/laptop through
-the speaker icon on the TV or phone; the mute state is shared within the lobby. The phone
+the speaker icon on the phone; the mute state is shared within the lobby. The phone
 keeps its separate motion animation and vibration feedback.
 The controller requests a screen wake lock after setup while connected and
 visible, including the lobby wait. Browser and battery settings can still deny
@@ -114,7 +120,7 @@ for [screen wake locks](https://developer.mozilla.org/en-US/docs/Web/API/WakeLoc
 and [vibration](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/vibrate).
 
 The browser still asks for motion permission after the secure page opens; the
-app cannot grant that permission on the player’s behalf. Tap **Calibrate** directly
+app cannot grant that permission on the player’s behalf. Tap **Enable motion** or **Resume motion** directly
 in Safari or Chrome on the phone. See [the browser motion-permission requirements](https://developer.mozilla.org/en-US/docs/Web/API/DeviceMotionEvent/requestPermission_static).
 Live diagnostics are under **Motion not working?**. A desktop without a gyroscope
 correctly fails sensor calibration. Automated recordings and simulated motion

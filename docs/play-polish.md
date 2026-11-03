@@ -3,6 +3,40 @@
 Implemented on `update-homepage`. The team's models, stroke classifier, racket
 hitboxes and gravity remain in place. No changes were merged into `main`.
 
+## Branch integration and scoring review
+
+Adapted `updated-menu`'s return-to-lobby behavior to the existing TV display
+menu and Player 1's phone options/result prompt. A confirmation ends the match
+while keeping players, controller setup and sound preference. Players ready up
+again before starting. Only the authenticated current host or Player 1 can
+return everyone; stale game requests cannot cancel a replacement match.
+Late roll/settings acknowledgements are also checked against their original
+game ID before releasing any pending-action lock.
+
+Included the compatible shared-import fixes from `base-game`, the team manual
+structure from `beta_release_readme`, and the missing build-metadata ignore
+rule. The branch comparison and intentional exclusions are documented in
+[branch integration](branch-integration.md). Dependency versions, existing
+physics parameters and the Park Club presentation remain unchanged.
+
+The rules review fixed a missing bowling strike callout for the fresh fill rack
+after a tenth-frame spare (`6 / X`). Numeric scoring was already correct.
+Tennis set/match results and bowling winners/ties are announced on the TV;
+the final result stays visible until replay or leaving the match.
+
+Validation: **338 game + 93 platform tests passed (431 total)**, including
+return authorization, live Socket.IO broadcasts, preserved setup, countdown
+cancellation, delayed acknowledgements, phone confirmation/replay, tennis
+set/match results and bowling final-frame rules. TypeScript, lint, diff checks
+and the production build passed. The existing Three.js bundle-size warning
+remains. A live built quick match ended 7–0, showing the TV winner card and
+phone result prompt; Play again reset it to 0–0. Confirmed TV and phone return
+actions restored the same lobby/player, made Ready available without repeating
+controller setup, and stopped the old game. Both browser error logs were empty.
+Live input used desktop button fallback, not physical phone sensors. Bowling
+final-frame/winner behavior and reconnect races used automated tests. Temporary
+test tabs and server were closed afterward.
+
 ## Park Club selected — implemented
 
 ### Winner and replay follow-up

@@ -1,6 +1,9 @@
 import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+
+const sharedPackage = fileURLToPath(new URL('../shared', import.meta.url));
 
 /**
  * The laptop's Wi-Fi address. Phones can't open "localhost", so when the TV
@@ -18,6 +21,11 @@ function lanHost() {
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      '@wee/shared': sharedPackage,
+    },
+  },
   define: {
     __LAN_HOST__: JSON.stringify(lanHost()),
   },
