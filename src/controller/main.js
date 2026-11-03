@@ -5,6 +5,7 @@ import { createStrengthRehearsal } from './strengthRehearsal.js';
 import { connectSwings } from '../network/swingConnection.js';
 import { createInputId } from '../network/inputId.js';
 import { createCalibrationSession } from './calibration.js';
+import { createCalibrationMemory, matchesSavedBias } from './calibrationMemory.js';
 import { createPhoneFeedback, createScreenAwake } from './phoneExperience.js';
 import { isTennisState, isStrokeResult } from '../../shared/protocol.js';
 import { createTimingStats } from '../network/timingStats.js';
@@ -38,9 +39,21 @@ let lobbyPaused = embedded;
 let gameActive = !embedded;
 let enabled = false;
 let permissionPending = false;
+let permissionIntent = null;
+let setupIntent = 0;
 let permissionAt = 0;
 let bias = null;
 let calibration = null;
+let calibrationIsRestore = false;
+let verifiedAt = null;
+let setupStorage;
+let fallbackSetupStorage;
+try { setupStorage = window.localStorage; } catch { /* Fall back to this tab. */ }
+try { fallbackSetupStorage = window.sessionStorage; } catch { /* Setup still works without storage. */ }
+const calibrationMemory = createCalibrationMemory(setupStorage, Date.now, fallbackSetupStorage);
+let savedSetup = calibrationMemory.read();
+let restorePending = Boolean(savedSetup);
+if (savedSetup) element('hand').value = savedSetup.hand;
 let strengthProfile = null;
 let strengthOffer = false;
 let rehearsal = null;
@@ -220,7 +233,8 @@ function controls() {
   element('enable').disabled = permissionPending || (enabled && recentReadings());
   element('enable').textContent = enabled ? 'Retry motion access' : 'Enable motion';
   element('calibrate').disabled = permissionPending || Boolean(calibration);
-  element('calibrate').textContent = calibration ? 'Calibrating…' : bias ? 'Calibrate again' : 'Calibrate';
+  element('calibrate').textContent = calibration ? calibrationIsRestore ? 'Checking motion…' : 'Calibrating…'
+    : bias ? 'Calibrate again' : savedSetup ? 'Resume motion' : 'Calibrate';
   element('stop').disabled = !gameActive || !motionWanted;
   for (const id of ['hand', 'response', 'stroke-mode', 'suppress-returns']) element(id).disabled = recording || Boolean(calibration) || Boolean(rehearsal);
   for (const id of ['forehand', 'backhand']) element(id).disabled = !gameActive || lobbyPaused || !connected || tennisState?.phase === 'complete';
@@ -365,7 +379,7 @@ function startMotion() {
 function finishRehearsal(message, profile = null) {
   rehearsal = null;
   rehearsalStream = null;
-  if (profile) strengthProfile = profile;
+  if (profile) { strengthProfile = profile; rememberCalibration(); }
   element('strength-status').textContent = message;
   controls();
 }
@@ -390,14 +404,21 @@ element('skip-strength').onclick = () => {
   if (rehearsal) finishRehearsal(strengthProfile ? 'Rehearsal cancelled. Your previous comfortable strength is kept.' : 'Rehearsal cancelled. Default strength is ready.');
   else {
     strengthProfile = null;
+    rememberCalibration();
     element('strength-status').textContent = 'Default strength is ready. Tune again whenever you want.';
   }
   strengthOffer = false;
   controls();
 };
 element('hand').onchange = () => {
+  setupIntent++;
   strengthProfile = null;
   strengthOffer = true;
+  // Gyro bias is hand-independent once verified, but an unverified stored
+  // setup must never restore another hand's power profile or selection.
+  savedSetup = null; restorePending = false;
+  calibrationMemory.clear();
+  rememberCalibration();
   finishRehearsal('Playing hand changed. Default strength is ready; tune comfortable swings again if you want.');
 };
 window.addEventListener('message', event => {
@@ -468,6 +489,12 @@ function motion(event) {
   validReadings++;
   lastReading = now;
   latestRate = { alpha: rate.alpha, beta: rate.beta, gamma: rate.gamma };
+  if (restorePending && savedSetup && !calibration && !bias && !buttonMode && !document.hidden && pageActive) {
+    // Actual sensor data proves the browser already allows this page to listen.
+    // Merely finding a stored profile is never sufficient.
+    enabled = true;
+    beginCalibration(true);
+  }
   calibration?.push(rate, now);
   if ((!recording && !rehearsal) || !bias) return;
   const sample = { timeMs: now - (rehearsal ? rehearsalStarted : started), rotationAlpha: rate.alpha - bias.alpha,
@@ -500,7 +527,8 @@ function motion(event) {
     if (result) roll(result.power, result.spin);
   } else { stream.push(sample); if (element('response').value !== 'complete') analyze(); }
 }
-async function requestMotion() {
+function currentSetupIntent(intent) { return intent === setupIntent && pageActive && !document.hidden; }
+async function requestMotion(intent) {
   if (!window.isSecureContext) throw new Error('Motion needs HTTPS. The lobby can open over HTTP, but phone sensors cannot. Ask the TV host for the secure HTTPS link, or use buttons.');
   if (!window.DeviceMotionEvent) throw new Error('This browser does not expose phone motion. Open the link in Safari or Chrome on a phone, or use buttons.');
   const policy = document.permissionsPolicy ?? document.featurePolicy;
@@ -508,41 +536,72 @@ async function requestMotion() {
     throw new Error('This page is blocked from using motion sensors by its permissions policy. Open the original game link directly in your phone browser, or use buttons.');
   }
   permissionPending = true;
+  permissionIntent = intent;
   controls();
   try {
     // Called directly from the tap handler: iOS requires transient activation.
     const permission = typeof DeviceMotionEvent.requestPermission === 'function'
       ? await DeviceMotionEvent.requestPermission() : 'granted';
+    if (!currentSetupIntent(intent)) return;
     if (permission !== 'granted') throw new Error('Motion access was denied. Allow Motion & Orientation in this site’s browser permissions, then reload and try again. Button controls are available now.');
     window.addEventListener('devicemotion', motion);
     enabled = true;
     permissionAt = performance.now();
     element('motion').textContent = recentReadings() ? 'Sensor readings received. Tap Calibrate and put the phone down.' : 'Permission allowed. Waiting for actual sensor readings…';
-  } finally { permissionPending = false; controls(); }
+  } finally {
+    if (permissionIntent === intent) { permissionPending = false; permissionIntent = null; controls(); }
+  }
 }
 function showMotionError(error) {
   element('motion').textContent = error.name === 'NotAllowedError'
     ? 'Motion permission needs a direct tap. Open this page in Safari or Chrome, tap Enable motion and allow access.' : error.message;
   element('sensor-status').dataset.state = 'error';
 }
-element('enable').onclick = () => requestMotion().catch(showMotionError);
+function rememberCalibration() {
+  if (bias && Number.isFinite(verifiedAt)) calibrationMemory.save({
+    hand: element('hand').value, bias, strength: strengthProfile, verifiedAt,
+  });
+}
+function beginCalibration(restore = false) {
+  stop();
+  buttonMode = false;
+  bias = null;
+  if (restore) savedSetup = calibrationMemory.read();
+  calibrationIsRestore = restore && savedSetup?.hand === element('hand').value;
+  restorePending = false;
+  if (!calibrationIsRestore) {
+    savedSetup = null;
+    calibrationMemory.clear();
+    strengthProfile = null;
+    strengthOffer = false;
+    element('strength-status').textContent = 'Default strength is ready. This tunes power to your comfortable swings.';
+  }
+  calibration = createCalibrationSession(performance.now(), calibrationIsRestore
+    ? { settleMs: 0, windowMs: 500, timeoutMs: 6000 } : undefined);
+  element('calibration-progress').hidden = false;
+  element('calibration-progress').value = 0;
+  element('motion').textContent = calibrationIsRestore ? 'Checking your saved setup. Hold still for a moment…'
+    : 'Put the phone down. Waiting for it to settle…';
+  controls();
+}
+element('enable').onclick = async () => {
+  const intent = ++setupIntent;
+  try {
+    await requestMotion(intent);
+    if (!currentSetupIntent(intent)) return;
+    if (savedSetup && !bias && !calibration) beginCalibration(true);
+  } catch (error) { if (currentSetupIntent(intent)) showMotionError(error); }
+};
 element('calibrate').onclick = async () => {
+  const intent = ++setupIntent;
   if (rehearsal) finishRehearsal('Rehearsal stopped for recalibration.');
   stop();
   try {
     // One tap also requests permission; disabled Calibrate used to hide this step.
-    if (!enabled || !recentReadings()) await requestMotion();
-    buttonMode = false;
-    bias = null;
-    strengthProfile = null;
-    strengthOffer = false;
-    element('strength-status').textContent = 'Default strength is ready. This tunes power to your comfortable swings.';
-    calibration = createCalibrationSession(performance.now());
-    element('calibration-progress').hidden = false;
-    element('calibration-progress').value = 0;
-    element('motion').textContent = 'Put the phone down. Waiting for it to settle…';
-    controls();
-  } catch (error) { showMotionError(error); }
+    if (!enabled || !recentReadings()) await requestMotion(intent);
+    if (!currentSetupIntent(intent)) return;
+    beginCalibration(Boolean(savedSetup) && !bias);
+  } catch (error) { if (currentSetupIntent(intent)) showMotionError(error); }
 };
 element('record').onclick = () => { motionWanted = true; startMotion(); };
 element('stop').onclick = () => stop(undefined, true);
@@ -554,9 +613,11 @@ element('toggle-settings').onclick = () => {
   controls();
 };
 element('use-buttons').onclick = () => {
+  setupIntent++;
   if (rehearsal) finishRehearsal('Rehearsal stopped. Button controls use default strength.');
   stop(undefined, true);
   calibration = null;
+  calibrationIsRestore = false; restorePending = false;
   element('calibration-progress').hidden = true;
   buttonMode = true;
   settingsOpen = false;
@@ -593,22 +654,37 @@ setInterval(() => {
     const result = calibration.read(now);
     element('calibration-progress').value = result.progress;
     if (result.state === 'done' || result.state === 'failed') {
+      const restored = calibrationIsRestore;
+      if (restored && result.state === 'done' && !matchesSavedBias(savedSetup?.bias, result.bias)) {
+        // Sensor zero changed: use the normal longer calibration, not an old bias.
+        beginCalibration(false);
+        element('motion').textContent = 'Your sensors changed. Keep still while setup refreshes…';
+        return;
+      }
       bias = result.bias ?? null;
       calibration = null;
+      calibrationIsRestore = false;
       element('calibration-progress').hidden = true;
       if (bias) {
-        strengthOffer = !bowling;
+        if (restored) strengthProfile = savedSetup?.strength ?? null;
+        savedSetup = null;
+        verifiedAt = Date.now();
+        rememberCalibration();
+        strengthOffer = !bowling && !restored;
         motionWanted = true;
         settingsOpen = false;
-        element('motion').textContent = gameActive ? 'Calibrated. Motion starts when the match is ready.' : 'Calibrated. Press Ready above; motion will start with the match.';
-      } else element('motion').textContent = result.reason === 'no-readings' || result.reason === 'stale'
+        element('motion').textContent = restored ? 'Your setup is ready again. Motion starts with the match.'
+          : gameActive ? 'Calibrated. Motion starts when the match is ready.' : 'Calibrated. Press Ready above; motion will start with the match.';
+        if (restored && strengthProfile) element('strength-status').textContent = 'Your comfortable strength was restored for this playing hand.';
+      } else element('motion').textContent = restored ? 'Saved setup needs fresh, still readings. Tap Resume motion and hold still for a moment.'
+        : result.reason === 'no-readings' || result.reason === 'stale'
         ? 'Calibration could not get live gyroscope readings. Open Controller help, then retry or use button controls.'
         : 'The phone kept moving. Place it on a stable table and tap Calibrate again.';
       controls();
     } else element('motion').textContent = result.state === 'settling' ? 'Put the phone down. Waiting for it to settle…'
       : result.state === 'moving' ? 'Movement detected. Keep the phone on the table; calibration will continue automatically.'
       : result.state === 'no-readings' || result.state === 'stale' ? 'Waiting for live gyroscope readings…'
-      : `Keep still… ${Math.round(result.progress * 100)}%`;
+      : `${calibrationIsRestore ? 'Checking saved setup' : 'Keep still'}… ${Math.round(result.progress * 100)}%`;
   }
   if (recording && !recentReadings()) stop('Sensor readings paused. Keep the page visible; motion resumes when readings return.');
   if (rehearsal) {
@@ -625,11 +701,16 @@ setInterval(() => {
   analyze();
 }, 30);
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) { startMotion(); controls(); screenAwake.retry(); return; }
+  if (!document.hidden) {
+    if (savedSetup && !bias && !buttonMode) restorePending = true;
+    startMotion(); controls(); screenAwake.retry(); return;
+  }
+  setupIntent++;
   stop('Motion paused while the page is hidden. Return to this page to continue.');
   if (rehearsal) finishRehearsal('Rehearsal stopped because the page was hidden. Keep it open and try again.');
   if (calibration) {
     calibration = null; bias = null; strengthProfile = null;
+    calibrationIsRestore = false;
     element('calibration-progress').hidden = true;
     element('motion').textContent = 'Calibration stopped because the page was hidden. Keep it visible and try again.';
     controls();
@@ -637,10 +718,21 @@ document.addEventListener('visibilitychange', () => {
 });
 document.addEventListener('pointerdown', () => screenAwake.retry());
 window.addEventListener('pagehide', () => {
+  setupIntent++;
   pageActive = false;
   if (rehearsal) finishRehearsal('Rehearsal stopped. Start again when you return.');
   screenAwake.setActive(false); phoneFeedback.setActive(false);
 });
 window.addEventListener('pageshow', () => { pageActive = true; controls(); screenAwake.retry(); });
+if (savedSetup) {
+  element('motion').textContent = 'Saved setup found. Hold still briefly; if needed, tap Resume motion to allow sensors.';
+  const policy = document.permissionsPolicy ?? document.featurePolicy;
+  const allowed = !policy?.allowsFeature || ['accelerometer', 'gyroscope'].every(feature => policy.allowsFeature(feature));
+  if (window.isSecureContext && window.DeviceMotionEvent && allowed) {
+    // Listening can reuse an existing browser grant. A new grant is requested
+    // only by the explicit Resume motion / Enable motion tap handlers.
+    window.addEventListener('devicemotion', motion);
+  }
+}
 controls();
 sensorStatus(performance.now() + 250);

@@ -59,6 +59,28 @@ geometry, no oil carrydown or certified ball-core simulation. There is no foul
 line sensor; releases are legal by design. It does not claim USBC equipment
 certification or tournament-grade realism.
 
+## Play screen and sound lifecycle
+
+The lane fills the game viewport, including shorter laptop windows. The old
+640px minimum page height and scorecard below the canvas have been removed.
+A compact top scoreboard shares its player colors, point cards and typography
+with tennis. It shows each player's total, the active player and the current
+frame/ball. **Full scorecard** expands the ten-frame history when needed; it
+scrolls within the overlay instead of shrinking or cutting off the lane.
+The alley, moving camera, ball/pin models, scoring and physics are unchanged.
+
+Rolling audio now ends at the first real pin impact or gutter entry. It no
+longer continues underneath the pin-impact sound while every body settles.
+Settlement, pause, reset and disposal also stop the rolling bed, without
+replaying it on resume. Each outcome still produces one strike/spare/result
+cue after its score is recorded. A bounded audio-clock deadline is a final
+backstop if an end event is lost. See [sound controls and event mapping](sound.md).
+
+The live layout check at 1280 × 600 confirmed the lane, canvas and app all fill
+the viewport without overflow. Offline delivery-lifecycle regressions cover
+early loop termination on pin/gutter contact and stopping an unfinished roll
+on reset. Speaker balance and real-phone delivery feel remain device checks.
+
 ## Motion setup and delivery
 
 A direct Calibrate tap requests motion permission while the browser still has

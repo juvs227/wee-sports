@@ -25,6 +25,7 @@ import { ReconnectNotice } from '../components/ReconnectNotice.jsx';
 import { sportName } from '../lib/sports.js';
 import { PrototypeFrame } from '../components/PrototypeFrame.jsx';
 import { usePhoneLink } from '../lib/usePhoneLink.js';
+import { PhoneSoundToggle } from '../components/PhoneSoundToggle.jsx';
 
 const NAME_KEY = 'wee:name';
 
@@ -127,12 +128,13 @@ export default function JoinStub() {
           >
             P{seat.slot + 1}
           </span>
-          <div>
+          <div className="phone-session__name">
             <h1>{playing ? seat.name : <>You&rsquo;re in, {seat.name}</>}</h1>
             <p className="stub__muted">
               {sportName(seat.sport)}{playing ? '' : ` · lobby ${seat.code}`}
             </p>
           </div>
+          <PhoneSoundToggle lobby={lobby} disabled={reconnecting} />
         </div>
         {playing ? null : phase === PHASES.LOBBY ? (
           <p className="stub__status">Waiting for a player to join the P1 controller seat…</p>

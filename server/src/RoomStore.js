@@ -109,7 +109,7 @@ export class RoomStore {
 
     this.#rooms.set(code, { code, sport, hostId, phase: PHASES.LOBBY, players: new Map(), deadline: null, pausedAt: null,
       gameId: null, gameState: null, pendingRoll: null, seenRolls: new Set(),
-      seenHits: new Set(), lastHitAt: new Map(), pendingStrokes: new Map() });
+      seenHits: new Set(), lastHitAt: new Map(), pendingStrokes: new Map(), soundMuted: null });
     const memberId = this.#addSession(hostId, code, 'host');
     this.#rooms.get(code).hostId = memberId;
     return this.#sessionView(memberId);
@@ -166,6 +166,20 @@ export class RoomStore {
       room.phase = nextPhaseAfterReady();
     }
     return { ok: true, code: room.code, advanced };
+  }
+
+  /** Room membership, never a client-supplied code, scopes the shared sound control. */
+  setSound(socketId, payload) {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    const room = member && this.#rooms.get(member.code);
+    if (!room || (member.role !== 'host' && !room.players.has(member.id))) return { ok: false, error: ERRORS.NO_ROOM };
+    if (typeof payload?.muted !== 'boolean' || (payload.initialize !== undefined && payload.initialize !== true)) {
+      return { ok: false, error: 'bad-sound' };
+    }
+    if (payload.initialize && member.role !== 'host') return { ok: false, error: ERRORS.NOT_HOST };
+    const changed = (!payload.initialize || room.soundMuted === null) && room.soundMuted !== payload.muted;
+    if (changed) room.soundMuted = payload.muted;
+    return { ok: true, code: room.code, muted: room.soundMuted, changed };
   }
 
   /** The TV's Play button. Only the room's TV, and only once everyone is ready. */
@@ -355,7 +369,7 @@ export class RoomStore {
     return { code: room.code, sport: room.sport, phase: room.phase, players, countdown,
       paused: room.pausedAt !== null, reconnecting,
       setupPending: players.filter(player => isController(room.sport, player.slot) && !player.setup).map(player => player.name),
-      gameId: room.gameId, gameState: room.gameState };
+      gameId: room.gameId, gameState: room.gameState, soundMuted: room.soundMuted };
   }
 
   /** The code this id is hosting, or null. */

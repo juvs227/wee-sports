@@ -3,15 +3,16 @@
 Sound plays on the **TV/laptop**, with phone vibration as separate feedback.
 Pressing **Play** in the homepage lobby now activates sound directly from that
 click. The TV keeps the same audio context through the countdown and embedded
-game. **Sound on / Sound off** remains visible in the lobby, countdown and game
-header. An explicit saved mute is respected; Play never turns it back on.
+game. A compact speaker icon stays in the TV header and at the top of each phone.
+Either can mute/unmute the shared TV sound, and all lobby members see the same
+state. Toggling is quiet and does not play a test cue. An explicit saved mute is
+respected; Play primes the context without turning sound back on. This lets a
+phone unmute later without a second click on the TV.
 
-Use **Sound check → Test sound** to enable and hear a short confirmation cue.
-This explicit test also works while gameplay is paused; game effects remain paused.
-If that cue is silent, check the TV/laptop volume, selected output device and
-browser tab mute. A failed audio initialization or partial asset load produces
-a retry message. Direct standalone game pages still use **Enable sound** on the
-game panel. Browsers require a user gesture before audio starts.
+If effects are silent, check the TV/laptop volume, selected output device and
+browser tab mute. Direct standalone pages retain a single **Enable sound**
+button. Browsers require a user gesture before audio starts; a suspended TV
+context may need its speaker button tapped again.
 
 The previous implementation created audio only inside the game iframe and
 required a second, easy-to-miss Enable sound click after Play. The parent-page
@@ -59,7 +60,6 @@ There is no continuous music or voice announcing every countdown.
 | Both    | `countdown` | Lobby numbers 5, 4 and 3                 | Short bright pip                                    |
 | Both    | `countdown-2`, `countdown-1` | Final lobby numbers      | Rising pips                                         |
 | Both    | `start`    | Countdown enters play                     | Original short Go chime                             |
-| Both    | `ready`    | Explicit enable/test sound click          | Two-note confirmation                               |
 | Tennis  | `hit`      | Accepted racket/ball contact in a rally   | Racket impact                                       |
 | Tennis  | `serve`    | Ball actually served                      | Same racket impact; replaces `hit` for this contact |
 | Tennis  | `bounce`   | Actual court bounce                       | Ground impact                                       |
@@ -77,7 +77,7 @@ There is no continuous music or voice announcing every countdown.
 | Bowling | `spare`    | Recorded result is a spare                | Distinct three-note cue                             |
 | Bowling | `result`   | Other completed delivery                  | Short finish cue                                    |
 | Bowling | `match`    | Bowling match completes                   | Match finish cue                                    |
-| Bowling | `roll-end` | Ball settles/turn ends                    | Stops the loop; no new sound                        |
+| Bowling | `roll-end` | First pin impact, gutter, settlement or turn end | Stops the loop; no new sound                   |
 
 Emit only the highest tennis scoring event for a point, rather than playing point,
 game, set and match cues together. Events must come from accepted game transitions
@@ -96,7 +96,8 @@ The embedded game emits `{type: 'wee:game-audio', gameId, sport, event}`. The
 homepage bridge accepts only its current iframe, same origin, current game and
 sport, active connection and allowlisted event. It calls `onAudio(event)` on the
 existing parent manager; the iframe does not create a second audio context.
-`roll-end` stops the bowling rolling loop; `stop` clears all effects on reset or
+`roll-end` stops the bowling rolling loop; a 12-second audio-clock deadline also
+ends it if a final event is lost. `stop` clears all effects on reset or
 teardown. Pause and document visibility also stop active effects.
 
 `src/audio/tvAudioSession.ts` remembers countdown progress and whether each
@@ -105,6 +106,12 @@ countdown numbers cannot replay expired pips or Go sounds. Restoring directly
 into an existing game is silent. A new lobby match can play a new countdown.
 An explicit Play again/replay action may request the Go cue without repeating
 the lobby countdown; ordinary serves never do.
+
+`sound:set` carries only the desired boolean mute state. The server resolves the
+current member's lobby, ignores any supplied room code, and publishes `soundMuted`
+to that room. New lobbies initialize once from the TV's saved preference; subsequent
+initialization/reconnect cannot overwrite a phone's choice. Replaced or disconnected
+members cannot change sound. Mute updates neither reset the game nor change readiness.
 
 Standalone pages use the same audio manager locally:
 
@@ -161,12 +168,12 @@ downloads, cooldowns, voice limits, loops, mute, pause, visibility, retry, dispo
 and every manifest file's PCM header, size, sample format, non-silent content,
 clipping bounds and prompt attack. The whole pack is bounded below 1 MB.
 
-Manual test on the TV/laptop after starting it yourself: use Sound check, then
-Play. Confirm pips follow the initial countdown, Go sounds once, and serving or
+Manual test on the TV/laptop: press Play. Confirm pips follow the initial
+countdown, Go sounds once, and serving or
 scoring does not restart that countdown. Serve and rally, confirm a
 point/game/set/match gets one appropriate result cue, then mute. A new match
-must retain the mute preference; an explicit Test sound click enables sound.
+must retain the mute preference. Unmute from the phone and verify the TV follows.
 In bowling, confirm release → quiet rolling → actual pin impacts → result, and
-that rolling stops on settlement. Pause or background either game during an
+that rolling stops at first pin contact or gutter entry, and on settlement. Pause or background either game during an
 effect; returning should be silent until the next real event. Adjust the manifest
 volumes after listening on your team's speakers, especially for repeated pins.

@@ -7,6 +7,7 @@ interface SoundDefinition {
   volume: number;
   cooldownMs: number;
   loop?: boolean;
+  maxDuration?: number;
 }
 
 const START_SOUNDS: Record<string, SoundDefinition> = {
@@ -51,6 +52,7 @@ export const SOUND_MANIFEST: Record<Sport, Record<string, SoundDefinition>> = {
       volume: 0.2,
       cooldownMs: 0,
       loop: true,
+      maxDuration: 12,
     },
     pin: {file: '/sounds/bowling/pin.wav', volume: 0.75, cooldownMs: 90},
     gutter: {file: '/sounds/bowling/gutter.wav', volume: 0.4, cooldownMs: 700},
@@ -257,8 +259,8 @@ export function createSportsAudio(
   /** Call directly from a click/tap. Never queues a game event for later playback. */
   async function unlock({respectMute = false} = {}): Promise<boolean> {
     if (disposed) return false;
-    // Play can activate sound, but must not undo an explicit saved mute.
-    if (respectMute && muted) return false;
+    // Prime the context even while muted. A phone can later unmute the TV
+    // without needing another browser activation gesture on the TV itself.
     if (!respectMute) setMuted(false);
     unavailable = false;
     try {
@@ -309,7 +311,7 @@ export function createSportsAudio(
     }
   }
 
-  function play(event: string, preview = false): boolean {
+  function play(event: string): boolean {
     if (event === 'stop') {
       stop();
       return false;
@@ -322,7 +324,7 @@ export function createSportsAudio(
     const buffer = buffers.get(event);
     if (
       disposed ||
-      (!active && !preview) ||
+      !active ||
       doc?.hidden ||
       muted ||
       !unlocked ||
@@ -374,6 +376,8 @@ export function createSportsAudio(
       voices.add(voice);
       try {
         source.start();
+        // Audio-clock deadline also stops a loop if its final game event is lost.
+        if (definition.maxDuration) source.stop(context.currentTime + definition.maxDuration);
       } catch {
         voice.finish();
         return false;
@@ -384,11 +388,6 @@ export function createSportsAudio(
       // Optional feedback must never break a physics frame or a network handler.
       return false;
     }
-  }
-
-  /** An explicit Sound check is useful even while gameplay is paused. */
-  function preview(): boolean {
-    return play('ready', true);
   }
 
   function setActive(value: boolean) {
@@ -411,10 +410,7 @@ export function createSportsAudio(
     button.className = 'sports-sound-toggle';
     const onClick = () => {
       if (unlocked && !muted && context?.state === 'running') setMuted(true);
-      else
-        void unlock().then(ok => {
-          if (ok) preview();
-        });
+      else void unlock();
     };
     button.addEventListener('click', onClick);
     buttons.set(button, onClick);
@@ -449,7 +445,6 @@ export function createSportsAudio(
 
   return {
     play: (event: string) => play(event),
-    preview,
     stop,
     preload,
     unlock,

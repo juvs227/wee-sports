@@ -53,8 +53,9 @@ angle, later intent a straighter placement. Given identical state and input,
 the planner returns the same target and trajectory. The safe-arc solver and real
 racket-contact checks remain in use; power remains bounded.
 
-**Beginner** assistance offers a slightly larger early-input window, gentler
-pace and narrower angles. **Standard** retains the existing timing window.
+**Beginner** assistance offers a 750 ms early-input window, gentler pace and
+narrower angles. **Standard** buffers early input for up to 650 ms. Buffered
+animations wait for a reachable authored racket path rather than a timer alone.
 Movement and timing assistance can be toggled independently. Bot difficulty is
 also independent: the Beginner bot moves more slowly and returns gently;
 Standard retains its usual movement and power. Both bots must physically contact

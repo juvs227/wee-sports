@@ -142,176 +142,22 @@ summary {
     padding: 8px 0;
 }
 
-.game-panel {
-    position: fixed;
-    z-index: 1;
-    top: 10px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: min(720px, calc(100vw - 20px));
-    background: #ffffffed;
-    padding: 7px 14px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    font-size: 12px;
-}
-
-.game-panel h2 {
-    font-size: 18px;
-}
-
-.game-panel p {
-    margin: 3px 0;
-}
-
-.game-panel .play-eyebrow {
-    display: inline-block;
-    margin-right: 14px;
-}
-
-.game-panel .scoreboard {
-    display: inline-flex;
-    gap: 14px;
-    vertical-align: middle;
-}
-
-.game-panel .score-row {
-    display: grid;
-    grid-template-columns: minmax(90px, auto) auto auto auto;
-    align-items: center;
-    padding: 2px 8px;
-    gap: 7px;
-}
-
-.game-panel .score-row strong {
-    font-size: 20px;
-    line-height: 1;
-}
-
-.game-panel .score-row small {
-    color: var(--text-muted);
-    white-space: nowrap;
-}
-
-.game-panel .score-row[data-player="1"] {
-    border-left: 4px solid var(--p1);
-    padding-left: 10px;
-}
-
-.game-panel .score-row[data-player="2"] {
-    border-left: 4px solid var(--p2);
-    padding-left: 10px;
-}
-
-.game-panel label {
-    display: block;
-    margin: 6px 0;
-}
-
-.game-panel details {
-    font-size: 12px;
-}
-
-.game-panel #feedback {
-    display: inline-block;
-    margin-left: 10px;
-    color: var(--text-muted);
-}
-
-.game-panel #serve-status {
-    display: inline-block;
-    padding: 2px 7px;
-    border-radius: var(--radius-pill);
-    transition: background-color .2s ease, color .2s ease;
-}
-
-.game-panel #serve-status.serving-p1 {
-    background: color-mix(in srgb, var(--p1) 16%, transparent);
-    color: color-mix(in srgb, var(--p1) 70%, var(--text));
-}
-
-.game-panel #serve-status.serving-p2 {
-    background: color-mix(in srgb, var(--p2) 16%, transparent);
-    color: color-mix(in srgb, var(--p2) 70%, var(--text));
-}
-
-.game-panel #serve-status.rally {
-    background: var(--surface-sunk);
-    color: var(--text-muted);
-}
-
-.game-panel #serve-status.paused {
-    background: var(--warn-soft);
-    color: var(--warn-ink);
-}
-
-.game-panel {
-    z-index: 3;
-}
-
-.game-panel .score-format {
-    display: inline-block;
-    color: var(--text-muted);
-    font-size: 11px;
-}
-
-.game-panel .scoreboard {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 14px;
-    margin: 4px 0;
-}
-
-.game-panel #point-result {
-    font-weight: 800;
-    color: var(--accent-ink);
-}
-
-.game-panel #point-result:empty,
-.game-panel #completed-sets:empty {
-    display: none;
-}
-
-.game-panel #match-result {
-    border-top: 1px solid var(--border);
-    margin-top: 8px;
-    padding: 8px 0;
-}
-
-.game-panel #match-winner {
-    font-size: 16px;
-    font-weight: 800;
-    margin-bottom: 8px;
-}
-
-.game-panel:has(details[open]) {
-    max-height: calc(100dvh - 24px);
-    overflow-y: auto;
-}
-
-.game-panel .tennis-options {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px 16px;
-    padding: 8px 0;
-}
-
-.game-panel select {
-    display: block;
-    width: 100%;
-    margin: 4px 0;
-    padding: 7px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: var(--surface);
-    color: var(--text);
-    font: inherit;
-}
-
+/* The scoreboard layout is shared with bowling in gameHud.css. */
+.game-panel { position: fixed; }
+.game-panel label { display: block; margin: 6px 0; }
+.game-panel #feedback { color: var(--text-muted); }
+.game-panel #serve-status { padding: 3px 8px; border-radius: var(--radius-pill); font-weight: 800; }
+.game-panel #serve-status.serving-p1 { background: color-mix(in srgb, var(--p1) 14%, white); color: color-mix(in srgb, var(--p1) 65%, var(--text)); }
+.game-panel #serve-status.serving-p2 { background: color-mix(in srgb, var(--p2) 14%, white); color: color-mix(in srgb, var(--p2) 65%, var(--text)); }
+.game-panel #serve-status.rally { background: var(--surface-sunk); color: var(--text-muted); }
+.game-panel #serve-status.paused { background: var(--warn-soft); color: var(--warn-ink); }
+.game-panel #point-result { font-weight: 800; color: var(--accent-ink); }
+.game-panel #point-result:empty, .game-panel #completed-sets:empty { display: none; }
+.game-panel #match-result { border-top: 1px solid var(--border); margin-top: 8px; padding: 8px 0; }
+.game-panel #match-winner { font-size: 16px; font-weight: 800; margin-bottom: 8px; }
+.game-panel .tennis-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 16px; padding: 8px 0; }
+.game-panel select { display: block; width: 100%; margin: 4px 0; padding: 7px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; }
 .game-panel button { margin: 4px 4px 4px 0; }
 .game-panel .tennis-practice { padding: 10px; border-radius: 10px; background: var(--surface-sunk); }
 .game-panel .tennis-practice p { color: var(--text-muted); }
-@media (max-width: 480px) {
-    .game-panel .tennis-options { grid-template-columns: 1fr; }
-}
+@media (max-width: 480px) { .game-panel .tennis-options { grid-template-columns: 1fr; } }

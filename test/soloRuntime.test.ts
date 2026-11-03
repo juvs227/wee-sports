@@ -5,18 +5,18 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { createPlayer } from '../src/World/components/player';
 import { createBall } from '../src/World/components/ball';
 import { GameLogic } from '../src/World/gameLogic';
+import { TENNIS_COURT } from '../src/World/tennisRules';
 
 afterEach(() => vi.restoreAllMocks());
 
 test('solo phone serve and bot contact report actual hits without updating static scenery at physics frequency', async () => {
-    vi.spyOn(Math, 'random').mockReturnValue(.5);
     vi.spyOn(GLTFLoader.prototype, 'load').mockImplementation((url, onLoad) => {
         const data = readFileSync(`public${url}`);
         void new GLTFLoader().parseAsync(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength), '').then(onLoad);
     });
     const scene = new THREE.Scene();
-    const phonePlayer = createPlayer(0, .25, 10, 0x3b82f6);
-    const bot = createPlayer(0, .25, -10, 0xef4444, { minZ: -11.5, maxZ: -1 });
+    const phonePlayer = createPlayer(0, .25, 10, 0x3b82f6, {minZ: 1, maxZ: TENNIS_COURT.serveDepth + .2});
+    const bot = createPlayer(0, .25, -10, 0xef4444, { minZ: -TENNIS_COURT.serveDepth - .2, maxZ: -1 });
     bot.group.rotation.y = Math.PI;
     scene.add(phonePlayer.group, bot.group);
     await vi.waitFor(() => { expect(phonePlayer.hitbox).toBeTruthy(); expect(bot.hitbox).toBeTruthy(); });

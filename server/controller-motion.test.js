@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { createCalibrationMemory, CALIBRATION_STORAGE_KEY } from '../src/controller/calibrationMemory.js';
 
 const relay = vi.hoisted(() => ({ sendSwing: vi.fn(() => true), options: null }));
 vi.mock('../src/network/swingConnection.js', () => ({ connectSwings: options => { relay.options = options; return relay; } }));
@@ -23,8 +24,11 @@ beforeEach(() => {
   parent = { postMessage: data => messages.push(data) };
   permission = vi.fn(async () => 'granted');
   const motionAPI = { requestPermission: permission };
+  const stored = new Map();
+  const sessionStorage = { getItem: key => stored.get(key) ?? null,
+    setItem: (key, value) => stored.set(key, value), removeItem: key => stored.delete(key) };
   vi.stubGlobal('DeviceMotionEvent', motionAPI);
-  vi.stubGlobal('window', { parent, isSecureContext: true, DeviceMotionEvent: motionAPI,
+  vi.stubGlobal('window', { parent, sessionStorage, isSecureContext: true, DeviceMotionEvent: motionAPI,
     addEventListener(type, fn) { if (!listeners.has(type)) listeners.set(type, new Set()); listeners.get(type).add(fn); },
   });
   vi.stubGlobal('document', { hidden: false,
@@ -118,6 +122,165 @@ async function calibrate() {
   await elements.get('calibrate').onclick();
   for (let i = 0; i < 110; i++) tick();
 }
+
+test('a controller reload reuses calibration after fresh still readings without a new permission request', async () => {
+  await import('../src/controller/main.js');
+  await calibrate();
+  expect(window.sessionStorage.getItem(CALIBRATION_STORAGE_KEY)).not.toBeNull();
+  expect(createCalibrationMemory(window.sessionStorage).read()).not.toBeNull();
+  expect(permission).toHaveBeenCalledOnce();
+  const wallClock = Date.now();
+  vi.clearAllTimers(); vi.setSystemTime(wallClock); vi.resetModules();
+  elements.clear(); listeners.clear(); documentListeners.clear(); messages.length = 0;
+  expect(createCalibrationMemory(window.sessionStorage).read()).not.toBeNull();
+  await import('../src/controller/main.js');
+  expect(createCalibrationMemory(window.sessionStorage).read()).not.toBeNull();
+  state({ playing: true, paused: false, gameId: 'new-match' });
+  expect(elements.get('calibrate').textContent).toBe('Resume motion');
+  expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBeNull();
+  tick(20);
+  expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBeNull();
+  for (let i = 0; i < 30; i++) tick();
+  expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBe('motion');
+  expect(elements.get('setup-panel').hidden).toBe(true);
+  expect(permission).toHaveBeenCalledOnce();
+  state({ playing: true, paused: true, connected: false, gameId: 'new-match' });
+  state({ playing: true, paused: false, gameId: 'another-match' });
+  expect(elements.get('setup-panel').hidden).toBe(true);
+  expect(permission).toHaveBeenCalledOnce();
+});
+
+test('a new controller tab for another sport restores origin storage only after new live verification', async () => {
+  const persistent = new Map();
+  window.localStorage = { getItem: key => persistent.get(key) ?? null,
+    setItem: (key, value) => persistent.set(key, value), removeItem: key => persistent.delete(key) };
+  await import('../src/controller/main.js');
+  await calibrate();
+  expect(window.localStorage.getItem(CALIBRATION_STORAGE_KEY)).not.toBeNull();
+  expect(window.sessionStorage.getItem(CALIBRATION_STORAGE_KEY)).toBeNull();
+  const wallClock = Date.now();
+  vi.clearAllTimers(); vi.setSystemTime(wallClock); vi.resetModules();
+  elements.clear(); listeners.clear(); documentListeners.clear(); messages.length = 0;
+  window.sessionStorage = { getItem: () => null, setItem: vi.fn(), removeItem: vi.fn() };
+  location.search = '?room=lobby-NEXT&lobby=NEXT&player=1&sport=bowling';
+  await import('../src/controller/main.js');
+  state({ playing: false, gameId: 'new-bowling-match' });
+  expect(elements.get('calibrate').textContent).toBe('Resume motion');
+  expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBeNull();
+  for (let i = 0; i < 30; i++) tick();
+  expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBe('motion');
+  expect(permission).toHaveBeenCalledOnce();
+});
+
+const savedMotionSetup = (overrides = {}) => createCalibrationMemory(window.sessionStorage).save({
+  hand: 'Left', bias: { alpha: .1, beta: -.1, gamma: .2 },
+  strength: { hand: 'Left', Forehand: 1.2, Backhand: 1.1 }, ...overrides,
+});
+
+test('cached setup never substitutes for permission or live sensors and a Resume tap can restore it', async () => {
+  savedMotionSetup();
+  await import('../src/controller/main.js');
+  expect(elements.get('hand').value).toBe('Left');
+  expect(permission).not.toHaveBeenCalled();
+  tick(7000, null);
+  expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBeNull();
+  permission.mockResolvedValueOnce('denied');
+  await elements.get('calibrate').onclick();
+  expect(elements.get('motion').textContent).toContain('denied');
+  expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBeNull();
+  await elements.get('calibrate').onclick();
+  for (let i = 0; i < 30; i++) tick();
+  expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBe('motion');
+  expect(elements.get('tune-strength').textContent).toBe('Tune again');
+  expect(elements.get('strength-status').textContent).toContain('restored');
+});
+
+test.each([
+  ['enable', 'granted'], ['enable', 'denied'], ['calibrate', 'granted'], ['calibrate', 'denied'],
+])('late %s permission result (%s) cannot replace a newer button choice', async (action, grant) => {
+  savedMotionSetup();
+  await import('../src/controller/main.js');
+  let resolvePermission;
+  permission.mockImplementationOnce(() => new Promise(resolve => { resolvePermission = resolve; }));
+  const pending = elements.get(action).onclick();
+  elements.get('use-buttons').onclick();
+  const buttonMessage = elements.get('motion').textContent;
+  resolvePermission(grant);
+  await pending;
+  for (let i = 0; i < 30; i++) tick();
+  expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBe('buttons');
+  expect(elements.get('motion').textContent).toBe(buttonMessage);
+  expect(elements.get('calibration-progress').hidden).toBe(true);
+});
+
+test.each(['hand', 'hidden', 'pagehide'])('pending permission cannot begin calibration after a newer %s intent', async change => {
+  savedMotionSetup();
+  await import('../src/controller/main.js');
+  let resolvePermission;
+  permission.mockImplementationOnce(() => new Promise(resolve => { resolvePermission = resolve; }));
+  const pending = elements.get('calibrate').onclick();
+  if (change === 'hand') { elements.get('hand').value = 'Right'; elements.get('hand').onchange(); }
+  if (change === 'hidden') { document.hidden = true; documentListeners.get('visibilitychange')(); }
+  if (change === 'pagehide') emit('pagehide', {});
+  resolvePermission('granted');
+  await pending;
+  for (let i = 0; i < 30; i++) tick();
+  expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBeNull();
+  expect(elements.get('calibrate').textContent).not.toMatch(/Checking|Calibrating/);
+});
+
+test('an older permission promise cannot clear the pending state or start setup for a newer request', async () => {
+  savedMotionSetup();
+  await import('../src/controller/main.js');
+  let resolveFirst, resolveSecond;
+  permission.mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve; }))
+    .mockImplementationOnce(() => new Promise(resolve => { resolveSecond = resolve; }));
+  const first = elements.get('enable').onclick();
+  const second = elements.get('calibrate').onclick();
+  resolveFirst('granted'); await first;
+  expect(elements.get('calibrate').disabled).toBe(true);
+  expect(elements.get('calibrate').textContent).toBe('Resume motion');
+  resolveSecond('granted'); await second;
+  expect(elements.get('calibrate').textContent).toBe('Checking motion…');
+  for (let i = 0; i < 30; i++) tick();
+  expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBe('motion');
+});
+
+test('saved calibration with changed sensor zero falls back to full still calibration and clears old power', async () => {
+  savedMotionSetup({ hand: 'Right', strength: { hand: 'Right', Forehand: 1.2, Backhand: 1.1 } });
+  await import('../src/controller/main.js');
+  for (let i = 0; i < 35; i++) tick(20, { alpha: 4, beta: 0, gamma: 0 });
+  expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBeNull();
+  expect(window.sessionStorage.getItem(CALIBRATION_STORAGE_KEY)).toBeNull();
+  for (let i = 0; i < 110; i++) tick(20, { alpha: 4, beta: 0, gamma: 0 });
+  expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBe('motion');
+  expect(JSON.parse(window.sessionStorage.getItem(CALIBRATION_STORAGE_KEY)).strength).toBeNull();
+});
+
+test('changing the selected hand before verification prevents restoring the previous hand profile', async () => {
+  savedMotionSetup();
+  await import('../src/controller/main.js');
+  elements.get('hand').value = 'Right'; elements.get('hand').onchange();
+  for (let i = 0; i < 30; i++) tick();
+  expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBeNull();
+  expect(elements.get('calibrate').textContent).toBe('Calibrate');
+  expect(window.sessionStorage.getItem(CALIBRATION_STORAGE_KEY)).toBeNull();
+});
+
+test('saved setup verification rejects moving samples and cancels when the phone is hidden', async () => {
+  savedMotionSetup();
+  await import('../src/controller/main.js');
+  for (let i = 0; i < 30; i++) tick(20, { alpha: i % 2 ? -10 : 10, beta: 0, gamma: 0 });
+  expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBeNull();
+  document.hidden = true; documentListeners.get('visibilitychange')();
+  for (let i = 0; i < 30; i++) tick();
+  expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBeNull();
+  document.hidden = false; documentListeners.get('visibilitychange')();
+  tick(20);
+  expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBeNull();
+  for (let i = 0; i < 30; i++) tick();
+  expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBe('motion');
+});
 
 test('optional strength rehearsal uses real completed strokes, pauses setup, and never sends a match swing', async () => {
   await import('../src/controller/main.js');

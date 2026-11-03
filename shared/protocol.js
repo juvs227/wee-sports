@@ -87,6 +87,8 @@ export const EVENTS = {
   PLAYER_READY: 'player:ready',
   /** Controller setup is reported by each phone before it can become ready. */
   PLAYER_SETUP: 'player:setup',
+  /** Current TV or seated phone -> shared TV sound preference for this lobby. */
+  SOUND_SET: 'sound:set',
   /** Joined P1/P2 -> server -> its TV. The server assigns the player number. */
   PLAYER_SWING: 'player:swing',
   GAME_SWING: 'game:swing',

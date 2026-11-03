@@ -18,11 +18,16 @@ async function court() {
         void new GLTFLoader().parseAsync(file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength), '').then(onLoad);
     });
     const scene = new THREE.Scene();
-    const player1 = createPlayer(0, .25, 10, 0x3b82f6);
-    const player2 = createPlayer(0, .25, -10, 0xef4444, { minZ: -11.5, maxZ: -1 });
+    const player1 = createPlayer(0, .25, 10, 0x3b82f6, {minX: -4.115, maxX: 4.115, minZ: 1, maxZ: TENNIS_COURT.serveDepth + .2});
+    const player2 = createPlayer(0, .25, -10, 0xef4444, {minX: -4.115, maxX: 4.115, minZ: -TENNIS_COURT.serveDepth - .2, maxZ: -1});
     player2.group.rotation.y = Math.PI;
     scene.add(player1.group, player2.group);
     await vi.waitFor(() => { expect(player1.hitbox).toBeTruthy(); expect(player2.hitbox).toBeTruthy(); });
+    // Never globally stub Math.random here: Three.js uses it to generate unique
+    // binding IDs. Repeated UUIDs make different bones share animation bindings.
+    const nodeIds: string[] = [];
+    scene.traverse(node => nodeIds.push(node.uuid));
+    expect(new Set(nodeIds).size).toBe(nodeIds.length);
     const ball = createBall(0, .3, 10);
     (ball.userData as BallUserData).serveDelayRemaining = 0;
     scene.add(ball);
@@ -51,7 +56,6 @@ for (const hand of ['Right', 'Left'] as const) for (const label of ['Forehand', 
 }
 
 test('phone strength changes an actual serve only after racket contact', async () => {
-    vi.spyOn(Math, 'random').mockReturnValue(.5);
     const speeds: number[] = [];
     for (const power of [.2, 1]) {
         const { game, ball, feedback } = await court();
@@ -213,10 +217,8 @@ function swingNearArrival(state: Awaited<ReturnType<typeof court>>, number: 1 | 
 
 for (const number of [1, 2] as const) for (const hand of ['Right', 'Left'] as const) {
     for (const label of ['Forehand', 'Backhand'] as const) {
-        test(`P${number} ${hand} ${label} tolerates inputs arriving 0–300 ms early with real model contact`, async () => {
-            const random = vi.spyOn(Math, 'random');
-            for (const seed of [.2, .5, .8]) for (const lead of [0, .08, .16, .3]) {
-                random.mockReturnValue(seed);
+        test(`P${number} ${hand} ${label} tolerates inputs arriving 80–550 ms early with real model contact`, async () => {
+            for (const lead of [.08, .16, .3, .45, .55]) {
                 const state = await court();
                 state.game.swing({ label: 'Forehand', hand: 'Right', player: 1 });
                 if (number === 1) {
@@ -228,14 +230,13 @@ for (const number of [1, 2] as const) for (const hand of ['Right', 'Left'] as co
                 swingNearArrival(state, number, hand, label, lead);
                 for (let step = 0; step < 90; step++) state.game.update(1 / 120);
                 expect(state.feedback.some(message => message.startsWith(`Player ${number}: Hit!`)),
-                    `random=${seed}, lead=${lead}: ${state.feedback.join('; ')}`).toBe(true);
+                    `lead=${lead}: ${state.feedback.join('; ')}`).toBe(true);
             }
         });
     }
 }
 
 test('a late stroke misses, and pausing discards a prepared stroke', async () => {
-    vi.spyOn(Math, 'random').mockReturnValue(.5);
     const late = await court();
     late.game.swing({ label: 'Forehand', hand: 'Right', player: 1 });
     swingNearArrival(late, 2, 'Right', 'Forehand', -.08);
@@ -252,7 +253,6 @@ test('a late stroke misses, and pausing discards a prepared stroke', async () =>
 });
 
 test('consecutive human returns keep normal contact, then a missed ball scores only once', async () => {
-    vi.spyOn(Math, 'random').mockReturnValue(.5);
     const state = await court();
     state.game.swing({ label: 'Forehand', hand: 'Right', player: 1 });
     for (let shot = 0; shot < 8; shot++) {
@@ -289,16 +289,12 @@ test('cached racket poses match the live authored backhand animation', async () 
 });
 
 test('the solo bot returns a phone serve using the shipped racket and normal contact', async () => {
-    const random = vi.spyOn(Math, 'random');
-    for (const seed of [.2, .5, .8]) {
-        random.mockReturnValue(seed);
-        const state = await court();
-        state.game.botEnabled = true;
-        state.game.swing({ label: 'Forehand', hand: 'Right', player: 1 });
-        for (let step = 0; step < 480; step++) state.game.update(1 / 120);
-        expect(state.feedback.some(message => message.startsWith('Player 2: Hit!')),
-            `seed=${seed}: ${state.feedback.join('; ')}`).toBe(true);
-    }
+    const state = await court();
+    state.game.botEnabled = true;
+    state.game.swing({ label: 'Forehand', hand: 'Right', player: 1 });
+    for (let step = 0; step < 480; step++) state.game.update(1 / 120);
+    expect(state.feedback.some(message => message.startsWith('Player 2: Hit!')),
+        state.feedback.join('; ')).toBe(true);
 });
 
 test('a prepared keyboard serve can still be released by a phone swing', async () => {
@@ -311,7 +307,6 @@ test('a prepared keyboard serve can still be released by a phone swing', async (
 });
 
 test('phone timing assistance remains playable at 30, 60, and 144 FPS', async () => {
-    vi.spyOn(Math, 'random').mockReturnValue(.5);
     for (const fps of [30, 60, 144]) for (const label of ['Forehand', 'Backhand'] as const) {
         const state = await court();
         state.game.swing({ label: 'Forehand', hand: 'Right', player: 1 });
@@ -475,4 +470,16 @@ test('a completed service swing missing its held ball consumes an attempt, but r
     miss('miss-second');
     expect(game.getScore()).toMatchObject({player2: 15, lastPoint: {reason: 'double-fault'}});
     expect(events.filter(event => event.kind === 'point')).toHaveLength(1);
+});
+
+
+test.each([
+    ['Right', 'Backhand', -.02],
+    ['Left', 'Forehand', -.04],
+] as const)('%s %s can meet the remaining racket path after the nominal strike plane', async (hand, label, lead) => {
+    const state = await court();
+    state.game.swing({label: 'Forehand', hand: 'Right', player: 1});
+    swingNearArrival(state, 2, hand, label, lead);
+    for (let step = 0; step < 120; step++) state.game.update(1 / 120);
+    expect(state.feedback.some(message => message.startsWith('Player 2: Hit!')), state.feedback.join('; ')).toBe(true);
 });

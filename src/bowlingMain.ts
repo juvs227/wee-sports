@@ -2,6 +2,7 @@ import {BowlingWorld, BowlingState} from './bowling/World';
 import {formatFrame} from './bowling/match';
 import {createSportsAudio} from './audio/sportsAudio';
 import '../client/src/styles/tokens.css';
+import './gameHud.css';
 import './bowling.css';
 
 const embedded = window.parent !== window;
@@ -31,8 +32,19 @@ function render(state: BowlingState): void {
   el('roll-status').textContent = paused ? 'Match paused. Waiting for controllers.' : state.phase === 'rolling' ? 'Ball in play…' : state.complete ? 'Final scores are in.' :
     last ? `${last.strike ? 'Strike!' : last.spare ? 'Spare!' : `${last.pins} ${last.pins === 1 ? 'pin' : 'pins'} down.`} ${last.player !== state.currentPlayer ? 'Next player, your turn.' : 'Ready for your next roll.'}` : 'Your lane is ready. Line up and roll.';
   el('pin-status').textContent = state.complete ? '' : `${state.pinsStanding.length} pins standing`;
+  const summary = el('score-summary'); summary.replaceChildren();
   const body = el('score-body'); body.replaceChildren();
   for (const score of state.players) {
+    const card = document.createElement('div'); card.className = 'match-player';
+    card.dataset.player = String(score.player); card.dataset.active = String(!state.complete && score.player === state.currentPlayer);
+    const cardName = document.createElement('span'); cardName.className = 'match-player__name'; cardName.textContent = `P${score.player} · ${score.name}`;
+    const points = document.createElement('div'); points.className = 'match-player__score';
+    const value = document.createElement('strong'); value.textContent = String(score.total);
+    const unit = document.createElement('span'); unit.className = 'match-player__unit'; unit.textContent = 'Points';
+    points.append(value, unit);
+    const status = document.createElement('div'); status.className = 'match-player__stats';
+    status.textContent = state.complete ? 'Final score' : score.player === state.currentPlayer ? state.phase === 'rolling' ? 'Ball in play' : 'Your turn' : 'Waiting';
+    card.append(cardName, points, status); summary.append(card);
     const row = document.createElement('tr');
     row.dataset.active = String(score.player === state.currentPlayer);
     row.style.setProperty('--player-color', `var(--p${score.player})`);

@@ -27,6 +27,7 @@ export class BowlingWorld {
   private running = false;
   private disposed = false;
   private rolling = false;
+  private rollSoundActive = false;
   private settlement: RollSettlement | null = null;
   private revealTime = 0;
   private animation = 0;
@@ -38,20 +39,12 @@ export class BowlingWorld {
   constructor(private container: HTMLElement, players: BowlingPlayer[]) {
     this.players = players.map(player => ({...player}));
     this.match = new BowlingMatch(players);
-    this.physics.onPinHit = () => {
-      const player = this.match.getState().currentPlayer;
-      if (this.running && this.rolling && player !== null) {
-        this.onPinHit?.(player);
-        this.onSoundEvent?.('pin');
-      }
-    };
-    this.physics.onGutter = () => {
-      if (this.running && this.rolling) this.onSoundEvent?.('gutter');
-    };
+    this.physics.onPinHit = () => this.pinContact();
+    this.physics.onGutter = () => this.gutterContact();
     this.renderer = new THREE.WebGLRenderer({antialias: true, alpha: false});
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.25;
@@ -106,6 +99,7 @@ export class BowlingWorld {
   stop(): void {
     this.running = false;
     cancelAnimationFrame(this.animation);
+    this.endRollingSound();
     // Neither physical time nor the result-reveal timer advances while paused.
   }
 
@@ -124,6 +118,7 @@ export class BowlingWorld {
     this.aimLine.visible = false;
     this.onState?.(this.getState());
     this.onSoundEvent?.('release');
+    this.rollSoundActive = true;
     this.onSoundEvent?.('roll');
     return {ok: true};
   }
@@ -142,6 +137,7 @@ export class BowlingWorld {
   }
 
   reset(players: BowlingPlayer[] = this.players): void {
+    this.endRollingSound();
     this.players = players.map(player => ({...player}));
     this.match = new BowlingMatch(players);
     this.physics.resetRack();
@@ -193,6 +189,27 @@ export class BowlingWorld {
     this.render();
   };
 
+  private endRollingSound(): void {
+    if (!this.rollSoundActive) return;
+    this.rollSoundActive = false;
+    this.onSoundEvent?.('roll-end');
+  }
+
+  private pinContact(): void {
+    const player = this.match.getState().currentPlayer;
+    if (!this.running || !this.rolling || player === null) return;
+    // The lane bed ends at impact, not after every pin has finished settling.
+    this.endRollingSound();
+    this.onPinHit?.(player);
+    this.onSoundEvent?.('pin');
+  }
+
+  private gutterContact(): void {
+    if (!this.running || !this.rolling) return;
+    this.endRollingSound();
+    this.onSoundEvent?.('gutter');
+  }
+
   private tick = (time: number): void => {
     if (!this.running) return;
     const dt = Math.min(Math.max((time - this.lastTime) / 1000, 0), 0.1);
@@ -219,7 +236,7 @@ export class BowlingWorld {
       this.settlement = this.physics.step(dt);
       if (this.settlement) {
         this.revealTime = 1.1;
-        this.onSoundEvent?.('roll-end');
+        this.endRollingSound();
       }
     } else if (this.settlement) {
       this.revealTime -= dt;

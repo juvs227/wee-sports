@@ -6,6 +6,7 @@ import { connectSwings } from './network/swingConnection.js';
 import { createInputId } from './network/inputId.js';
 import { createSportsAudio } from './audio/sportsAudio';
 import '../client/src/styles/tokens.css';
+import './gameHud.css';
 import './play.css';
 
 async function main(): Promise<void> {
@@ -30,17 +31,17 @@ async function main(): Promise<void> {
     history.replaceState(null, '', url);
 
     const panel = document.createElement('aside');
-    panel.className = 'game-panel';
+    panel.className = 'game-panel match-hud';
     panel.setAttribute('aria-label', 'Tennis scoreboard');
-    panel.innerHTML = `<p class="play-eyebrow" id="match-mode">Tennis · solo</p>
-      <p class="score-format" id="score-format">Best of 3 sets · advantage scoring</p>
-      <div class="scoreboard">
-        <div class="score-row" data-player="1"><span id="name-1"></span><strong id="points-1" aria-label="Player 1 points">0</strong><small id="games-1">Games 0</small><small id="sets-1">Sets 0</small></div>
-        <div class="score-row" data-player="2"><span id="name-2"></span><strong id="points-2" aria-label="Player 2 points">0</strong><small id="games-2">Games 0</small><small id="sets-2">Sets 0</small></div>
+    panel.innerHTML = `<header class="match-hud__heading"><p class="play-eyebrow" id="match-mode">Tennis · solo</p>
+      <p class="score-format" id="score-format">Best of 3 sets · advantage scoring</p></header>
+      <div class="scoreboard match-hud__players">
+        <div class="score-row match-player" data-player="1"><span class="match-player__name" id="name-1"></span><div class="match-player__score"><strong id="points-1" aria-label="Player 1 points">0</strong><span class="match-player__unit">Points</span></div><div class="match-player__stats"><small id="games-1">Games 0</small><small id="sets-1">Sets 0</small></div></div>
+        <div class="score-row match-player" data-player="2"><span class="match-player__name" id="name-2"></span><div class="match-player__score"><strong id="points-2" aria-label="Player 2 points">0</strong><span class="match-player__unit">Points</span></div><div class="match-player__stats"><small id="games-2">Games 0</small><small id="sets-2">Sets 0</small></div></div>
       </div>
       <p id="completed-sets" class="play-muted"></p>
       <p id="point-result" role="status"></p>
-      <p id="serve-status"></p><p id="feedback" role="status">Swing as the ball approaches your side.</p>
+      <div class="match-hud__status"><p id="serve-status"></p><p id="feedback" role="status">Swing as the ball approaches your side.</p></div>
       <div id="match-result" hidden><p id="match-winner"></p><button id="play-again" class="primary">Play again</button></div>
       <details id="court-options"><summary>Play options & practice</summary><p id="connection"></p>
       <div class="tennis-options">

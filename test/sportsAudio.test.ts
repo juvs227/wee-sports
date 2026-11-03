@@ -17,6 +17,7 @@ function harness() {
   }> = [];
   const context = {
     state: 'suspended',
+    currentTime: 4,
     destination: {},
     resume: vi.fn(async () => {
       context.state = 'running';
@@ -103,11 +104,13 @@ test('lobby preload stays silent and Play activation preserves an explicit saved
   expect(fetched).toBeGreaterThan(0);
   expect(h.createContext).not.toHaveBeenCalled();
   expect(h.sources).toHaveLength(0);
-  await expect(sound.unlock({respectMute: true})).resolves.toBe(false);
-  expect(h.createContext).not.toHaveBeenCalled();
+  await expect(sound.unlock({respectMute: true})).resolves.toBe(true);
+  expect(h.createContext).toHaveBeenCalledTimes(1);
   expect(sound.getStatus().muted).toBe(true);
-  // The explicit Enable/Test sound action can unmute, using prefetched bytes.
-  await expect(sound.unlock()).resolves.toBe(true);
+  expect(sound.play('hit')).toBe(false);
+  // A later phone unmute uses the already activated context, without a TV click.
+  sound.setMuted(false);
+  expect(sound.play('hit')).toBe(true);
   expect(h.fetchAsset).toHaveBeenCalledTimes(fetched);
   expect(h.createContext).toHaveBeenCalledTimes(1);
   await sound.unlock({respectMute: true});
@@ -241,11 +244,11 @@ test('rapid pin contacts are limited, loops cannot stack, and voices stay bounde
     expect(sound.play('pin')).toBe(true);
   }
   expect(
-    h.sources.filter(source => !source.stop.mock.calls.length),
+    h.sources.filter(source => !source.stop.mock.calls.some(call => call.length === 0)),
   ).toHaveLength(8);
-  expect(h.sources[0].stop).not.toHaveBeenCalled();
+  expect(h.sources[0].stop).toHaveBeenCalledExactlyOnceWith(16);
   sound.play('roll-end');
-  expect(h.sources[0].stop).toHaveBeenCalledTimes(1);
+  expect(h.sources[0].stop).toHaveBeenLastCalledWith();
   sound.dispose();
 });
 
@@ -257,7 +260,7 @@ test('mute persists, and pause or hidden tabs stop all effects without replaying
   sound.play('pin');
   sound.setMuted(true);
   expect(h.values.get('wee-sports:sound-muted')).toBe('true');
-  expect(h.sources.every(source => source.stop.mock.calls.length === 1)).toBe(
+  expect(h.sources.every(source => source.stop.mock.calls.some(call => call.length === 0))).toBe(
     true,
   );
   expect(sound.play('release')).toBe(false);
@@ -265,7 +268,7 @@ test('mute persists, and pause or hidden tabs stop all effects without replaying
   sound.play('roll');
   h.doc.hidden = true;
   h.doc.dispatchEvent(new Event('visibilitychange'));
-  expect(h.sources[2].stop).toHaveBeenCalledTimes(1);
+  expect(h.sources[2].stop).toHaveBeenLastCalledWith();
   expect(sound.play('release')).toBe(false);
   h.doc.hidden = false;
   h.doc.dispatchEvent(new Event('visibilitychange'));
@@ -311,26 +314,29 @@ test('disposal releases audio resources and prevents all subsequent playback', a
   sound.play('roll');
   sound.dispose();
   sound.dispose();
-  expect(h.sources[0].stop).toHaveBeenCalledTimes(1);
+  expect(h.sources[0].stop).toHaveBeenLastCalledWith();
   expect(h.sources[0].disconnect).toHaveBeenCalledTimes(1);
   expect(h.context.close).toHaveBeenCalledTimes(1);
   expect(sound.play('roll')).toBe(false);
   await expect(sound.unlock()).resolves.toBe(false);
 });
 
-test('explicit sound check can preview during a game pause but never bypass mute or a hidden tab', async () => {
+test('enabling sound is quiet and never bypasses pause, mute or a hidden tab', async () => {
   const h = harness();
   const sound = createSportsAudio('tennis', h.options);
   await sound.unlock();
   sound.setActive(false);
   expect(sound.play('hit')).toBe(false);
-  expect(sound.preview()).toBe(true);
+  await sound.unlock();
+  expect(h.sources).toHaveLength(0);
+  expect(sound.play('ready')).toBe(false);
   h.tick(500);
   h.doc.hidden = true;
-  expect(sound.preview()).toBe(false);
+  sound.setActive(true);
+  expect(sound.play('hit')).toBe(false);
   h.doc.hidden = false;
   sound.setMuted(true);
-  expect(sound.preview()).toBe(false);
+  expect(sound.play('hit')).toBe(false);
   sound.dispose();
 });
 

@@ -54,10 +54,36 @@ return-motion filter enabled.
 The team's five saved recordings retain all 19 expected stroke labels and peaks.
 Offline replay recognizes them 17–134 ms earlier after peak than the previous
 fast mode. These are detector measurements, not live network or device results.
-No browser, game server, tunnel, Docker image or Railway deployment was launched
-for this change. Physical phone play and hosted deployment remain manual checks.
+Those detector measurements were collected offline. They do not measure live
+phone, network or hosted-deployment latency.
 
 See [Railway setup](railway.md) for permanent hosting.
+
+## Making an accepted stroke reach the ball
+
+The latest contact review found missed returns after a stroke had already arrived
+at the TV. A queued stroke could start when its nominal strike-plane timer fired,
+even though assisted foot movement had not yet brought the authored racket path
+within reach. Left-handed inputs could also use an offset cached for the other
+stroke animation. A slightly late input could lose timing assistance just after
+the ball crossed that single cached plane, despite another part of the racket
+path still being able to meet it.
+
+The TV now keeps early inputs for up to **650 ms in Standard / 750 ms in Beginner**.
+A queued animation starts when the actual authored path predicts reachable
+contact; otherwise it briefly retries while movement catches up, within that
+bounded window. Its offsets match the selected hand and stroke. Incoming balls
+slightly past the nominal plane can still use the full-path timing check. Inputs
+are cleared at point changes and pause, and no input can replay into a later shot.
+
+The collision check still requires the real moving racket and ball to intersect.
+There is no guaranteed-hit award, ball teleport or larger hitbox. Forehand and
+backhand classification, authored animations, power mapping and court rules are
+retained. Cached matrix decomposition reduces repeated work in the collision
+prediction path; this targets local processing rather than internet delay.
+Actual-model regressions cover both hands, earlier/later arrivals and authored
+contacts. The stage measurements below distinguish these local timing problems
+from slow motion recognition or network delivery during a physical phone test.
 
 ## Separate response measurements
 
@@ -106,9 +132,9 @@ at its endpoints. Recognition thresholds, the team's forehand/backhand rules and
 return-motion suppression are unchanged. This is a comfortable game-power scale,
 not a physical force measurement or automatic classifier retraining.
 
-The profile stays only in this controller session. Changing the playing hand,
-starting a new calibration or selecting **Use default strength** clears it.
-Reloading starts with the default curve. A failed retuning leaves an existing
+The profile stays in this browser's recent setup cache for this site. Changing the playing
+hand, starting a new full calibration or selecting **Use default strength** clears
+it. Reloading can restore it after fresh sensor verification (below). A failed retuning leaves an existing
 valid profile unchanged; only six accepted, sufficiently consistent strokes can
 replace it. No profile is inferred from ordinary match play.
 
@@ -121,3 +147,47 @@ Offline checks cover profile bounds, monotonic power, rejected/duplicate samples
 timeouts, real sensor-to-rehearsal flow, isolated practice input, cancellation and
 reset behavior. The five team recordings still retain all 19 expected labels.
 Comfort and perceived power across different real phones remain a manual test.
+
+## Reusing phone setup between games
+
+Rematches and temporary reconnects already kept calibration in memory. Reloading
+the controller, rejoining a lobby or changing sports used to recreate that memory
+and force a full calibration. The phone now keeps its last verified gyro bias,
+playing hand and optional comfortable-power profile in `localStorage` for up to
+two hours. A QR opened in a new tab of the same browser and origin can reuse it.
+It carries the current calibration/classifier version and contains only the
+coarse offset/profile values, not motion recordings. If persistent storage is
+blocked, it falls back to `sessionStorage` for the current tab.
+
+A saved entry alone never makes a controller ready. If the browser still grants
+motion access, fresh finite readings start a short **Checking motion** step:
+500 ms of continuous stillness, at least ten samples and no sensor gaps. The
+measured offset must remain close to the saved one. Once checked, the controller
+restores the chosen hand and power profile and publishes its ready setup.
+Changed sensor zero instead triggers the normal longer calibration and clears
+the old power tuning. Moving, missing, stale or hidden-page readings cannot pass.
+
+If the browser requires permission again, **Resume motion** requests it from the
+tap and performs that same fresh-data check. It does not repeat the full setup
+unless readings have changed. **Calibrate again** remains available in controller
+settings. Changing the hand before verification discards the unverified profile;
+changing it after verification retains the hand-independent gyro bias and resets
+the stroke-specific power tuning.
+
+Permission prompts are tied to the latest setup choice. Choosing buttons,
+changing hands, hiding/leaving the page or starting a newer request cancels the
+older request's setup action; a late permission result cannot switch the phone
+back to motion or replace the newer choice.
+
+Using a different secure origin (for example a new temporary tunnel URL), another
+browser, an expired/version-mismatched entry or disabled storage may require full
+setup again. With session-only fallback, closing the tab loses its saved setup.
+The game continues to work when both storage options are unavailable. This uses
+[same-origin local storage](https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage)
+with [same-tab session storage](https://developer.mozilla.org/en-US/docs/Web/API/Window/sessionStorage)
+as fallback, and respects [motion permission's user-gesture requirement](https://developer.mozilla.org/en-US/docs/Web/API/DeviceMotionEvent/requestPermission_static).
+
+Offline regressions cover reload and a new same-origin controller tab without a
+second permission request when actual readings are available; denied permission/no sensors; profile expiry/version and
+hand mismatch; changed bias; moving/hidden samples; and storage failures. Live
+permission persistence varies by phone/browser and still needs the device check.

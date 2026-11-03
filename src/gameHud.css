@@ -1,0 +1,48 @@
+/* Shared, compact match overlay for the existing tennis and bowling scenes. */
+.match-hud {
+  position: absolute;
+  z-index: 3;
+  top: max(10px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(760px, calc(100% - 24px));
+  padding: 10px 14px;
+  border: 1px solid #ffffffd9;
+  border-radius: 20px;
+  background: #fffffff2;
+  box-shadow: 0 4px 24px #102d2d24;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.match-hud__heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 3px 12px; margin-bottom: 7px; }
+.match-hud .play-eyebrow { margin: 0; font-size: 10px; font-weight: 900; color: var(--accent-ink); letter-spacing: .13em; text-transform: uppercase; }
+.match-hud .score-format { margin: 0; font-size: 11px; color: var(--text-muted); }
+.match-hud__players { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.match-player { --seat-color: var(--p1); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: center; min-width: 0; padding: 8px 12px; border: 1px solid var(--border); border-left: 4px solid var(--seat-color); border-radius: 12px; background: var(--surface-sunk); }
+.match-player[data-player='2'] { --seat-color: var(--p2); }
+.match-player[data-player='3'] { --seat-color: var(--p3); }
+.match-player[data-player='4'] { --seat-color: var(--p4); }
+.match-player[data-active='true'] { border-color: var(--seat-color); background: color-mix(in srgb, var(--seat-color) 8%, white); }
+.match-player__name { font-size: 13px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.match-player__score { grid-column: 2; grid-row: 1 / 3; min-width: 38px; text-align: center; }
+.match-player__score strong { display: block; color: var(--seat-color); font-size: 27px; line-height: 1; font-weight: 900; font-variant-numeric: tabular-nums; }
+.match-player__unit { display: block; margin-top: 3px; color: var(--text-muted); font-size: 8px; text-transform: uppercase; letter-spacing: .1em; font-weight: 800; }
+.match-player__stats { display: flex; flex-wrap: wrap; gap: 3px 10px; min-width: 0; color: var(--text-muted); font-size: 11px; }
+.match-player__stats small { font-size: inherit; white-space: nowrap; }
+.match-hud__status { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 10px; margin-top: 6px; font-size: 11px; }
+.match-hud p { margin: 3px 0; }
+.match-hud details > summary { cursor: pointer; color: var(--accent-ink); font-weight: 800; font-size: 11px; padding: 6px 0 1px; }
+.match-hud:has(details[open]) { max-height: calc(100dvh - 24px); overflow-y: auto; overscroll-behavior: contain; }
+@media (max-width: 540px) {
+  .match-hud { top: max(7px, env(safe-area-inset-top)); width: calc(100% - 14px); padding: 8px 10px; border-radius: 15px; }
+  .match-player { padding: 7px 8px; gap: 2px 6px; }
+  .match-player__name { font-size: 11px; }
+  .match-player__score strong { font-size: 23px; }
+  .match-player__stats { font-size: 10px; gap: 3px 7px; }
+}
+@media (max-height: 520px) and (min-width: 541px) {
+  .match-hud { padding-top: 6px; padding-bottom: 6px; }
+  .match-hud__heading { margin-bottom: 3px; }
+  .match-player { padding-top: 5px; padding-bottom: 5px; }
+}

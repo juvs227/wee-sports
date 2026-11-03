@@ -38,15 +38,8 @@
   gap: 8px;
   position: relative;
 }
-.tv-sound-help {
-  position: relative;
-  font-size: 12px;
-}
-.tv-sound-help summary {
-  cursor: pointer;
-  white-space: nowrap;
-}
-.tv-sound-help__panel {
+.tv-sound-error,
+.phone-sound-control__error {
   position: absolute;
   z-index: 40;
   top: calc(100% + 8px);
@@ -58,28 +51,19 @@
   border-radius: 12px;
   box-shadow: 0 8px 24px #0004;
 }
-.tv-sound-help__panel p {
-  margin: 10px 0 0;
-  font-size: 12px;
-  line-height: 1.5;
-}
-.tv-sound-help__panel button {
-  background: #d5f487;
-  color: #16342d;
-  border: 0;
-  border-radius: 20px;
-  padding: 8px 12px;
-  cursor: pointer;
-}
+.sports-sound-toggle--icon { width: 44px; height: 44px; min-height: 44px; padding: 9px; }
+.sports-sound-toggle--icon[aria-pressed='false'] { border-color: #81dfbb; background: #214e42; }
+.sports-sound-toggle--icon[aria-pressed='true'] { border-color: #ffffff4d; background: #18363a; }
+.sports-sound-toggle--icon:disabled { opacity: .5; cursor: default; }
+.phone-sound-control { margin-left: auto; position: relative; flex-shrink: 0; }
+.phone-session__name { min-width: 0; }
+.phone-session .sports-sound-toggle--icon { color: var(--accent-ink); background: var(--accent-soft); border-color: var(--border); }
+.phone-session .sports-sound-toggle--icon[aria-pressed='true'] { color: var(--text-muted); background: var(--surface); }
 .game-countdown__sound {
   position: absolute;
   z-index: 4;
   top: 16px;
   left: 16px;
-}
-.game-countdown__sound .tv-sound-help__panel {
-  left: 0;
-  right: auto;
 }
 @media (max-width: 600px) {
   .game-session__actions {

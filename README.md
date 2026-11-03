@@ -1,5 +1,7 @@
 # Wee Sports
 
+Latest play-screen, phone mute, calibration reuse and timing fixes: [play polish](docs/play-polish.md).
+
 Current tennis features and manual checks: [tennis upgrade](docs/tennis-upgrade.md).
 Rules, formats and practice: [tennis scoring](docs/tennis-scoring.md).
 Sound activation, effects and credits: [sound](docs/sound.md).
@@ -102,7 +104,7 @@ whose racket hit the ball, on browsers that support vibration. Bowling gives a
 light pulse on release and a distinct double pulse when the ball first contacts
 a pin. Gutter rolls do not trigger pin-impact feedback, and multiple colliding
 pins cannot repeatedly buzz the phone. Game sound plays on the TV/laptop through
-the visible sound control; **Sound check** can confirm it is enabled. The phone
+the speaker icon on the TV or phone; the mute state is shared within the lobby. The phone
 keeps its separate motion animation and vibration feedback.
 The controller requests a screen wake lock after setup while connected and
 visible, including the lobby wait. Browser and battery settings can still deny
@@ -184,7 +186,7 @@ their original Player 1 relay. The named server starts each point; the bot serve
 automatically when it owns the service turn.
 
 With **Timing assistance** enabled, phone/button inputs can be buffered for up
-to 450 ms in Standard or 550 ms in Beginner while an incoming ball approaches.
+to 650 ms in Standard or 750 ms in Beginner while an incoming ball approaches.
 Timing assistance is independent of **Automatic movement**. The game samples the shipped racket
 animations and chooses a remaining wind-up that can meet the ball. This adjusts
 the animation timing; it does not move the ball or guarantee a hit. Swing as the

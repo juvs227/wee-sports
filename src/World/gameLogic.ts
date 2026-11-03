@@ -30,7 +30,7 @@ const PHYSICS_STEP = 1 / 120;
 // A phone reports a stroke after it has begun. Buffer a slightly early input,
 // then time the authored animation to the incoming ball; contact still has to
 // pass the normal swept racket test. Never replay inputs into a later shot.
-const SWING_BUFFER_SECONDS = 0.45;
+const SWING_BUFFER_SECONDS = 0.65;
 const STRIKE_PROGRESS = 0.45;
 // The authored backhand rises through contact later than the forehand.
 const BACKHAND_PROGRESS = 0.65;
@@ -41,6 +41,7 @@ interface PendingSwing {
     remaining: number;
     lastHitBy: BallPlayer;
     power: number;
+    retryIn?: number;
 }
 
 export interface TennisSettings {
@@ -331,7 +332,7 @@ export class GameLogic {
         const backhand = event.label === 'Backhand';
         const animation = this.swingAnimation(backhand, event.hand);
         const action = player.actions[animation];
-        const intercept = this.strokeIntercept(player, animation, number);
+        const intercept = this.strokeIntercept(player, animation, number, backhand);
         const contactTime = action?.getClip().duration * (backhand ? BACKHAND_PROGRESS : STRIKE_PROGRESS);
         const trace = this.strokes[number - 1];
         if (trace) {
@@ -348,11 +349,11 @@ export class GameLogic {
         }
         if (player.isSwinging) { reject('Finish the current stroke'); return; }
         if (this.settings.timingAssist && action && intercept &&
-            intercept.time <= (this.settings.assistance === 'beginner' ? .55 : SWING_BUFFER_SECONDS) &&
+            intercept.time <= (this.settings.assistance === 'beginner' ? .75 : SWING_BUFFER_SECONDS) &&
             intercept.time > action.getClip().duration * (backhand ? BACKHAND_PROGRESS : STRIKE_PROGRESS) &&
             data.lastHitBy && !player.isSwinging) {
             this.pendingSwings[number - 1] = {
-                backhand, hand: event.hand, remaining: this.settings.assistance === 'beginner' ? .55 : SWING_BUFFER_SECONDS,
+                backhand, hand: event.hand, remaining: this.settings.assistance === 'beginner' ? .75 : SWING_BUFFER_SECONDS,
                 lastHitBy: data.lastHitBy, power,
             };
             this.feedback(`Player ${number}: ${event.label} ready · meeting the incoming ball`);
@@ -584,7 +585,7 @@ export class GameLogic {
                     const pending = this.pendingSwings[number - 1];
                     const selected = pending ? this.swingAnimation(pending.backhand, pending.hand)
                         : player.isSwinging ? player.currentAnimation : null;
-                    const preferred = selected && player.strikeOffsets[selected];
+                    const preferred = selected && this.strikeOffset(player, selected, pending?.backhand ?? player.swingBackhand);
                     for (const offset of preferred ? [preferred] : Object.values(player.strikeOffsets)) {
                         const intercept = predictBaselineIntercept({
                             position: this.ball.position, velocity: data.velocity, gravity: data.gravity, bounceCount: data.bounceCount
@@ -635,9 +636,18 @@ export class GameLogic {
         return backhand !== (hand === 'Left') ? 'SwingLeft' : 'SwingRight';
     }
 
-    private strokeIntercept(player: PlayerController, animation: string, number: 1 | 2) {
+    private strikeOffset(player: PlayerController, animation: string, backhand: boolean): THREE.Vector3 | undefined {
+        const poses = player.swingPoses[`${animation}:${backhand}`];
+        const pose = poses?.[Math.round((poses.length - 1) * (backhand ? BACKHAND_PROGRESS : STRIKE_PROGRESS))];
+        if (!pose || !player.hitbox) return player.strikeOffsets[animation];
+        player.group.updateWorldMatrix(true, false);
+        return player.hitbox.bounds.getCenter(new THREE.Vector3()).applyMatrix4(pose)
+            .applyMatrix4(player.group.matrixWorld).sub(new THREE.Vector3().setFromMatrixPosition(player.group.matrixWorld));
+    }
+
+    private strokeIntercept(player: PlayerController, animation: string, number: 1 | 2, backhand: boolean) {
         const data = this.ball.userData as BallUserData;
-        const offset = player.strikeOffsets[animation];
+        const offset = this.strikeOffset(player, animation, backhand);
         if (!offset || data.isWaitingForServe || data.waitingForRacketHit ||
             data.lastHitBy === this.toBallPlayer(number) ||
             (number === 1 ? data.velocity.z <= 0 : data.velocity.z >= 0)) return null;
@@ -655,24 +665,37 @@ export class GameLogic {
             if (pending.remaining <= 0 || data.isWaitingForServe ||
                 data.waitingForRacketHit || data.lastHitBy !== pending.lastHitBy) {
                 this.pendingSwings[number - 1] = null;
-                this.reportStroke(number, 'miss', pending.remaining <= 0 ? 'Too early' : 'Point ended before racket contact');
+                const reason = pending.remaining <= 0
+                    ? pending.retryIn === undefined ? 'Too early' : 'Ball is out of reach'
+                    : 'Point ended before racket contact';
+                this.feedback(`Player ${number}: ${reason}`);
+                this.reportStroke(number, 'miss', reason);
                 continue;
             }
             const animation = this.swingAnimation(pending.backhand, pending.hand);
             const action = player.actions[animation];
-            const intercept = this.strokeIntercept(player, animation, number);
-            if (!action || !intercept ||
-                intercept.time > action.getClip().duration * (pending.backhand ? BACKHAND_PROGRESS : STRIKE_PROGRESS)) continue;
+            const intercept = this.strokeIntercept(player, animation, number, pending.backhand);
+            if (!action || (intercept &&
+                intercept.time > action.getClip().duration * (pending.backhand ? BACKHAND_PROGRESS : STRIKE_PROGRESS))) continue;
+            pending.retryIn = (pending.retryIn ?? 0) - delta;
+            if (pending.retryIn > 0) continue;
+            // Movement can still be settling when the strike-plane timer fires.
+            // Start when the authored path has a reachable contact, not merely
+            // because one nominal animation progress has arrived.
+            const start = this.assistedStartTime(player, animation, pending.backhand, number);
+            if (start === null) { pending.retryIn = .025; continue; }
             this.pendingSwings[number - 1] = null;
-            this.performSwing(pending.backhand, number, pending.hand, true, pending.power);
+            const trace = this.strokes[number - 1];
+            if (trace) trace.reason = 'Racket did not reach the ball';
+            this.performSwing(pending.backhand, number, pending.hand, true, pending.power, start);
         }
     }
 
-    private assistedStartTime(player: PlayerController, animation: string, backhand: boolean, number: 1 | 2): number {
+    private assistedStartTime(player: PlayerController, animation: string, backhand: boolean, number: 1 | 2): number | null {
         const data = this.ball.userData as BallUserData;
         const poses = player.swingPoses[`${animation}:${backhand}`];
         const hitbox = player.hitbox;
-        if (!poses || !hitbox || data.isWaitingForServe || data.waitingForRacketHit) return 0;
+        if (!poses || !hitbox || data.isWaitingForServe || data.waitingForRacketHit) return null;
         const duration = player.actions[animation].getClip().duration;
         const path = [this.ball.position.clone()];
         const playerX = [player.group.position.x];
@@ -700,19 +723,28 @@ export class GameLogic {
             playerZ.push(previousZ + mz * scale);
         }
         player.group.updateWorldMatrix(true, false);
-        const poseAt = (progress: number, step: number) => {
+        // Decode the 21 cached poses once. Doing this inside both sides of every
+        // candidate sweep created thousands of short-lived vectors and matrices
+        // on the same main thread that receives input and draws the court.
+        const frames = poses.map(pose => {
+            const position = new THREE.Vector3(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3();
+            pose.decompose(position, rotation, scale);
+            return {position, rotation, scale};
+        });
+        const position = new THREE.Vector3(), scale = new THREE.Vector3(), rotation = new THREE.Quaternion();
+        const transform = new THREE.Matrix4();
+        const previousRacket = new THREE.Matrix4(), nextRacket = new THREE.Matrix4();
+        const poseAt = (progress: number, step: number, target: THREE.Matrix4) => {
             const index = Math.min(19, Math.floor(progress * 20));
             const fraction = progress * 20 - index;
-            const position = new THREE.Vector3(), scale = new THREE.Vector3(), rotation = new THREE.Quaternion();
-            const nextPosition = new THREE.Vector3(), nextScale = new THREE.Vector3(), nextRotation = new THREE.Quaternion();
-            poses[index].decompose(position, rotation, scale);
-            poses[index + 1].decompose(nextPosition, nextRotation, nextScale);
-            const transform = player.group.matrixWorld.clone();
+            const from = frames[index], to = frames[index + 1];
+            position.copy(from.position).lerp(to.position, fraction);
+            rotation.copy(from.rotation).slerp(to.rotation, fraction);
+            scale.copy(from.scale).lerp(to.scale, fraction);
+            transform.copy(player.group.matrixWorld);
             transform.elements[12] += playerX[step] - player.group.position.x;
             transform.elements[14] += playerZ[step] - player.group.position.z;
-            return new THREE.Matrix4().multiplyMatrices(transform,
-                new THREE.Matrix4().compose(position.lerp(nextPosition, fraction),
-                    rotation.slerp(nextRotation, fraction), scale.lerp(nextScale, fraction)));
+            return target.compose(position, rotation, scale).premultiply(transform);
         };
         // Choose a broad contact window within the remaining animation. Equal
         // windows favor less skipped wind-up; the ball is never rewound.
@@ -726,7 +758,7 @@ export class GameLogic {
                 const after = start + step / (120 * duration);
                 if (after > .8) break;
                 if (contactWindowCrossed(before, after, backhand) &&
-                    sweptRacketContact(hitbox.bounds, poseAt(before, step - 1), poseAt(after, step),
+                    sweptRacketContact(hitbox.bounds, poseAt(before, step - 1, previousRacket), poseAt(after, step, nextRacket),
                         path[step - 1], path[step], BALL_RADIUS)) contactSteps++;
             }
             if (contactSteps > mostContactSteps) {
@@ -734,11 +766,11 @@ export class GameLogic {
                 bestStart = start * duration;
             }
         }
-        return bestStart;
+        return mostContactSteps > 0 ? bestStart : null;
     }
 
     private performSwing(isBackhand: boolean, number: 1 | 2, hand: 'Left' | 'Right' = 'Right',
-        assistTiming = false, power = 0.5): void {
+        assistTiming = false, power = 0.5, plannedStart?: number): void {
         const player = number === 1 ? this.player1 : this.player2;
         if (player.isSwinging) return;
         const animation = this.swingAnimation(isBackhand, hand);
@@ -749,19 +781,25 @@ export class GameLogic {
         player.swingBackhand = isBackhand;
         this.swingPowers[number - 1] = power;
         player.playAnimation(animation);
+        this.updateAutoTargets();
         // Avoid adding a full wind-up after the phone's physical stroke. This
         // advances only the animation, never the ball or the contact result.
         if (assistTiming && this.settings.timingAssist) {
             const action = player.actions[animation];
-            const intercept = this.strokeIntercept(player, animation, number);
             const heldServe = (this.ball.userData as BallUserData).waitingForRacketHit;
-            if (intercept || heldServe) {
+            const data = this.ball.userData as BallUserData;
+            const incoming = data.lastHitBy !== this.toBallPlayer(number) &&
+                (number === 1 ? data.velocity.z > 0 : data.velocity.z < 0);
+            // A cached strike plane is only one point along the racket path.
+            // Keep checking the full authored path while the ball is incoming,
+            // including a slightly late input that can still physically meet it.
+            if (incoming || heldServe) {
                 action.stopFading();
                 action.setEffectiveWeight(1);
                 // The real phone swing already happened. Skip only the serve
                 // wind-up; the ball must still cross the authored racket path.
                 action.time = heldServe ? action.getClip().duration * 0.2
-                    : this.assistedStartTime(player, animation, isBackhand, number);
+                    : plannedStart ?? this.assistedStartTime(player, animation, isBackhand, number) ?? 0;
             }
         }
         this.feedback(`Player ${number}: ${isBackhand ? 'Backhand' : 'Forehand'} · swinging`);

@@ -19,7 +19,7 @@ function deliveryHarness(match = new BowlingMatch([{player: 1, name: 'Player 1'}
     onSoundEvent: (event: BowlingSoundEvent) => events.push(event),
     onState: vi.fn(), syncBodies: vi.fn(), render: vi.fn(),
   });
-  const lifecycle = world as unknown as {running: boolean; advanceDelivery(dt: number): void};
+  const lifecycle = world as unknown as {running: boolean; advanceDelivery(dt: number): void; pinContact(): void; gutterContact(): void};
   function settle(remaining: number[]) {
     physics.step.mockReturnValueOnce({remaining, gutter: false, elapsed: 5});
     lifecycle.advanceDelivery(1 / 60);
@@ -90,4 +90,25 @@ test('strike, spare and match cues follow the recorded score, once per outcome',
   expect(finish.world.roll(delivery).ok).toBe(false);
   finish.lifecycle.advanceDelivery(1 / 60);
   expect(finish.events).toHaveLength(4);
+});
+
+test.each(['pinContact', 'gutterContact'] as const)('rolling bed ends at %s before the pin settlement delay', contact => {
+  const {world, lifecycle, physics, events, settle} = deliveryHarness();
+  world.roll(delivery);
+  lifecycle[contact]();
+  expect(events).toEqual(['release', 'roll', 'roll-end', contact === 'pinContact' ? 'pin' : 'gutter']);
+  for (let frame = 0; frame < 120; frame++) lifecycle.advanceDelivery(1 / 60);
+  expect(physics.step).toHaveBeenCalledTimes(120);
+  expect(events.filter(event => event === 'roll-end')).toHaveLength(1);
+  settle([...FULL_RACK]);
+  expect(events.filter(event => event === 'roll-end')).toHaveLength(1);
+  expect(events.at(-1)).toBe('result');
+});
+
+test('reset stops an unfinished rolling bed without emitting a score outcome', () => {
+  const {world, events} = deliveryHarness();
+  world.roll(delivery);
+  world.reset();
+  world.reset();
+  expect(events).toEqual(['release', 'roll', 'roll-end']);
 });

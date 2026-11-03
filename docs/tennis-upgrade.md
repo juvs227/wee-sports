@@ -1,5 +1,8 @@
 # Tennis playability upgrade
 
+For the later UI, shared phone mute, calibration reuse and response fixes, see
+[play polish](play-polish.md), including live browser verification.
+
 Implemented on `update-homepage`. This change keeps the team's authored racket
 animations, stroke classifier and actual ball/racket collision path. It adds
 controls around them and makes the rules and feedback explicit.
@@ -35,14 +38,14 @@ The homepage **Play** click now activates a persistent audio context on the TV
 page. It survives the countdown and game iframe, so an extra click inside the
 court is no longer needed. An explicit saved mute is respected.
 
-**Sound check → Test sound** provides an audible confirmation and a retry if
-initialization or assets failed. Sound controls remain available during play.
+A compact speaker icon on the phone and TV controls shared game sound. Toggling
+is quiet, and the lobby keeps the selected mute state through reconnects.
 The existing match-start countdown has a pip for each number and a Go cue;
 ordinary serves do not restart that countdown. Explicit rematches have a Go cue.
 
 Tennis uses actual hit, bounce, serve, fault, let and scoring events. Bowling uses
 release, rolling, actual pin contact and result events, and stops rolling audio
-when the ball settles. The pack includes original bright family-sports chimes;
+on first pin contact or gutter entry, as well as settlement. The pack includes original bright family-sports chimes;
 it contains no Nintendo recordings or copied melodies. See [sound setup, event
 mapping and source credits](sound.md).
 
@@ -50,7 +53,7 @@ mapping and source credits](sound.md).
 
 1. Restart your session with your usual command and reload both the TV and phone
    so all pages use the updated protocol. For a built session, rebuild it first.
-2. On the TV, use **Sound check → Test sound**, then start solo tennis. Confirm
+2. On the TV, start solo tennis. Confirm
    countdown pips, a single Go, both camera views, and sound at actual contact.
 3. Calibrate the phone. Optionally tune six comfortable swings, then return to
    the controller. Check gentle/stronger strokes and both forehand/backhand.
@@ -67,14 +70,15 @@ mapping and source credits](sound.md).
    old diagnostic result or old practice stroke should replay. In bowling,
    check release → rolling → pin impact → result and that the loop stops.
 
-The implementation was checked offline with simulated sensors, real model poses,
+The initial six-feature implementation was checked offline with simulated sensors, real model poses,
 rules/physics tests, mocked audio and iframe messages, room-state tests, TypeScript
-and lint. No app, browser, game server, tunnel, build or audio playback was started
-for this work. Phone feel, audible balance and live two-human play remain manual
+and lint. Those initial checks did not launch the app or play audio; the later
+[polish update](play-polish.md) adds full build, socket and live browser checks.
+Phone feel, audible balance and live two-human play remain manual
 checks. The team should also run its normal build/network integration checks
 before deployment.
 
-Recorded offline results for this update:
+Recorded offline results for the initial six-feature update:
 
 - `vitest run --exclude server/relay.test.js`: 244 tests passed across 34 files.
 - `node --test server/src/RoomStore.test.js`: 37 tests passed.
