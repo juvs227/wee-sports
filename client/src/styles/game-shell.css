@@ -49,6 +49,8 @@
 .game-session__display[open] > summary { opacity: 1; }
 .game-session__menu-panel button + button { margin-top: 8px; }
 .game-session__menu-panel button { width: 100%; }
+.game-session__return { margin: 8px 0; }
+.game-session__return p { margin: 10px 0; }
 .game-session button,
 .game-session summary,
 .game-countdown__view {

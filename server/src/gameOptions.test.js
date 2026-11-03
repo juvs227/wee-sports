@@ -59,9 +59,9 @@ test('P1 commands route only to their current TV and cannot be replayed after fa
   assert.deepEqual(delivered.event, command());
   assert.equal(store.gameCommandTarget('p1', command()).error, 'duplicate-command');
   assert.equal(store.gameCommandTarget('p1', command('another')).error, 'game-command-pending');
-  store.finishGameCommand(room.code, 'unrelated');
+  store.finishGameCommand(room.code, 'unrelated', options.gameId);
   assert.equal(store.gameCommandTarget('p1', command('another')).error, 'game-command-pending');
-  store.finishGameCommand(room.code, command().id);
+  store.finishGameCommand(room.code, command().id, options.gameId);
   store.disconnect('p1');
   store.resume('phone-new', { v, code: room.code, token: seats[0].token, role: 'player' });
   assert.equal(store.gameCommandTarget('p1', command('another')).error, 'not-game-leader');
@@ -102,10 +102,10 @@ test('bowling serializes a new game and a release in either arrival order', () =
   const roll = { type: 'roll', id: 'roll-1', power: 0.5, spin: 0, aim: 0 };
   assert.equal(store.gameCommandTarget('p1', command()).ok, true);
   assert.equal(store.rollTarget('p1', roll).error, 'game-command-pending');
-  store.finishGameCommand(room.code, command().id);
+  store.finishGameCommand(room.code, command().id, gameId);
   assert.equal(store.rollTarget('p1', roll).ok, true);
   assert.equal(store.gameCommandTarget('p1', command('new-game-2')).error, 'ball-in-play');
-  store.finishRollDelivery(room.code, roll.id);
+  store.finishRollDelivery(room.code, roll.id, gameId);
   assert.equal(store.gameCommandTarget('p1', command('new-game-2')).ok, true);
 });
 

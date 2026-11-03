@@ -41,7 +41,7 @@ import {
   isGameCommand,
   isGameOptions,
   playerCapacity,
-} from '@wee/shared/protocol.js';
+} from '../../shared/protocol.js';
 
 const MAX_CODE_ATTEMPTS = 50;
 
@@ -219,9 +219,9 @@ export class RoomStore {
     return { ok: true, code: room.code, hostSocketId: this.#members.get(room.hostId)?.socketId, event: command };
   }
 
-  finishGameCommand(code, id) {
+  finishGameCommand(code, id, gameId) {
     const room = this.#rooms.get(code);
-    if (room?.pendingGameCommand === id) room.pendingGameCommand = null;
+    if (room && room.gameId === gameId && room.pendingGameCommand === id) room.pendingGameCommand = null;
   }
 
   setGameOptions(socketId, payload) {
@@ -256,6 +256,27 @@ export class RoomStore {
     room.gameId = randomUUID();
     room.deadline = this.#now() + COUNTDOWN_SECONDS * 1000;
     return { ok: true, code: room.code, msLeft: COUNTDOWN_SECONDS * 1000 };
+  }
+
+  /** End only the caller's current match. Returning never releases a seat or controller setup. */
+  returnToLobby(socketId, payload, role = 'host') {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    const room = member && this.#rooms.get(member.code);
+    if (role === 'host') {
+      if (member?.role !== 'host' || room?.hostId !== member.id) return { ok: false, error: ERRORS.NOT_HOST };
+    } else if (role !== 'player' || member?.role !== 'player' || room?.players.get(member.id)?.slot !== 0) {
+      return { ok: false, error: 'not-game-leader' };
+    }
+    // A delayed request from an older game must not cancel its replacement.
+    if (![PHASES.COUNTDOWN, PHASES.TUTORIAL].includes(room.phase) ||
+        typeof payload?.gameId !== 'string' || payload.gameId !== room.gameId) {
+      return { ok: false, error: 'not-playing' };
+    }
+    room.deadline = null;
+    this.#resetReady(room);
+    // Keep genuine reconnect pauses, but a missing setup no longer pauses a lobby.
+    this.#updatePause(room);
+    return { ok: true, code: room.code };
   }
 
   setSetup(socketId, payload) {
@@ -400,9 +421,9 @@ export class RoomStore {
         player: player.slot + 1, gameId: room.gameId } };
   }
 
-  finishRollDelivery(code, id) {
+  finishRollDelivery(code, id, gameId) {
     const room = this.#rooms.get(code);
-    if (room?.pendingRoll === id) room.pendingRoll = null;
+    if (room && room.gameId === gameId && room.pendingRoll === id) room.pendingRoll = null;
   }
 
   /**

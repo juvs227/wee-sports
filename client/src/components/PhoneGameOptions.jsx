@@ -14,6 +14,7 @@ export function PhoneGameOptions({ lobby, slot, disabled }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [confirmRestart, setConfirmRestart] = useState(false);
+  const [confirmReturn, setConfirmReturn] = useState(false);
   const [resultMode, setResultMode] = useState(false);
   const resultShown = useRef(null);
   const [format, setFormat] = useState('full');
@@ -30,8 +31,10 @@ export function PhoneGameOptions({ lobby, slot, disabled }) {
     (tennis && player === 2 ? 'Bot' : `Player ${player}`));
   const resultTitle = winnerNames.length > 1 ? 'A shared victory!' : winnerNames.length ? `${winnerNames[0]} wins!` : 'Game complete';
   const locked = disabled || lobby.paused || !playing || !available || slot !== 0 || busy;
+  const active = playing || lobby.phase === PHASES.COUNTDOWN;
+  const returnLocked = disabled || !active || !lobby.gameId || slot !== 0 || busy;
   useEffect(() => {
-    setMessage(''); setConfirmRestart(false);
+    setMessage(''); setConfirmRestart(false); setConfirmReturn(false);
     setResultMode(false);
     dialog.current?.close();
   }, [lobby.gameId]);
@@ -56,12 +59,23 @@ export function PhoneGameOptions({ lobby, slot, disabled }) {
     pending.current = false; setBusy(false);
     if (currentGame.current !== gameId) return;
     setMessage(result?.ok ? action === 'new-match' ? 'New game ready. Watch the TV.' : 'Updated.' : errorText(result?.error));
-    if (result?.ok) setConfirmRestart(false);
+    if (result?.ok) { setConfirmRestart(false); setConfirmReturn(false); }
+  }
+  async function returnToLobby() {
+    if (returnLocked || pending.current) return;
+    if (!confirmReturn) { setConfirmReturn(true); setMessage(''); return; }
+    const gameId = lobby.gameId;
+    pending.current = true; setBusy(true); setMessage('');
+    const result = await request(EVENTS.PLAYER_RETURN_TO_LOBBY, { gameId });
+    pending.current = false; setBusy(false);
+    if (currentGame.current !== gameId) return;
+    if (result?.ok) { setConfirmReturn(false); dialog.current?.close(); }
+    else setMessage(errorText(result?.error));
   }
   const configure = (name, value) => command('configure', { settings: { [name]: value } });
   return <>
     <button type="button" className="phone-options-toggle" aria-label="Game options" aria-haspopup="dialog"
-      onClick={() => { setMessage(''); setConfirmRestart(false); setResultMode(completed); dialog.current?.showModal(); }}>
+      onClick={() => { setMessage(''); setConfirmRestart(false); setConfirmReturn(false); setResultMode(completed); dialog.current?.showModal(); }}>
       <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
         <path d="M4 7h16M4 17h16" /><circle cx="9" cy="7" r="3" fill="var(--surface)" /><circle cx="15" cy="17" r="3" fill="var(--surface)" />
       </svg>
@@ -119,6 +133,14 @@ export function PhoneGameOptions({ lobby, slot, disabled }) {
         <p className="phone-options-message" role="status">{busy ? 'Updating the game…' : message}</p>
         <button type="button" className="btn btn--primary phone-options-done" onClick={() => dialog.current?.close()}>Back to play</button>
         </>}
+        {slot === 0 && active ? <section className="phone-options-section phone-options-return" aria-label="Return to lobby">
+          <button type="button" className="btn btn--secondary" disabled={returnLocked}
+            aria-describedby={confirmReturn ? 'phone-return-explanation' : undefined} onClick={returnToLobby}>
+            {confirmReturn ? busy ? 'Returning…' : 'End match and return' : 'Return to lobby'}
+          </button>
+          {confirmReturn ? <><p id="phone-return-explanation">This ends the current match and clears its score for everyone. Your players and controller setup stay in the lobby.</p>
+            <button type="button" className="btn btn--ghost" disabled={busy} onClick={() => setConfirmReturn(false)}>Keep playing</button></> : null}
+        </section> : null}
       </div>
     </dialog>
   </>;

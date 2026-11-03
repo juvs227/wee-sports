@@ -139,9 +139,9 @@ test('bowling stamps authenticated seat and game, locks pending delivery and rej
   assert.equal(delivered.hostSocketId, 'tv');
   assert.deepEqual(delivered.event, { ...roll('own-seat'), player: 4, gameId });
   assert.equal(store.rollTarget('p4', roll('next')).error, 'not-ready-to-roll');
-  store.finishRollDelivery(room.code, 'unrelated-id');
+  store.finishRollDelivery(room.code, 'unrelated-id', gameId);
   assert.equal(store.rollTarget('p4', roll('next')).error, 'not-ready-to-roll');
-  store.finishRollDelivery(room.code, 'own-seat');
+  store.finishRollDelivery(room.code, 'own-seat', gameId);
   assert.equal(store.rollTarget('p4', roll('own-seat')).error, 'duplicate-roll');
   store.setGameState('tv', { gameId, phase: 'rolling', currentPlayer: 4, frame: 1 });
   assert.equal(store.rollTarget('p4', roll('next')).error, 'not-ready-to-roll');

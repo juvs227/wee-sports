@@ -982,6 +982,8 @@
 .phone-options-section p { margin-bottom: 14px; font-size: .85rem; }
 .phone-options-section .btn { min-height: 44px; padding: 10px 14px; font-size: .85rem; }
 .phone-options-confirm { display: flex; flex-wrap: wrap; gap: 8px; }
+.phone-options-return { padding-top: 16px; }
+.phone-options-return p { margin: 12px 0; line-height: 1.5; }
 .phone-options-message { font-size: .85rem; color: var(--accent-ink); margin: 12px 0; min-height: 1.5em; }
 .phone-options-done { width: 100%; }
 .phone-game-options--result { border-color: var(--accent-ink); }

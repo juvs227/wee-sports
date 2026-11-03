@@ -99,3 +99,55 @@ test('a failed replay keeps the result available and shows a useful error', asyn
   expect(f.text()).toContain('Waiting for the TV game. Try again in a moment.');
   expect(f.button('Play again').props.disabled).toBe(false);
 });
+
+test('P1 confirms a return without requiring game options or every participant to reconnect', async () => {
+  const lobby = tennis(); lobby.paused = true; lobby.gameOptions = null;
+  const f = mount(lobby);
+  expect(f.button('Return to lobby').props.disabled).toBe(false);
+  await f.button('Return to lobby').props.onClick(); f.render();
+  expect(h.request).not.toHaveBeenCalled();
+  expect(f.text()).toContain('controller setup stay in the lobby');
+  f.button('Keep playing').props.onClick(); f.render();
+  expect(f.button('End match and return')).toBeUndefined();
+  await f.button('Return to lobby').props.onClick(); f.render();
+  await f.button('End match and return').props.onClick(); f.render();
+  expect(h.request).toHaveBeenCalledExactlyOnceWith(EVENTS.PLAYER_RETURN_TO_LOBBY, { gameId: 'game-1' });
+  expect(f.dialog.close).toHaveBeenCalled();
+});
+
+test('return is available in the winner prompt and countdown, but never to another seat or offline phone', () => {
+  const lobby = tennis(); lobby.gameState = { phase: 'complete', server: 1, winner: 1 };
+  const f = mount(lobby);
+  expect(f.button('Return to lobby')).toBeDefined();
+  f.render({ disabled: true });
+  expect(f.button('Return to lobby').props.disabled).toBe(true);
+  f.render({ disabled: false, slot: 1 });
+  expect(f.button('Return to lobby')).toBeUndefined();
+  f.render({ slot: 0, lobby: { ...tennis(), phase: PHASES.COUNTDOWN } }); f.render();
+  expect(f.button('Return to lobby').props.disabled).toBe(false);
+});
+
+test('return requests are coalesced, and a stale reply cannot alter the next match dialog', async () => {
+  const f = mount();
+  await f.button('Return to lobby').props.onClick(); f.render();
+  let finish;
+  h.request.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  const action = f.button('End match and return').props.onClick;
+  const first = action(); action();
+  expect(h.request).toHaveBeenCalledTimes(1);
+  f.render({ lobby: { ...tennis(), gameId: 'game-2' } }); f.render();
+  f.dialog.close.mockClear();
+  finish({ ok: false, error: 'timeout' }); await first; f.render();
+  expect(f.dialog.close).not.toHaveBeenCalled();
+  expect(f.text()).not.toContain("Couldn't reach the game server.");
+  expect(f.button('End match and return')).toBeUndefined();
+});
+
+test('a failed return retains its confirmation and tells the player why', async () => {
+  const f = mount();
+  await f.button('Return to lobby').props.onClick(); f.render();
+  h.request.mockResolvedValue({ ok: false, error: 'disconnected' });
+  await f.button('End match and return').props.onClick(); f.render();
+  expect(f.text()).toContain('Reconnecting… Keep this page open.');
+  expect(f.button('End match and return').props.disabled).toBe(false);
+});

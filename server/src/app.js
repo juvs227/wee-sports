@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { Server } from 'socket.io';
-import { ERRORS, EVENTS } from '@wee/shared/protocol.js';
+import { ERRORS, EVENTS } from '../../shared/protocol.js';
 import { RoomStore } from './RoomStore.js';
 
 /** Importable server for tests. index.js owns the listening port. */
@@ -61,6 +61,13 @@ export function createGameServer({ store = new RoomStore(), origins = [], tickMs
       reply(ack, result);
       if (result.ok) broadcast(result.code);
     });
+    for (const [event, role] of [[EVENTS.HOST_RETURN_TO_LOBBY, 'host'], [EVENTS.PLAYER_RETURN_TO_LOBBY, 'player']]) {
+      socket.on(event, (payload, ack) => {
+        const result = store.returnToLobby(socket.id, payload, role);
+        reply(ack, result);
+        if (result.ok) broadcast(result.code);
+      });
+    }
     socket.on(EVENTS.SOUND_SET, (payload, ack) => {
       const result = store.setSound(socket.id, payload);
       reply(ack, result);
@@ -76,12 +83,13 @@ export function createGameServer({ store = new RoomStore(), origins = [], tickMs
       if (!result.ok) return reply(ack, result);
       const host = io.sockets.sockets.get(result.hostSocketId);
       if (!host?.connected) {
-        store.finishGameCommand(result.code, result.event.id);
+        store.finishGameCommand(result.code, result.event.id, result.event.gameId);
         return reply(ack, { ok: false, error: 'disconnected' });
       }
       // The phone waits for the game to apply the change, not just relay delivery.
       host.timeout(2500).emit(EVENTS.GAME_COMMAND, result.event, (error, received) => {
-        store.finishGameCommand(result.code, result.event.id);
+        store.finishGameCommand(result.code, result.event.id, result.event.gameId);
+        if (store.lobby(result.code)?.gameId !== result.event.gameId) return reply(ack, { ok: false, error: 'not-playing' });
         reply(ack, !error && received?.ok === true ? { ok: true, id: result.event.id }
           : { ok: false, error: !error && typeof received?.error === 'string' && received.error.length <= 160
             ? received.error : 'game-loading' });
@@ -106,12 +114,13 @@ export function createGameServer({ store = new RoomStore(), origins = [], tickMs
       if (!result.ok) return reply(ack, result);
       const host = io.sockets.sockets.get(result.hostSocketId);
       if (!host) {
-        store.finishRollDelivery(result.code, result.event.id);
+        store.finishRollDelivery(result.code, result.event.id, result.event.gameId);
         return reply(ack, { ok: false, error: 'disconnected' });
       }
       // Acknowledge the actual game result; never buffer or retry a release.
       host.timeout(2500).emit(EVENTS.GAME_ROLL, result.event, (error, received) => {
-        store.finishRollDelivery(result.code, result.event.id);
+        store.finishRollDelivery(result.code, result.event.id, result.event.gameId);
+        if (store.lobby(result.code)?.gameId !== result.event.gameId) return reply(ack, { ok: false, error: 'not-playing' });
         reply(ack, !error && received?.ok ? { ok: true, id: result.event.id, receivers: 1 }
           : { ok: false, error: received?.error || 'game-loading' });
       });

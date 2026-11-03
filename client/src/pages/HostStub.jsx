@@ -30,6 +30,10 @@ export default function HostStub() {
   const audio = useTvAudio(lobby, reconnecting || Boolean(ended));
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState(null);
+  const [returning, setReturning] = useState(false);
+  const returnPending = useRef(false);
+  const currentGame = useRef(lobby?.gameId);
+  currentGame.current = lobby?.gameId;
 
   const [immersive, setImmersive] = useState(true);
   const [fullscreen, setFullscreen] = useState(false);
@@ -92,6 +96,17 @@ export default function HostStub() {
     if (!result.ok) { setStartError(result.error); leaveGameView(); }
   }
 
+  async function returnToLobby() {
+    if (reconnecting || !lobby?.gameId || returnPending.current) return;
+    const gameId = lobby.gameId;
+    returnPending.current = true; setReturning(true); setStartError(null);
+    const result = await request(EVENTS.HOST_RETURN_TO_LOBBY, { gameId });
+    returnPending.current = false; setReturning(false);
+    if (currentGame.current !== gameId) return;
+    if (result?.ok) leaveGameView();
+    else setStartError(result?.error ?? 'disconnected');
+  }
+
   if (ended || (!lobby && !reconnecting)) {
     return (
       <main className="stub host-lobby">
@@ -112,6 +127,7 @@ export default function HostStub() {
   // Keep the game mounted through a temporary drop, so its local state survives.
   if (lobby?.phase === PHASES.TUTORIAL) return <TvTutorial lobby={lobby}
     onAudio={audio.onAudio}
+    onReturnToLobby={returnToLobby} returning={returning} returnDisabled={reconnecting}
     immersive={immersive} fullscreen={fullscreen} onToggleView={immersive ? leaveGameView : enterGameView}
     paused={reconnecting || lobby.paused} error={startError ? errorText(startError) : null} onClose={async () => {
       if (await leave()) navigate('/');
