@@ -42,52 +42,63 @@ node --version
 npm --version
 ```
 
-### 2. Install Cloudflare (optional)
+### 2. Install the phone tunnel client once
 
-Cloudflare is only needed for deployment or an alternative tunnel. Follow the
-[official Cloudflare guide](https://developers.cloudflare.com/tunnel/downloads/).
+Phone motion needs HTTPS, including when the phone and laptop share Wi-Fi.
+The development launcher creates a temporary HTTPS connection automatically
+using Cloudflare Quick Tunnels. No account or domain is required.
 
-### 3. Installing dependencies
-Open a terminal in the project folder, run
+On macOS:
+
+```bash
+brew install cloudflared
+```
+
+For Windows or Linux, use the
+[official cloudflared downloads](https://developers.cloudflare.com/tunnel/downloads/).
+
+### 3. Install dependencies
+
+From the project folder:
+
 ```bash
 npm ci
 ```
-to install dependencies from ``package-lock.json``
 
-### 4. Install and use ngrok
-
-ngrok is optional for local play. You need it to connect your phone when it is
-not on the same local network as your computer.
-
-Install ngrok from the [official ngrok website](https://ngrok.com/download),
-then authenticate it with your ngrok token:
-
-```bash
-ngrok config add-authtoken YOUR_AUTH_TOKEN
-```
-
-After starting the game in Part 5, open a second terminal and run:
-
-```bash
-ngrok http 5173
-```
-
-Open the generated HTTPS URL on your phone. Do not share or commit your auth
-token.
-
-### 5. Running the game
+### 4. Run the game and phone connection
 
 ```bash
 npm run dev
 ```
 
-For local play, open the link printed in the terminal, usually
-`http://localhost:5173`.
-An actual link printed in the terminal like ``https://rarity-underfoot-finale.ngrok-free.dev/`` also works (but requires ngrok configuration).
+This builds the app, starts the server and secure tunnel, and checks that the
+phone link is reachable. Open `http://localhost:5173` on the TV/laptop, choose a
+sport, and scan the lobby QR with your phone. The QR uses the HTTPS address
+automatically. There is no separate ngrok command or URL to configure.
+`npm run dev:phone` is an alias for the same launcher.
 
-That is all the setup required to run the system. Cloudflare and ngrok are not
-needed for local play (with keyboard control); ngrok is only needed for phone access outside your local
-network.
+Keep the terminal open while playing. Press Ctrl+C to stop the server and
+tunnel together. The temporary public link changes on restart, so scan the new
+QR each session. Anyone with the link can reach the app while it is running.
+Re-run `npm run dev` after source changes to rebuild the phone-play session.
+
+### Local editing or an existing tunnel
+
+For local editing with Vite or keyboard-only testing:
+
+```bash
+npm run dev:local
+```
+
+This starts the local server without a tunnel. Plain HTTP on a LAN cannot
+provide phone motion access. To use an existing HTTPS tunnel such as ngrok,
+start that tunnel for port 5173 and pass its origin when starting the server:
+
+```bash
+PUBLIC_GAME_URL="https://your-tunnel-domain" npm run dev:local
+```
+
+The TV can stay on `http://localhost:5173`; its QR will use that secure origin.
 
 ## Operational Use Case
 
