@@ -1,10 +1,10 @@
 import {expect, test} from 'vitest';
 import * as THREE from 'three';
-import {createBall, hitBall, updateBallMotion, BALL_RADIUS, type BallUserData} from '../src/World/components/ball';
-import {insideCourt, insideServiceBox, netHeightAt, TENNIS_COURT} from '../src/World/tennisRules';
-import {planCourtShot} from '../src/World/shotTrajectory';
-import {ScoreSystem} from '../src/World/scoreSystem';
-import {predictBaselineIntercept} from '../src/World/autoPosition';
+import {createBall, hitBall, updateBallMotion, BALL_RADIUS, type BallUserData} from '../src/Tennis/components/ball';
+import {insideCourt, insideServiceBox, netHeightAt, TENNIS_COURT} from '../src/Tennis/tennisRules';
+import {planCourtShot} from '../src/Tennis/shotTrajectory';
+import {ScoreSystem} from '../src/Tennis/scoreSystem';
+import {predictBaselineIntercept} from '../src/Tennis/autoPosition';
 
 const dispose = (ball: THREE.Mesh): void => {ball.geometry.dispose(); (ball.material as THREE.Material).dispose();};
 function droppingServe(attempt: 1 | 2 = 1) {

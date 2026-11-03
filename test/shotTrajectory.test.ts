@@ -1,8 +1,8 @@
 import { test, vi } from 'vitest';
 import { strict as assert } from 'node:assert';
 import * as THREE from 'three';
-import { planCourtShot, MIN_NET_HEIGHT } from '../src/World/shotTrajectory.ts';
-import { createBall, hitBall, updateBallMotion, type BallUserData } from '../src/World/components/ball.ts';
+import { planCourtShot, MIN_NET_HEIGHT } from '../src/Tennis/shotTrajectory.ts';
+import { createBall, hitBall, updateBallMotion, type BallUserData } from '../src/Tennis/components/ball.ts';
 
 for (const player of [1, 2] as const) {
     test(`player ${player} shots land in the opponent court and clear the net across contact positions`, () => {

@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import { strict as assert } from 'node:assert';
 import * as THREE from 'three';
-import { forehandDrop, worldOffsetToLocal } from '../src/World/components/forehandPose.ts';
+import { forehandDrop, worldOffsetToLocal } from '../src/Tennis/components/forehandPose.ts';
 
 test('forehand lowers smoothly by 0.22 units at midstroke and restores endpoints', () => {
     assert.equal(forehandDrop(0, false), 0);

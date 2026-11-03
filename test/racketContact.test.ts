@@ -3,8 +3,8 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { contactWindowCrossed, sweptRacketContact, RacketHitbox } from '../src/World/components/racketContact.ts';
-import { createBall, hitBall, serveBall, updateBallMotion, type BallUserData } from '../src/World/components/ball.ts';
+import { contactWindowCrossed, sweptRacketContact, RacketHitbox } from '../src/Tennis/components/racketContact.ts';
+import { createBall, hitBall, serveBall, updateBallMotion, type BallUserData } from '../src/Tennis/components/ball.ts';
 
 const box = new THREE.Box3(new THREE.Vector3(-0.4, -0.3, -0.04), new THREE.Vector3(0.4, 0.3, 0.04));
 const identity = new THREE.Matrix4();

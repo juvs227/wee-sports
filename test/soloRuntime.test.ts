@@ -2,10 +2,10 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { createPlayer } from '../src/World/components/player';
-import { createBall } from '../src/World/components/ball';
-import { GameLogic } from '../src/World/gameLogic';
-import { TENNIS_COURT } from '../src/World/tennisRules';
+import { createPlayer } from '../src/Tennis/components/player';
+import { createBall } from '../src/Tennis/components/ball';
+import { GameLogic } from '../src/Tennis/gameLogic';
+import { TENNIS_COURT } from '../src/Tennis/tennisRules';
 
 afterEach(() => vi.restoreAllMocks());
 

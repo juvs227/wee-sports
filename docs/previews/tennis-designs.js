@@ -1,8 +1,8 @@
 // Isolated visual concepts only: no live game logic, input, networking or mutations.
 import * as THREE from 'three';
-import {createCourt} from '../../src/World/components/court';
-import {createNet} from '../../src/World/components/net';
-import {createPlayer} from '../../src/World/components/player';
+import {createCourt} from '../../src/Tennis/components/court';
+import {createNet} from '../../src/Tennis/components/net';
+import {createPlayer} from '../../src/Tennis/components/player';
 
 const palettes = {
   park: {sky: 0xc4d9d3, court: 0x357953, ground: 0x8caa72, edge: 0x315b41, light: 2.3},

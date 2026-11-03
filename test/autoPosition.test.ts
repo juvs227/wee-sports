@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import { strict as assert } from 'node:assert';
-import { predictBaselineIntercept, lateralSteering } from '../src/World/autoPosition.ts';
-import { createBall, hitBall, updateBallMotion } from '../src/World/components/ball.ts';
+import { predictBaselineIntercept, lateralSteering } from '../src/Tennis/autoPosition.ts';
+import { createBall, hitBall, updateBallMotion } from '../src/Tennis/components/ball.ts';
 import * as THREE from 'three';
 
 test('predicts an approaching ball at either baseline instead of chasing current X', () => {

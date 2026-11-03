@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { ScoreSystem } from '../src/World/scoreSystem';
+import { ScoreSystem } from '../src/Tennis/scoreSystem';
 
 // Theme behavior is covered independently; these fixtures model game/relay APIs.
 vi.mock('../src/theme.js', () => ({}));
@@ -7,7 +7,7 @@ vi.mock('../src/theme.js', () => ({}));
 const runtime = vi.hoisted(() => ({ world: null, close: vi.fn(),
   sound: { mountButton: vi.fn(), play: vi.fn(), setActive: vi.fn(), dispose: vi.fn() } }));
 vi.mock('../src/audio/sportsAudio', () => ({ createSportsAudio: () => runtime.sound }));
-vi.mock('../src/World/World', () => ({ World: class {
+vi.mock('../src/Tennis/World', () => ({ World: class {
   constructor() {
     this.start = vi.fn(); this.stop = vi.fn(); this.dispose = vi.fn(); this.swing = vi.fn();
     this.setPlayerInput = vi.fn();

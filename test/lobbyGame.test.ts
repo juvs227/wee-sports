@@ -2,13 +2,13 @@ import { test, expect, vi, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { createPlayer } from '../src/World/components/player';
-import { createBall, type BallUserData } from '../src/World/components/ball';
-import { GameLogic, type TennisGameEvent, type StrokeResult } from '../src/World/gameLogic';
-import { chooseBotStroke, type BotStroke } from '../src/World/botPlayer';
-import { ScoreSystem } from '../src/World/scoreSystem';
-import { predictBaselineIntercept } from '../src/World/autoPosition';
-import { TENNIS_COURT } from '../src/World/tennisRules';
+import { createPlayer } from '../src/Tennis/components/player';
+import { createBall, type BallUserData } from '../src/Tennis/components/ball';
+import { GameLogic, type TennisGameEvent, type StrokeResult } from '../src/Tennis/gameLogic';
+import { chooseBotStroke, type BotStroke } from '../src/Tennis/botPlayer';
+import { ScoreSystem } from '../src/Tennis/scoreSystem';
+import { predictBaselineIntercept } from '../src/Tennis/autoPosition';
+import { TENNIS_COURT } from '../src/Tennis/tennisRules';
 
 // Load the shipped models without a browser or renderer. Animation/contact are real.
 afterEach(() => vi.restoreAllMocks());

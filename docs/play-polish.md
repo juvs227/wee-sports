@@ -7,6 +7,9 @@ hitboxes and gravity remain in place. No changes were merged into `main`.
 
 ### Winner and replay follow-up
 
+- Tennis source now lives in `src/Tennis/` instead of `src/World/`. Imports,
+  test mocks and the design preview references follow the new folder. Existing
+  scene class names and bowling's separate world module remain valid.
 - The tennis camera is lower (8 units high instead of 12, one unit closer), with
   both solo views preserved. Court dimensions and gameplay rules are unchanged.
 - Tennis announces a set winner with the finished set score, then continues the

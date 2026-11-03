@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { ScoreSystem, type PointResult } from '../src/World/scoreSystem';
-import type { BallPlayer } from '../src/World/components/ball';
+import { ScoreSystem, type PointResult } from '../src/Tennis/scoreSystem';
+import type { BallPlayer } from '../src/Tennis/components/ball';
 
 function point(score: ScoreSystem, winner: BallPlayer): PointResult | null {
     return score.awardPoint(winner, winner === 'player1' ? 'player2' : 'player1');

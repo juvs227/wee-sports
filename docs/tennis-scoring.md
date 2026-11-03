@@ -18,7 +18,7 @@ resets the selected format. Selecting the same format does not itself erase a sc
 ## Serving and court rules
 
 The painted court, net profile, shot planner and net collision share dimensions
-in `src/World/tennisRules.ts`. The service lines are 6.4 m from the net; the net's
+in `src/Tennis/tennisRules.ts`. The service lines are 6.4 m from the net; the net's
 center is 0.914 m high and its posts are 1.07 m. The collision uses a swept crossing
 of the net plane, so faster balls cannot skip through a low net collision.
 

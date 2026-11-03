@@ -1,7 +1,7 @@
-import { World, type TennisSettings, type PracticeState } from './World/World';
+import { World, type TennisSettings, type PracticeState } from './Tennis/World';
 import { InputController } from './Controllers/inputController';
-import type { BallUserData } from './World/components/ball';
-import { pointReasonLabel } from './World/tennisRules';
+import type { BallUserData } from './Tennis/components/ball';
+import { pointReasonLabel } from './Tennis/tennisRules';
 import { connectSwings } from './network/swingConnection.js';
 import { createInputId } from './network/inputId.js';
 import { createSportsAudio } from './audio/sportsAudio';
