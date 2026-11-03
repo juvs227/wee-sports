@@ -1,12 +1,10 @@
 {
-  "name": "wee-sports",
+  "name": "threejs-modular-template",
   "private": true,
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node scripts/dev-phone.mjs",
-    "dev:phone": "node scripts/dev-phone.mjs",
-    "dev:local": "node server/main.js",
+    "dev": "node server/main.js",
     "build": "vite build && node scripts/verify-build.mjs",
     "check": "gts check",
     "lint": "gts lint",
@@ -15,40 +13,35 @@
     "fix": "gts fix",
     "prepare": "npm run compile",
     "test:physics": "vitest run test/",
-    "test": "npm run test:game && npm run test:platform",
-    "test:watch": "vitest",
-    "test:game": "vitest run",
-    "test:platform": "npm test -w @wee/server",
-    "stress": "node server/scripts/stress.js",
-    "start": "node server/main.js",
-    "preview": "node server/main.js --preview",
-    "dev:game": "node server/main.js",
-    "build:game": "vite build && node scripts/verify-build.mjs",
-    "test:all": "npm test"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
-    "@types/node": "^22.7.5",
-    "@types/three": "^0.186.0",
-    "@vitejs/plugin-react": "^4.3.1",
+    "@types/node": "^26.6.6",
+    "@types/three": "^0.187.0",
+    "@vitejs/plugin-react": "^6.2.1",
     "gts": "^7.0.0",
-    "typescript": "^5.6.3",
-    "vite": "^6.4.5",
-    "vitest": "^4.1.12"
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.14.0",
+    "vite": "^8.3.5",
+    "vitest": "^5.1.0"
   },
   "dependencies": {
     "cannon-es": "0.20.0",
     "qrcode-generator": "^2.0.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.28.0",
+    "react-router-dom": "^7.18.5",
     "socket.io": "^4.8.4",
     "socket.io-client": "^4.8.4",
-    "three": "^0.186.1",
+    "three": "^0.187.0",
     "ws": "^8.18.0"
   },
-  "workspaces": [
-    "shared",
-    "server",
-    "client"
-  ]
+  "overrides": {
+    "tmp": "^0.2.3",
+    "minimatch": "^11.0.1",
+    "cross-spawn": "^7.0.6",
+    "rimraf": "^5.0.0",
+    "@humanwhocodes/config-array": "npm:@eslint/config-array@^0.18.0"
+  }
 }
