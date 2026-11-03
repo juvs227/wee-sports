@@ -70,3 +70,30 @@ test('hitbox fits the bundled racket asset without browser or mesh-triangle coll
     assert.equal(sweptRacketContact(hitbox.bounds, hitbox.pose(), hitbox.pose(), center, center, 0.1), true);
     hitbox.dispose();
 });
+
+test('second bounce ends a valid point immediately and cannot award it again', () => {
+    const ball = createBall(0, .4, -5);
+    hitBall(ball, new THREE.Vector3(0, .04, -.03), 'player1');
+    const data = ball.userData as BallUserData;
+    const winners: string[] = [];
+    let firstBounceSeen = false;
+    for (let step = 0; step < 600; step++) {
+        updateBallMotion(ball, 1 / 120, winner => winners.push(winner));
+        firstBounceSeen ||= data.bounceCount === 1 && data.firstBounceInBounds;
+    }
+    assert.equal(firstBounceSeen, true);
+    assert.deepEqual(winners, ['player1']);
+    assert.equal(data.isWaitingForServe, true);
+    assert.equal(data.waitingForRacketHit, false);
+});
+
+test('a first bounce out of court or on the hitter side awards the opponent', () => {
+    for (const [x, z] of [[5, -5], [0, 5]]) {
+        const ball = createBall(x, .12, z);
+        hitBall(ball, new THREE.Vector3(0, -.1, 0), 'player1');
+        const winners: string[] = [];
+        updateBallMotion(ball, 1 / 120, winner => winners.push(winner));
+        assert.deepEqual(winners, ['player2']);
+        assert.equal((ball.userData as BallUserData).isWaitingForServe, true);
+    }
+});

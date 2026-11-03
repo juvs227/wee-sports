@@ -8,6 +8,10 @@ export interface ShotPlan {
 }
 
 const RADIUS = 0.1;
+const LATE_CONTACT_HEIGHT = 0.5;
+const EARLY_CONTACT_HEIGHT = 1.5;
+const FOREHAND_LEFT_CHANCE = 0.7;
+const BACKHAND_RIGHT_CHANCE = 0.7;
 // Current visible net top is 0.55. Include ball radius and extra forgiveness.
 export const MIN_NET_HEIGHT = 0.9;
 
@@ -41,7 +45,24 @@ export function planCourtShot(origin: THREE.Vector3, player: 1 | 2, backhand: bo
     if (![origin.x, origin.y, origin.z, gravity].every(Number.isFinite) || gravity <= 0 ||
         origin.y < RADIUS || (player === 1 ? origin.z <= 0 : origin.z >= 0)) return null;
     const direction = player === 1 ? -1 : 1;
-    const x = THREE.MathUtils.clamp(-origin.x * 0.3 + (backhand ? -0.8 : 0.8), -2.8, 2.8);
+    // Higher contact represents an early swing and creates a sharper
+    // cross-court angle. Lower contact represents a late swing and favors a
+    // straighter shot by reducing the stroke-side bias.
+    const timing = THREE.MathUtils.clamp(
+        (origin.y - LATE_CONTACT_HEIGHT) /
+        (EARLY_CONTACT_HEIGHT - LATE_CONTACT_HEIGHT),
+        0,
+        1,
+    );
+    const strokeBias = THREE.MathUtils.lerp(0.45, 2.1, timing);
+    const leftChance = backhand ? 1 - BACKHAND_RIGHT_CHANCE : FOREHAND_LEFT_CHANCE;
+    const randomSide = Math.random() < leftChance ? -1 : 1;
+    const randomMagnitude = strokeBias * THREE.MathUtils.lerp(0.75, 1.45, Math.random());
+    const x = THREE.MathUtils.clamp(
+        -origin.x * 0.4 + randomSide * randomMagnitude,
+        -3,
+        3,
+    );
     const targets = [new THREE.Vector3(x, RADIUS, direction * 8.5),
         new THREE.Vector3(0, RADIUS, direction * 7)];
     for (const target of targets) {

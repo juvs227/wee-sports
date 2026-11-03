@@ -17,6 +17,8 @@ export interface PlayerController {
     hitConsumed: boolean;
     swingBackhand: boolean;
     strikeOffsets: Record<string, THREE.Vector3>;
+    swingPoses: Record<string, THREE.Matrix4[]>;
+    movementSpeed: number;
 
     playAnimation: (name: string) => void;
     stopAnimation: () => void;
@@ -82,6 +84,8 @@ export function createPlayer(
         hitConsumed: false,
         swingBackhand: false,
         strikeOffsets: {},
+        swingPoses: {},
+        movementSpeed: speed,
 
         playAnimation(name: string): void {
             const next = this.actions[name];
@@ -137,7 +141,8 @@ export function createPlayer(
             const action = this.currentAnimation ? this.actions[this.currentAnimation] : undefined;
             const duration = action?.getClip().duration ?? 0;
             this.contactActive = this.isSwinging && !this.hitConsumed && !!action && duration > 0 &&
-                contactWindowCrossed(action.time / duration, (action.time + delta) / duration);
+                contactWindowCrossed(action.time / duration, (action.time + delta) / duration,
+                    this.swingBackhand);
             this.mixer?.update(delta);
             if (this.isSwinging && action && duration > 0 && handBone?.parent) {
                 const drop = forehandDrop(action.time / duration, this.swingBackhand, forehandDropAmount);
@@ -287,6 +292,28 @@ export function createPlayer(
                             controller.strikeOffsets[name] = center.sub(group.getWorldPosition(new THREE.Vector3()));
                             controller.stopAnimation();
                             controller.update(0);
+                        }
+                        // Local racket poses let phone timing assistance test
+                        // the shipped animation without moving the live player.
+                        for (const name of ['SwingLeft', 'SwingRight']) {
+                            const action = controller.actions[name];
+                            if (!action) continue;
+                            for (const backhand of [false, true]) {
+                                const poses: THREE.Matrix4[] = [];
+                                for (let sample = 0; sample <= 20; sample++) {
+                                    controller.swingBackhand = backhand;
+                                    controller.playAnimation(name);
+                                    action.stopFading();
+                                    action.setEffectiveWeight(1);
+                                    action.time = action.getClip().duration * Math.min(sample / 20, .999);
+                                    controller.update(0);
+                                    const pose = controller.hitbox.pose();
+                                    poses.push(group.matrixWorld.clone().invert().multiply(pose));
+                                    controller.stopAnimation();
+                                    controller.update(0);
+                                }
+                                controller.swingPoses[`${name}:${backhand}`] = poses;
+                            }
                         }
                         controller.swingBackhand = false;
                         if (restore) controller.playAnimation(restore);

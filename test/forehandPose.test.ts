@@ -11,8 +11,10 @@ test('forehand lowers smoothly by 0.22 units at midstroke and restores endpoints
     assert.ok(forehandDrop(0.2, false) < forehandDrop(0.5, false));
 });
 
-test('backhands keep their authored height and the drop is tunable', () => {
+test('backhands rise from a lower start to a higher finish', () => {
+    assert.equal(forehandDrop(0, true), 0.22);
     assert.equal(forehandDrop(0.5, true), 0);
+    assert.equal(forehandDrop(1, true), -0.22);
     assert.equal(forehandDrop(0.5, false, 0), 0);
     assert.equal(forehandDrop(0.5, false, 0.3), 0.3);
 });

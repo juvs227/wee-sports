@@ -1,0 +1,42 @@
+/* A small polish pass on the familiar homepage. Keep shared styles and layouts. */
+.home--polished .topbar {
+  border-bottom: 1px solid var(--border);
+}
+
+.home--polished .hero__lede {
+  max-width: 36ch;
+  line-height: 1.6;
+}
+
+.home--polished .join-card {
+  border-color: #cbdfe9;
+  box-shadow: 0 2px 4px rgb(24 39 56 / 0.04), 0 12px 30px rgb(10 100 153 / 0.07);
+}
+
+.home--polished .join-card__title {
+  color: var(--accent-ink);
+}
+
+.home--polished .section-head__sub {
+  max-width: 48ch;
+  line-height: 1.5;
+}
+
+.home--polished .tile__meta {
+  color: #46535d;
+}
+
+.home--polished .how__num {
+  color: #687987;
+  font-size: 1rem;
+}
+
+.home--polished .footer a {
+  text-underline-offset: 0.2em;
+}
+
+@media (max-width: 760px) {
+  .home--polished .hero {
+    padding-top: 1.5rem;
+  }
+}

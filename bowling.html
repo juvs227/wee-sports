@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Wee Sports · Bowling</title></head>
+  <body><main id="bowling-app"><header class="bowling-heading"><div><p class="play-eyebrow">Wee Sports · Bowling</p><h1 id="turn">Preparing the lane…</h1></div><span id="frame-label" class="bowling-pill">10 frames</span></header>
+    <div id="lane" aria-label="Bowling lane"></div>
+    <section class="bowling-status"><p id="roll-status" role="status">One lane. Your moment.</p><p id="pin-status"></p></section>
+    <div class="bowling-scores"><table aria-label="Bowling scorecard"><thead><tr id="score-head"><th scope="col">Player</th></tr></thead><tbody id="score-body"></tbody></table></div>
+    <section id="results" class="bowling-results" hidden><h2>Match complete</h2><ol id="ranking"></ol><button id="replay" type="button">Play again</button></section>
+    <section id="local-controls" hidden><h2>Your delivery</h2><div class="bowling-controls"><label>Aim <input id="aim" type="range" min="-1" max="1" step="0.01" value="0"></label><label>Curve <input id="spin" type="range" min="-1" max="1" step="0.01" value="0"></label><label>Power <input id="power" type="range" min="0" max="1" step="0.01" value="0.65"></label><button id="roll" type="button">Roll ball</button></div></section>
+    <p class="bowling-help" id="help">Aim on your phone and roll when it is your turn. X = strike · / = spare · scores wait for bonus rolls.</p>
+  </main><script type="module" src="/src/bowlingMain.ts"></script></body>
+</html>

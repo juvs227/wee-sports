@@ -4,6 +4,8 @@ export function attachRelay(server) {
   const relay = new WebSocketServer({ noServer: true, maxPayload: 4096 });
   server.on('upgrade', (request, socket, head) => {
     const url = new URL(request.url, 'http://localhost');
+    // The platform's Socket.io server also uses this HTTP server.
+    if (url.pathname.startsWith('/socket.io/')) return;
     if (url.pathname !== '/swings') { socket.destroy(); return; }
     const room = url.searchParams.get('room');
     const role = url.searchParams.get('role');

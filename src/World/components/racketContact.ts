@@ -3,8 +3,10 @@ import * as THREE from 'three';
 export const CONTACT_START = 0.2;
 export const CONTACT_END = 0.7;
 
-export function contactWindowCrossed(from: number, to: number): boolean {
-    return from <= CONTACT_END && to >= CONTACT_START && to >= from;
+export function contactWindowCrossed(from: number, to: number, backhand = false): boolean {
+    const start = backhand ? 0.1 : CONTACT_START;
+    const end = backhand ? 0.8 : CONTACT_END;
+    return from <= end && to >= start && to >= from;
 }
 
 // Sweep the ball relative to the moving racket. Substeps in World limit the
@@ -65,7 +67,7 @@ export class RacketHitbox {
         this.bounds = bounds;
         // Small extra forgiveness in world units, independent of model scale.
         const worldScale = new THREE.Vector3().setFromMatrixScale(racket.matrixWorld);
-        this.padding.set(0.08 / Math.abs(worldScale.x), 0.08 / Math.abs(worldScale.y), 0.08 / Math.abs(worldScale.z));
+        this.padding.set(0.16 / Math.abs(worldScale.x), 0.16 / Math.abs(worldScale.y), 0.16 / Math.abs(worldScale.z));
         this.bounds.expandByVector(this.padding);
         this.overlay = new THREE.Mesh(
             new THREE.BoxGeometry(...this.bounds.getSize(new THREE.Vector3()).toArray()),

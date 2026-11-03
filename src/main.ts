@@ -1,89 +1,132 @@
 import { World } from './World/World';
 import { InputController } from './Controllers/inputController';
+import type { BallUserData } from './World/components/ball';
 import { connectSwings } from './network/swingConnection.js';
+import { createInputId } from './network/inputId.js';
+import '../client/src/styles/tokens.css';
+import './play.css';
 
 async function main(): Promise<void> {
     const container = document.querySelector('#scene-container');
-    if (!container) {
-        throw new Error('Could not find scene-container element');
-    }
-
+    if (!container) throw new Error('Could not find scene-container element');
     const world = new World(container as HTMLElement);
-    world.start();
-    new InputController((input) => {
-        world.setPlayerInput(input, 1);
-    });
+    const embedded = window.parent !== window;
+    let lobbyPaused = embedded;
+    let activeGameId: string | null = null;
+    let names = ['Player 1', 'Bot'];
+    if (!embedded) world.start();
+    new InputController(input => world.setPlayerInput(lobbyPaused ? { moveX: 0, moveZ: 0 } : input, 1));
 
     const params = new URLSearchParams(location.search);
-    const room = params.get('room') || crypto.randomUUID().slice(0, 8);
-    if (!/^[a-zA-Z0-9-]{6,40}$/.test(room)) {
-        throw new Error('Room must be 6-40 letters, numbers, or hyphens');
-    }
-
+    const room = params.get('room') || createInputId().slice(0, 8);
+    if (!/^[a-zA-Z0-9-]{6,40}$/.test(room)) throw new Error('Invalid room');
     const url = new URL(location.href);
     url.searchParams.set('room', room);
     history.replaceState(null, '', url);
 
     const panel = document.createElement('aside');
-    panel.style.cssText =
-        'position:fixed;top:16px;left:16px;max-width:340px;' +
-        'background:#182329ee;color:white;padding:18px;border-radius:12px;' +
-        'font:15px system-ui;z-index:1';
-
-    const heading = document.createElement('h2');
-    heading.textContent = 'Phone swing controller';
-    heading.style.margin = '0 0 12px';
-
-    const code = document.createElement('p');
-    code.textContent = `Room: ${room}`;
-
-    const status = document.createElement('p');
-    const result = document.createElement('p');
-    result.textContent = 'J/K: swing · B: practice feed · H: hitboxes';
-    world.onSwingFeedback = message => { result.textContent = message; };
-    const help = document.createElement('p');
-    help.style.fontSize = '12px';
-    help.textContent = 'Disable Auto position for WASD movement · J/K: backhand/forehand · B: forehand feed · Shift+B: backhand feed · N / Shift+N: feed bot · H: hitboxes. Amber: inactive, blue: strike window, green: hit.';
-
-    const link = document.createElement('a');
+    panel.className = 'game-panel';
+    panel.setAttribute('aria-label', 'Tennis scoreboard');
+    panel.innerHTML = `<p class="play-eyebrow" id="match-mode">Tennis · solo</p>
+      <div class="scoreboard">
+        <div class="score-row" data-player="1"><span id="name-1"></span><strong id="points-1">0</strong><small id="games-1">G 0</small></div>
+        <div class="score-row" data-player="2"><span id="name-2"></span><strong id="points-2">0</strong><small id="games-2">G 0</small></div>
+      </div>
+      <p id="serve-status"></p><p id="feedback" role="status">Swing as the ball approaches your side.</p>
+      <details><summary>Court controls</summary><p id="connection"></p>
+      <label><input id="auto" type="checkbox" checked> Automatic movement</label>
+      <label id="bot-label"><input id="bot" type="checkbox" checked> Player 2 bot</label>
+      <p>J/K: swing · B: practice feed · N: feed P2 · H: hitboxes. Turn off automatic movement for WASD.</p>
+      <a id="phone-link">Open phone controller</a></details>`;
+    document.body.append(panel);
+    const serveCountdown = document.createElement('div');
+    serveCountdown.className = 'serve-countdown';
+    serveCountdown.setAttribute('aria-live', 'polite');
+    document.body.append(serveCountdown);
+    const el = (id: string): HTMLElement => document.getElementById(id)!;
+    const auto = el('auto') as HTMLInputElement;
+    const bot = el('bot') as HTMLInputElement;
+    auto.onchange = () => { world.autoPositionEnabled = auto.checked; };
+    bot.onchange = () => { world.botEnabled = bot.checked; };
+    el('bot-label').hidden = embedded;
+    const link = el('phone-link') as HTMLAnchorElement;
     const controllerUrl = new URL('/controller.html', __PUBLIC_ORIGIN__ || location.origin);
     controllerUrl.searchParams.set('room', room);
     link.href = controllerUrl.href;
-    link.textContent = 'Open phone controller';
-    link.style.color = '#86efac';
-
-    const autoLabel = document.createElement('label');
-    autoLabel.style.cssText = 'display:block;margin:12px 0';
-    const autoToggle = document.createElement('input');
-    autoToggle.type = 'checkbox';
-    autoToggle.checked = world.autoPositionEnabled;
-    autoToggle.addEventListener('change', () => { world.autoPositionEnabled = autoToggle.checked; });
-    autoLabel.append(autoToggle, ' Auto position · both players');
-    const botLabel = document.createElement('label');
-    botLabel.style.cssText = 'display:block;margin:12px 0';
-    const botToggle = document.createElement('input');
-    botToggle.type = 'checkbox';
-    botToggle.checked = world.botEnabled;
-    botToggle.addEventListener('change', () => { world.botEnabled = botToggle.checked; });
-    botLabel.append(botToggle, ' Player 2 bot');
-    panel.append(heading, code, status, result, autoLabel, botLabel, link, help);
-    document.body.append(panel);
-
-    const connection = connectSwings({
-        room,
-        role: 'game',
-        onStatus: (text) => {
-            status.textContent = text;
-        },
-        onSwing: (event) => {
-            world.swing(event);
-
-        },
+    link.hidden = embedded;
+    world.onSwingFeedback = message => { el('feedback').textContent = message; };
+    world.onBallHit = player => {
+        if (embedded && activeGameId && !lobbyPaused) {
+            window.parent.postMessage({ type: 'wee:game-hit', player, gameId: activeGameId }, location.origin);
+        }
+    };
+    const updateScore = (): void => {
+        const score = world.getScore();
+        el('name-1').textContent = `P1 · ${names[0]}`;
+        el('name-2').textContent = `P2 · ${names[1]}`;
+        el('points-1').textContent = String(score.player1);
+        el('points-2').textContent = String(score.player2);
+        el('games-1').textContent = `G ${score.roundsPlayer1}`;
+        el('games-2').textContent = `G ${score.roundsPlayer2}`;
+        const ballData = world.ball.userData as BallUserData;
+        const servingPlayer = ballData.servingPlayer === 'player1' ? 'P1' : 'P2';
+        const serveStatus = el('serve-status');
+        const statusClass = lobbyPaused ? 'paused' :
+            ballData.isWaitingForServe
+                ? servingPlayer === 'P1' ? 'serving-p1' : 'serving-p2'
+                : 'rally';
+        serveStatus.className = statusClass;
+        serveStatus.textContent = lobbyPaused || !ballData.isWaitingForServe
+            ? '' : `${servingPlayer} serving`;
+        const countdown = ballData.isWaitingForServe
+            ? Math.ceil(ballData.serveDelayRemaining) : 0;
+        serveCountdown.textContent = countdown > 0 ? String(countdown) : '';
+        serveCountdown.classList?.toggle('visible', countdown > 0 && !lobbyPaused);
+        serveCountdown.classList?.toggle('player-1', servingPlayer === 'P1' && world.isSplitScreen);
+        serveCountdown.classList?.toggle('player-2', servingPlayer === 'P2' && world.isSplitScreen);
+    };
+    const receiveState = (event: MessageEvent): void => {
+        if (event.source !== window.parent || event.origin !== location.origin ||
+            event.data?.type !== 'wee:lobby-state' || typeof event.data.paused !== 'boolean') return;
+        const players = Array.isArray(event.data.players) ? event.data.players : [];
+        const p1 = players.find((player: {slot: number}) => player.slot === 0);
+        const p2 = players.find((player: {slot: number}) => player.slot === 1);
+        activeGameId = typeof event.data.gameId === 'string' ? event.data.gameId : null;
+        names = [p1?.name ?? 'Player 1', p2?.name ?? 'Bot'];
+        world.botEnabled = !p2;
+        // world.setSplitScreen?.(Boolean(p2));
+        world.setSplitScreen?.(true); // for testing only
+        el('match-mode').textContent = p2 ? 'Tennis · head to head' : 'Tennis · solo';
+        lobbyPaused = event.data.paused || !event.data.connected;
+        if (lobbyPaused) {
+            world.setPlayerInput({ moveX: 0, moveZ: 0 }, 1);
+            world.setPlayerInput({ moveX: 0, moveZ: 0 }, 2);
+            world.stop();
+        } else world.start();
+        updateScore();
+    };
+    window.addEventListener('message', receiveState);
+    updateScore();
+    const scoreTimer = window.setInterval(updateScore, 250);
+    const connection = connectSwings({ room, role: 'game',
+        onStatus: text => { el('connection').textContent = text; },
+        onSwing: event => { if (!lobbyPaused) world.swing(event); },
     });
-
-    window.addEventListener('pagehide', () => connection.close(), { once: true });
+    window.addEventListener('pagehide', event => {
+        if (event.persisted) { world.stop(); return; }
+        window.clearInterval(scoreTimer);
+        window.removeEventListener('message', receiveState);
+        connection.close();
+        world.dispose();
+    });
+    window.addEventListener('pageshow', event => {
+        if (!event.persisted) return;
+        if (embedded) {
+            // Restoring from browser history does not reload the iframe. Ask
+            // the parent for current pause/connection state before resuming.
+            window.parent.postMessage({ type: 'wee:bridge-ready' }, location.origin);
+        } else world.start();
+    });
 }
 
-main().catch((err: unknown) => {
-    console.error(err);
-});
+main().catch((error: unknown) => { console.error(error); });

@@ -2,10 +2,11 @@ import * as THREE from 'three';
 
 export const DEFAULT_FOREHAND_DROP = 0.22;
 
-// Ease the hand/racket lower during the stroke, returning to the authored pose
-// at either end. Backhands retain their original animation.
+// Forehands dip during the stroke. Backhands start below the authored pose and
+// rise above it through the finish.
 export function forehandDrop(progress: number, backhand: boolean, amount = DEFAULT_FOREHAND_DROP): number {
-    if (backhand || progress <= 0 || progress >= 1) return 0;
+    if (backhand) return THREE.MathUtils.lerp(amount, -amount, THREE.MathUtils.clamp(progress, 0, 1));
+    if (progress <= 0 || progress >= 1) return 0;
     return Math.sin(progress * Math.PI) * amount;
 }
 
