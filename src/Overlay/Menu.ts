@@ -62,7 +62,8 @@ export class Menu {
     }
 
     private readonly handleKeyDown = (event: KeyboardEvent): void => {
-        if (event.key === 'Escape') this.toggle();
+        // TODO: weird behavior when embedded, keydown not captured unless clicked first.
+        if (event.key === 'p') this.toggle();
     };
 
     private readonly handleResume = (): void => {
