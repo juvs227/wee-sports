@@ -14,6 +14,8 @@ export function PhoneGameOptions({ lobby, slot, disabled }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [confirmRestart, setConfirmRestart] = useState(false);
+  const [resultMode, setResultMode] = useState(false);
+  const resultShown = useRef(null);
   const [format, setFormat] = useState('full');
   const [stroke, setStroke] = useState('alternate');
   const [hand, setHand] = useState('Right');
@@ -22,11 +24,29 @@ export function PhoneGameOptions({ lobby, slot, disabled }) {
   const playing = lobby.phase === PHASES.TUTORIAL;
   const tennis = lobby.sport === 'tennis';
   const settings = options?.settings;
+  const completed = playing && lobby.gameState?.phase === 'complete';
+  const winners = completed ? tennis ? [lobby.gameState.winner] : lobby.gameState.winners ?? [] : [];
+  const winnerNames = winners.map(player => lobby.players?.find(seat => seat.slot + 1 === player)?.name ??
+    (tennis && player === 2 ? 'Bot' : `Player ${player}`));
+  const resultTitle = winnerNames.length > 1 ? 'A shared victory!' : winnerNames.length ? `${winnerNames[0]} wins!` : 'Game complete';
   const locked = disabled || lobby.paused || !playing || !available || slot !== 0 || busy;
   useEffect(() => {
     setMessage(''); setConfirmRestart(false);
+    setResultMode(false);
     dialog.current?.close();
   }, [lobby.gameId]);
+  useEffect(() => {
+    if (!completed) {
+      resultShown.current = null;
+      if (resultMode) { dialog.current?.close(); setResultMode(false); }
+      return;
+    }
+    // Polling/reconnect must not reopen a result the player already dismissed.
+    if (disabled || lobby.paused || resultShown.current === lobby.gameId) return;
+    resultShown.current = lobby.gameId;
+    setMessage(''); setResultMode(true);
+    dialog.current?.showModal();
+  }, [completed, disabled, lobby.paused, lobby.gameId, resultMode]);
   useEffect(() => { if (settings?.format) setFormat(settings.format); }, [settings?.format]);
   async function command(action, detail = {}) {
     if (locked || pending.current) return;
@@ -41,16 +61,28 @@ export function PhoneGameOptions({ lobby, slot, disabled }) {
   const configure = (name, value) => command('configure', { settings: { [name]: value } });
   return <>
     <button type="button" className="phone-options-toggle" aria-label="Game options" aria-haspopup="dialog"
-      onClick={() => { setMessage(''); setConfirmRestart(false); dialog.current?.showModal(); }}>
+      onClick={() => { setMessage(''); setConfirmRestart(false); setResultMode(completed); dialog.current?.showModal(); }}>
       <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
         <path d="M4 7h16M4 17h16" /><circle cx="9" cy="7" r="3" fill="var(--surface)" /><circle cx="15" cy="17" r="3" fill="var(--surface)" />
       </svg>
     </button>
-    <dialog ref={dialog} className="phone-game-options" aria-labelledby="phone-game-options-title"
+    <dialog ref={dialog} className={`phone-game-options${resultMode ? ' phone-game-options--result' : ''}`} data-sport={lobby.sport} aria-labelledby="phone-game-options-title"
       onClick={event => { if (event.target === event.currentTarget) dialog.current?.close(); }}>
       <div className="phone-game-options__content">
-        <header><div><p className="eyebrow">{lobby.sport === 'bowling' ? 'Bowling' : 'Tennis'} · {lobby.code}</p><h2 id="phone-game-options-title">Game options</h2></div>
-          <button className="phone-options-close" type="button" aria-label="Close game options" onClick={() => dialog.current?.close()}>×</button></header>
+        <header><div><p className="eyebrow">{lobby.sport === 'bowling' ? 'Bowling' : 'Tennis'} · {lobby.code}</p><h2 id="phone-game-options-title">{resultMode ? 'Match complete' : 'Game options'}</h2></div>
+          <button className="phone-options-close" type="button" aria-label={resultMode ? 'Close result' : 'Close game options'} onClick={() => dialog.current?.close()}>×</button></header>
+        {resultMode ? <div className="phone-match-result">
+          <div className="phone-match-result__medal" aria-hidden="true"><svg viewBox="0 0 48 48" width="52" height="52" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 7h18v12a9 9 0 0 1-18 0V7ZM15 10H8v5a8 8 0 0 0 8 8M33 10h7v5a8 8 0 0 1-8 8M24 28v10M16 41h16M19 38h10" /></svg></div>
+          <h3>{resultTitle}</h3>
+          {winnerNames.length > 1 ? <p>{winnerNames.join(' & ')}</p> : null}
+          {!tennis && Number.isInteger(lobby.gameState?.winnerScore) ? <p className="phone-match-result__score">{lobby.gameState.winnerScore}<span>points</span></p> : null}
+          <p>{slot === 0 ? 'Another round?' : 'Player 1 can start the next game.'}</p>
+          {lobby.paused || disabled ? <p role="status">Reconnect everyone to play again.</p> : null}
+          {slot === 0 ? <button type="button" className="btn btn--primary" disabled={locked}
+            onClick={() => command('new-match', tennis ? { format: settings?.format ?? 'full' } : {})}>{busy ? 'Starting…' : 'Play again'}</button> : null}
+          <p className="phone-options-message" role="status">{message}</p>
+          <button type="button" className="btn btn--ghost" onClick={() => dialog.current?.close()}>{slot === 0 ? 'Not now' : 'Keep watching'}</button>
+        </div> : <>
         <div className="phone-game-options__appearance"><span>Light / dark mode</span><ThemeToggle /></div>
         {!playing ? <p className="stub__muted">Match options will be ready when play starts.</p>
           : slot !== 0 ? <p className="stub__muted">Player 1 manages shared match settings. Your sound button still controls the TV sound.</p>
@@ -86,6 +118,7 @@ export function PhoneGameOptions({ lobby, slot, disabled }) {
           </>}
         <p className="phone-options-message" role="status">{busy ? 'Updating the game…' : message}</p>
         <button type="button" className="btn btn--primary phone-options-done" onClick={() => dialog.current?.close()}>Back to play</button>
+        </>}
       </div>
     </dialog>
   </>;

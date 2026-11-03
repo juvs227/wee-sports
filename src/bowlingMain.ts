@@ -5,6 +5,7 @@ import {createSportsAudio} from './audio/sportsAudio';
 import '../client/src/styles/tokens.css';
 import './gameHud.css';
 import './bowling.css';
+import './gameResults.css';
 import './theme.js';
 
 const embedded = window.parent !== window;
@@ -21,6 +22,7 @@ const commands = new Set<string>();
 const callouts = createRollCallouts();
 let calloutTimer: ReturnType<typeof setTimeout> | null = null;
 let complete = false;
+let finalResultKey = '';
 const post = (message: object): void => { if (embedded) window.parent.postMessage(message, location.origin); };
 document.body.classList.toggle('bowling-embedded', embedded);
 el('replay').hidden = embedded;
@@ -91,12 +93,25 @@ function render(state: BowlingState): void {
     const total = document.createElement('td'); total.className = 'bowling-total'; total.textContent = String(score.total); row.append(total); body.append(row);
   }
   el('results').hidden = !state.complete || !el('roll-callout').hidden;
-  el('ranking').replaceChildren(...state.ranking.map(p => {
-    const item = document.createElement('li'); item.textContent = `${p.rank}. ${p.name} · ${p.total} points`; return item;
-  }));
+  const winners = state.ranking.filter(player => player.rank === 1);
+  const finalKey = state.complete ? JSON.stringify(state.ranking) : '';
+  if (finalKey !== finalResultKey) {
+    finalResultKey = finalKey;
+    el('result-winner').textContent = state.complete ? winners.length > 1 ? 'Tied for first!' : `${winners[0].name} wins!` : '';
+    el('result-score').textContent = state.complete ? `${winners[0].total} points` : '';
+    el('replay-prompt').textContent = embedded ? 'Play again? Choose on your phone.' : 'Ready for another game?';
+    el('ranking').replaceChildren(...(state.complete ? state.ranking : []).map(p => {
+      const item = document.createElement('li'); item.dataset.winner = String(p.rank === 1);
+      const rank = document.createElement('span'); rank.className = 'result-rank'; rank.textContent = String(p.rank);
+      const name = document.createElement('span'); name.className = 'result-name'; name.textContent = p.name;
+      const total = document.createElement('strong'); total.textContent = String(p.total);
+      item.append(rank, name, total); return item;
+    }));
+  }
   (el('roll') as HTMLButtonElement).disabled = paused || state.phase !== 'ready';
   if (call) showCallout(call);
-  post({type: 'wee:bowling-state', gameId, phase: state.phase, currentPlayer: state.currentPlayer, frame: state.frame});
+  post({type: 'wee:bowling-state', gameId, phase: state.phase, currentPlayer: state.currentPlayer, frame: state.frame,
+    ...(state.complete ? {winners: winners.map(player => player.player), winnerScore: winners[0].total} : {})});
 }
 function create(players: Array<{player: number; name: string}>): void {
   callouts.reset(); complete = false; clearCallout();

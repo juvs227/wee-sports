@@ -45,10 +45,6 @@ body { margin: 0; background: #203a32; color: var(--text); font-family: var(--fo
 .bowling-controls label { display: flex; gap: 8px; align-items: center; font-size: 12px; font-weight: 800; }
 .bowling-controls input { width: 110px; accent-color: var(--accent-ink); }
 #bowling-app:has(#local-controls:not([hidden])) .bowling-help { display: none; }
-.bowling-results { position: absolute; z-index: 4; top: 50%; left: 50%; transform: translate(-50%, -30%); width: min(360px, calc(100% - 24px)); max-height: 55%; overflow-y: auto; padding: 22px; border-radius: 20px; background: var(--surface-overlay); box-shadow: var(--shadow-lift); text-align: center; }
-.bowling-results h2 { margin: 0 0 8px; font-size: 22px; }
-.bowling-results ol { padding: 0; list-style: none; }
-.bowling-results li { margin: 6px; font-size: 14px; font-weight: 800; }
 @media (max-width: 540px) {
   .bowling-hud { width: calc(100% - 14px); padding: 7px 8px; }
   .bowling-embedded .bowling-hud { top: max(48px, calc(env(safe-area-inset-top) + 44px)); }

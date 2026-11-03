@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { io } from 'socket.io-client';
-import { EVENTS, PROTOCOL_VERSION, PHASES, isRoll } from '@wee/shared/protocol.js';
+import { EVENTS, PROTOCOL_VERSION, PHASES, isRoll, isBowlingState } from '@wee/shared/protocol.js';
 import { createGameServer } from './app.js';
 import { RoomStore } from './RoomStore.js';
 
@@ -63,6 +63,52 @@ test('only the current authenticated TV can publish valid bowling turns for this
   assert.equal(resumed.ok, true);
   assert.equal(store.setGameState('tv', state).error, 'not-host');
   assert.equal(store.setGameState('tv-new', state).ok, true);
+});
+
+test('bowling result validation accepts ties and legacy completion, rejects incomplete or active results', () => {
+  const complete = { phase: 'complete', currentPlayer: null, frame: 10 };
+  assert.equal(isBowlingState(complete), true);
+  assert.equal(isBowlingState({ ...complete, winners: [1, 2, 3, 4], winnerScore: 0 }), true);
+  assert.equal(isBowlingState({ ...complete, winners: [1], winnerScore: 300 }), true);
+  for (const change of [{ winners: [] }, { winners: [1] }, { winnerScore: 100 },
+    { winners: [1, 1], winnerScore: 100 }, { winners: [0], winnerScore: 100 },
+    { winners: [5], winnerScore: 100 }, { winners: ['1'], winnerScore: 100 },
+    { winners: [1.5], winnerScore: 100 }, { winners: null, winnerScore: 100 },
+    { winners: [1], winnerScore: -1 }, { winners: [1], winnerScore: 301 },
+    { winners: [1], winnerScore: 1.5 }, { winners: [1], winnerScore: NaN },
+    { winners: [1], winnerScore: '100' }, { frame: 9 }]) {
+    assert.equal(isBowlingState({ ...complete, ...change }), false, JSON.stringify(change));
+  }
+  for (const phase of ['ready', 'rolling']) {
+    assert.equal(isBowlingState({ phase, currentPlayer: 1, frame: 1 }), true);
+    assert.equal(isBowlingState({ phase, currentPlayer: 1, frame: 1, winners: [1], winnerScore: 100 }), false);
+  }
+});
+
+test('only the current TV publishes roster-based winners and a replay removes old results', () => {
+  const { store, room, start } = readyBowling(2);
+  const gameId = start();
+  const result = { gameId, phase: 'complete', currentPlayer: null, frame: 10,
+    winners: [1, 2], winnerScore: 145, names: ['Untrusted winner'], arbitrary: true };
+  assert.equal(store.setGameState('p1', result).error, 'not-host');
+  assert.equal(store.setGameState('unknown', result).error, 'not-host');
+  assert.equal(store.setGameState('tv', { ...result, gameId: 'old-match' }).error, 'not-playing');
+  assert.equal(store.setGameState('tv', { ...result, winners: [3] }).error, 'bad-game-state');
+  assert.equal(store.lobby(room.code).gameState, null);
+  assert.equal(store.setGameState('tv', result).ok, true);
+  assert.deepEqual(store.lobby(room.code).gameState, {
+    phase: 'complete', currentPlayer: null, frame: 10, winners: [1, 2], winnerScore: 145,
+  });
+  result.winners.push(4);
+  assert.deepEqual(store.lobby(room.code).gameState.winners, [1, 2], 'snapshot owns a copy of winner seats');
+  assert.equal(store.setGameState('tv', { ...result, phase: 'ready', currentPlayer: 1, frame: 1 }).error, 'bad-game-state');
+  assert.deepEqual(store.lobby(room.code).gameState.winners, [1, 2], 'invalid updates preserve the previous result');
+  assert.equal(store.resume('tv-new', { v, code: room.code, role: 'host', token: room.token }).ok, true);
+  assert.equal(store.setGameState('tv', { ...result, winners: [1] }).error, 'not-host');
+  assert.equal(store.setGameState('tv-new', { gameId, phase: 'ready', currentPlayer: 1, frame: 1 }).ok, true);
+  assert.deepEqual(store.lobby(room.code).gameState, { phase: 'ready', currentPlayer: 1, frame: 1 });
+  assert.equal(store.setGameState('tv-new', { gameId, phase: 'complete', currentPlayer: null, frame: 10 }).ok, true);
+  assert.deepEqual(store.lobby(room.code).gameState, { phase: 'complete', currentPlayer: null, frame: 10 });
 });
 
 test('roll validation rejects malformed, nonfinite and out-of-range values', () => {

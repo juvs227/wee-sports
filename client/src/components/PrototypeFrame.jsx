@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { EVENTS, isRoll, isSwing, isGameHit, isTennisState, isStrokeResult, isGameSoundEvent, isGameCommand, isGameOptions } from '@wee/shared/protocol.js';
+import { EVENTS, isRoll, isSwing, isGameHit, isTennisState, isBowlingState, isStrokeResult, isGameSoundEvent, isGameCommand, isGameOptions } from '@wee/shared/protocol.js';
 import { request, socket, useConnection } from '../lib/socket.js';
 import { createInputId } from '../../../src/network/inputId.js';
 
@@ -72,8 +72,11 @@ export function PrototypeFrame({ code, controller = false, player = 1, players =
         const result = paused || connection !== 'online' ? { ok: false, error: 'paused' }
           : await request(EVENTS.PLAYER_ROLL, data.event);
         post({ type: 'wee:roll-ack', result });
-      } else if (!controller && data?.type === 'wee:bowling-state' && data.gameId === gameId) {
-        await request(EVENTS.HOST_GAME_STATE, { gameId, phase: data.phase, frame: data.frame, currentPlayer: data.currentPlayer });
+      } else if (!controller && sport === 'bowling' && data?.type === 'wee:bowling-state' &&
+          data.gameId === gameId && isBowlingState(data)) {
+        await request(EVENTS.HOST_GAME_STATE, { gameId, phase: data.phase, frame: data.frame, currentPlayer: data.currentPlayer,
+          ...(data.phase === 'complete' && data.winners !== undefined
+            ? { winners: [...data.winners], winnerScore: data.winnerScore } : {}) });
       } else if (!controller && sport === 'tennis' && data?.type === 'wee:tennis-state' &&
           data.gameId === gameId && isTennisState(data)) {
         await request(EVENTS.HOST_GAME_STATE, { gameId, phase: data.phase, server: data.server, winner: data.winner,

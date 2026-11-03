@@ -184,3 +184,37 @@ test('only current validated TV options are forwarded as a sanitized snapshot', 
   await f.receive(options);
   expect(h.request).toHaveBeenCalledExactlyOnceWith(EVENTS.HOST_GAME_OPTIONS, { gameId: 'match-a', sport: 'bowling' });
 });
+
+test('bowling results cross only the current TV bridge and carry seat numbers rather than names', async () => {
+  const f = mount({ sport: 'bowling' });
+  const result = { type: 'wee:bowling-state', gameId: 'match-a', phase: 'complete', currentPlayer: null,
+    frame: 10, winners: [1, 2], winnerScore: 180, names: ['Untrusted'], extra: true };
+  await f.receive(result, { source: {} });
+  await f.receive(result, { origin: 'https://wrong.test' });
+  await f.receive({ ...result, gameId: 'old-match' });
+  await f.receive({ ...result, winners: [1, 1] });
+  await f.receive({ ...result, winnerScore: 301 });
+  await f.receive({ ...result, phase: 'ready', currentPlayer: 1, frame: 1 });
+  expect(h.request).not.toHaveBeenCalled();
+  await f.receive(result);
+  expect(h.request).toHaveBeenCalledExactlyOnceWith(EVENTS.HOST_GAME_STATE, {
+    gameId: 'match-a', phase: 'complete', currentPlayer: null, frame: 10, winners: [1, 2], winnerScore: 180,
+  });
+  await f.receive({ type: 'wee:bowling-state', gameId: 'match-a', phase: 'ready', currentPlayer: 1, frame: 1 });
+  expect(h.request).toHaveBeenLastCalledWith(EVENTS.HOST_GAME_STATE, {
+    gameId: 'match-a', phase: 'ready', currentPlayer: 1, frame: 1,
+  });
+  await f.receive({ type: 'wee:bowling-state', gameId: 'match-a', phase: 'complete', currentPlayer: null, frame: 10 });
+  expect(h.request).toHaveBeenLastCalledWith(EVENTS.HOST_GAME_STATE, {
+    gameId: 'match-a', phase: 'complete', currentPlayer: null, frame: 10,
+  });
+});
+
+test.each([{ controller: true, sport: 'bowling' }, { sport: 'tennis' }])(
+  'a phone or tennis frame cannot publish bowling winners: %j', async props => {
+    const f = mount(props);
+    await f.receive({ type: 'wee:bowling-state', gameId: 'match-a', phase: 'complete', currentPlayer: null,
+      frame: 10, winners: [1], winnerScore: 300 });
+    expect(h.request).not.toHaveBeenCalled();
+  },
+);

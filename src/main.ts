@@ -9,6 +9,7 @@ import { isGameCommand } from '../shared/protocol.js';
 import '../client/src/styles/tokens.css';
 import './play.css';
 import './tennisHud.css';
+import './gameResults.css';
 import './theme.js';
 
 type TennisCommand = {id: string; gameId: string} & (
@@ -31,6 +32,8 @@ async function main(): Promise<void> {
     let resultUntil = 0;
     let strokeFeedback = '';
     let feedbackUntil = 0;
+    let announcedSets = 0;
+    let setResultUntil = 0;
     const deliveredCommands = new Map<string, {ok: boolean; error?: string}>();
     let names = ['Player 1', 'Bot'];
     let humanOpponent = false;
@@ -56,7 +59,13 @@ async function main(): Promise<void> {
       </div>
       <p id="completed-sets" class="visually-hidden"></p>
       <p id="coach" class="tennis-coach" role="status" aria-live="polite">Swing as the ball approaches your side.</p>
-      <div id="match-result" class="tennis-result" hidden><p id="match-winner"></p><button id="play-again" class="primary">Play again</button></div>
+      <section id="set-result" class="tennis-set-result" role="status" aria-live="polite" hidden><span class="result-eyebrow" id="set-result-label"></span><strong id="set-winner"></strong><span id="set-result-score"></span><p id="set-next"></p></section>
+      <section id="match-result" class="game-result-card" role="status" aria-live="polite" hidden>
+        <div class="game-result-emblem" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 5h12v7c0 5-2.5 8-6 8s-6-3-6-8V5Zm0 2H5v4c0 4 3 6 6 6m11-10h5v4c0 4-3 6-6 6M16 20v6m-5 2h10"/></svg></div>
+        <p class="result-eyebrow" id="match-result-label">Game, set & match</p><h2 id="match-winner"></h2>
+        <p class="game-result-score" id="match-result-score"></p><p class="game-result-detail" id="match-result-detail"></p>
+        <p class="game-result-replay" id="match-replay-prompt"></p><button id="play-again" class="primary">Play again</button>
+      </section>
       <details id="court-options" class="tennis-local-options"><summary>Play options & practice</summary><p id="connection"></p>
       <div class="tennis-options">
       <label>Match <select id="match-format"><option value="full">Full · best of 3 sets</option><option value="quick">Quick · tie-break to 7</option></select></label>
@@ -79,6 +88,7 @@ async function main(): Promise<void> {
       <a id="phone-link">Open phone controller</a></details>`;
     document.body.append(panel);
     const el = (id: string): HTMLElement => document.getElementById(id)!;
+    const setText = (id: string, text: string): void => { if (el(id).textContent !== text) el(id).textContent = text; };
     el('court-options').hidden = embedded;
     el('play-again').hidden = embedded;
     // Homepage audio stays in the TV document that received the Play click.
@@ -137,6 +147,18 @@ async function main(): Promise<void> {
         const score = world.getScore();
         const practice = world.getPracticeState();
         const serve = world.getServeState();
+        const now = performance.now();
+        if (score.completedSets.length < announcedSets) { announcedSets = score.completedSets.length; setResultUntil = 0; }
+        if (score.completedSets.length > announcedSets) {
+            announcedSets = score.completedSets.length;
+            setResultUntil = now + 3200;
+            const finished = score.completedSets[announcedSets - 1];
+            const winner = finished.player1 > finished.player2 ? 0 : 1;
+            setText('set-result-label', `Set ${announcedSets} complete`);
+            setText('set-winner', `${names[winner]} wins the set`);
+            setText('set-result-score', winner === 0 ? `${finished.player1}–${finished.player2}` : `${finished.player2}–${finished.player1}`);
+            setText('set-next', `Set ${announcedSets + 1} · ${names[score.server === 'player1' ? 0 : 1]} serves next`);
+        }
         el('name-1').textContent = names[0];
         el('name-2').textContent = names[1];
         el('points-1').textContent = String(score.player1);
@@ -164,6 +186,9 @@ async function main(): Promise<void> {
         const ballData = world.ball.userData as BallUserData;
         const servingPlayer = score.server === 'player1' ? 0 : 1;
         const waiting = ballData.isWaitingForServe || ballData.waitingForRacketHit;
+        // A set celebration never follows the ball into the next live rally.
+        if (!waiting) setResultUntil = 0;
+        el('set-result').hidden = lobbyPaused || practice.active || Boolean(score.matchWinner) || now >= setResultUntil;
         el('server-1').hidden = Boolean(score.matchWinner) || servingPlayer !== 0;
         el('server-2').hidden = Boolean(score.matchWinner) || servingPlayer !== 1;
         const coach = lobbyPaused ? 'Match paused · waiting for controllers'
@@ -173,9 +198,18 @@ async function main(): Promise<void> {
             : waiting ? `${serve.status === 'let' ? 'Let · replay serve · ' : serve.status === 'first-fault' ? 'Fault · second serve · ' : ''}${names[servingPlayer]}, ${ballData.serveDelayRemaining > 0 ? 'serve next' : 'serve when ready'} · ${serve.side === 'deuce' ? 'right' : 'left'} side`
             : performance.now() < feedbackUntil && strokeFeedback ? strokeFeedback : 'Rally · watch the ball';
         if (el('coach').textContent !== coach) el('coach').textContent = coach;
-        el('match-result').hidden = embedded || practice.active || !score.matchWinner;
-        el('match-winner').textContent = score.matchWinner
-            ? `${names[score.matchWinner === 'player1' ? 0 : 1]} wins · ${score.format === 'quick' ? `${score.player1}–${score.player2}` : `${score.setsPlayer1}–${score.setsPlayer2} sets`}` : '';
+        el('match-result').hidden = practice.active || !score.matchWinner;
+        if (score.matchWinner) {
+            const winner = score.matchWinner === 'player1' ? 0 : 1;
+            setText('match-result-label', score.format === 'quick' ? 'Match complete' : 'Game, set & match');
+            setText('match-winner', `${names[winner]} wins!`);
+            setText('match-result-score', score.format === 'quick'
+                ? `${winner === 0 ? score.player1 : score.player2}–${winner === 0 ? score.player2 : score.player1} in the tie-break`
+                : `${winner === 0 ? score.setsPlayer1 : score.setsPlayer2}–${winner === 0 ? score.setsPlayer2 : score.setsPlayer1} in sets`);
+            setText('match-result-detail', score.format === 'quick' ? 'First to seven · win by two.'
+                : score.completedSets.map(set => winner === 0 ? `${set.player1}–${set.player2}` : `${set.player2}–${set.player1}`).join(' · '));
+            setText('match-replay-prompt', embedded ? 'Play again? Choose on your phone.' : 'Ready for another match?');
+        }
         (el('play-again') as HTMLButtonElement).disabled = lobbyPaused;
         for (const id of ['new-match', 'practice-start', 'practice-stop']) (el(id) as HTMLButtonElement).disabled = lobbyPaused;
         el('practice-start').hidden = practice.active;

@@ -170,6 +170,22 @@ export function isTennisState(state) {
       ? [1, 2].includes(state.winner) : state.winner === null);
 }
 
+/** Optional final results keep older bowling TVs compatible; names stay in the lobby roster. */
+export function isBowlingState(state) {
+  if (!isRecord(state) || !['ready', 'rolling', 'complete'].includes(state.phase) ||
+      !Number.isInteger(state.frame) || state.frame < 1 || state.frame > 10) return false;
+  if (state.phase !== 'complete') {
+    return Number.isInteger(state.currentPlayer) && state.currentPlayer >= 1 && state.currentPlayer <= 4 &&
+      state.winners === undefined && state.winnerScore === undefined;
+  }
+  if (state.currentPlayer !== null || state.frame !== 10) return false;
+  if (state.winners === undefined && state.winnerScore === undefined) return true;
+  return Array.isArray(state.winners) && state.winners.length > 0 && state.winners.length <= 4 &&
+    state.winners.every(player => Number.isInteger(player) && player >= 1 && player <= 4) &&
+    new Set(state.winners).size === state.winners.length &&
+    Number.isInteger(state.winnerScore) && state.winnerScore >= 0 && state.winnerScore <= 300;
+}
+
 export function isStrokeResult(event) {
   return typeof event?.id === 'string' && event.id.length > 0 && event.id.length <= 100 &&
     typeof event.gameId === 'string' && event.gameId.length > 0 && event.gameId.length <= 100 &&

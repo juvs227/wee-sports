@@ -110,6 +110,11 @@ test('a final fill-ball strike appears before the ranking, then a phone restart 
   vi.advanceTimersByTime(2400);
   expect(document.getElementById('roll-callout').hidden).toBe(true);
   expect(document.getElementById('results').hidden).toBe(false);
+  expect(document.getElementById('result-winner').textContent).toBe('Yit wins!');
+  expect(document.getElementById('result-score').textContent).toBe('300 points');
+  expect(document.getElementById('replay-prompt').textContent).toBe('Play again? Choose on your phone.');
+  expect(parent.postMessage).toHaveBeenCalledWith({type: 'wee:bowling-state', gameId: 'bowl-one',
+    phase: 'complete', currentPlayer: null, frame: 10, winners: [1], winnerScore: 300}, location.origin);
 
   command({});
   expect(result()).toEqual({ok: true});
@@ -117,4 +122,24 @@ test('a final fill-ball strike appears before the ranking, then a phone restart 
   expect(document.getElementById('roll-callout').hidden).toBe(true);
   expect(document.getElementById('frame-label').textContent).toBe('Frame 1 / 10 · Ball 1');
   expect(document.getElementById('score-body').children[0].children[11].textContent).toBe('0');
+  expect(document.getElementById('result-winner').textContent).toBe('');
+  expect(document.getElementById('ranking').children).toHaveLength(0);
+});
+
+test('tied bowling totals name both winners without choosing the first seat', async () => {
+  runtime.match = new BowlingMatch([{player: 1, name: 'Yit'}, {player: 2, name: 'Teammate'}]);
+  await import('../src/bowlingMain.ts');
+  state({players: [{slot: 0, name: 'Yit'}, {slot: 1, name: 'Teammate'}]});
+  while (!runtime.match.getState().complete) {
+    runtime.match.record([]); runtime.world.onState(runtime.world.getState());
+  }
+  vi.advanceTimersByTime(2400);
+  expect(document.getElementById('results').hidden).toBe(false);
+  expect(document.getElementById('result-winner').textContent).toBe('Tied for first!');
+  expect(document.getElementById('ranking').children.map(row => row.dataset.winner)).toEqual(['true', 'true']);
+  expect(parent.postMessage).toHaveBeenCalledWith({type: 'wee:bowling-state', gameId: 'bowl-one',
+    phase: 'complete', currentPlayer: null, frame: 10, winners: [1, 2], winnerScore: 300}, location.origin);
+  const rows = document.getElementById('ranking').children;
+  runtime.world.onState(runtime.world.getState());
+  expect(document.getElementById('ranking').children).toBe(rows);
 });

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { ScoreSystem } from '../src/World/scoreSystem';
 
 // Theme behavior is covered independently; these fixtures model game/relay APIs.
 vi.mock('../src/theme.js', () => ({}));
@@ -206,4 +207,92 @@ test('solo practice controls work while human-opponent commands cannot enable pr
   expect(runtime.world.startPractice).toHaveBeenCalledOnce();
   expect(runtime.world.configure).not.toHaveBeenCalled();
   expect(runtime.world.setSplitScreen).toHaveBeenLastCalledWith(true);
+});
+
+test('a completed set announces its winner once, then continues the match until two sets are won', async () => {
+  await import('../src/main.ts'); state({});
+  const scoring = new ScoreSystem();
+  for (let point = 0; point < 24; point++) scoring.awardPoint('player2', 'player1');
+  runtime.world.score = scoring.getScore();
+  vi.advanceTimersByTime(250);
+  expect(document.getElementById('set-result').hidden).toBe(false);
+  expect(document.getElementById('set-result-label').textContent).toBe('Set 1 complete');
+  expect(document.getElementById('set-winner').textContent).toBe('Bot wins the set');
+  expect(document.getElementById('set-result-score').textContent).toBe('6–0');
+  expect(document.getElementById('set-next').textContent).toContain('Set 2');
+  expect(document.getElementById('match-result').hidden).toBe(true);
+  expect(runtime.world.startRound).not.toHaveBeenCalled();
+  runtime.world.ball.userData.isWaitingForServe = false;
+  vi.advanceTimersByTime(250);
+  expect(document.getElementById('set-result').hidden).toBe(true);
+  runtime.world.ball.userData.isWaitingForServe = true;
+  vi.advanceTimersByTime(250);
+  expect(document.getElementById('set-result').hidden).toBe(true);
+  vi.advanceTimersByTime(3500);
+  expect(document.getElementById('set-result').hidden).toBe(true);
+  vi.advanceTimersByTime(1000);
+  expect(document.getElementById('set-result').hidden).toBe(true);
+
+  for (let point = 0; point < 24; point++) scoring.awardPoint('player2', 'player1');
+  runtime.world.score = scoring.getScore();
+  vi.advanceTimersByTime(250);
+  expect(document.getElementById('set-result').hidden).toBe(true);
+  expect(document.getElementById('match-result').hidden).toBe(false);
+  expect(document.getElementById('match-winner').textContent).toBe('Bot wins!');
+  expect(document.getElementById('match-result-score').textContent).toBe('2–0 in sets');
+  expect(document.getElementById('match-result-detail').textContent).toBe('6–0 · 6–0');
+  expect(document.getElementById('match-replay-prompt').textContent).toBe('Play again? Choose on your phone.');
+  expect(document.getElementById('play-again').hidden).toBe(true);
+  vi.advanceTimersByTime(8000);
+  expect(document.getElementById('match-result').hidden).toBe(false);
+  expect(runtime.world.startRound).not.toHaveBeenCalled();
+  scoring.reset(); runtime.world.score = scoring.getScore();
+  vi.advanceTimersByTime(250);
+  expect(document.getElementById('match-result').hidden).toBe(true);
+  expect(document.getElementById('set-result').hidden).toBe(true);
+});
+
+test('quick-match result waits for a two-point margin and offers standalone replay', async () => {
+  window.parent = window;
+  await import('../src/main.ts');
+  const scoring = new ScoreSystem('quick');
+  for (let point = 0; point < 6; point++) {
+    scoring.awardPoint('player1', 'player2'); scoring.awardPoint('player2', 'player1');
+  }
+  scoring.awardPoint('player1', 'player2');
+  runtime.world.score = scoring.getScore(); vi.advanceTimersByTime(250);
+  expect(document.getElementById('match-result').hidden).toBe(true);
+  scoring.awardPoint('player1', 'player2');
+  runtime.world.score = scoring.getScore(); vi.advanceTimersByTime(250);
+  expect(document.getElementById('match-result').hidden).toBe(false);
+  expect(document.getElementById('match-result-label').textContent).toBe('Match complete');
+  expect(document.getElementById('match-result-score').textContent).toBe('8–6 in the tie-break');
+  expect(document.getElementById('play-again').hidden).toBe(false);
+  runtime.world.startRound.mockImplementation(() => { scoring.reset(); runtime.world.score = scoring.getScore(); });
+  document.getElementById('play-again').onclick();
+  expect(document.getElementById('match-result').hidden).toBe(true);
+  expect(runtime.world.startRound).toHaveBeenCalledOnce();
+});
+
+test('deuce and advantage stay in the score strip without announcing a set or match winner', async () => {
+  await import('../src/main.ts'); state({});
+  const scoring = new ScoreSystem();
+  for (let point = 0; point < 3; point++) {
+    scoring.awardPoint('player1', 'player2'); scoring.awardPoint('player2', 'player1');
+  }
+  runtime.world.score = scoring.getScore(); vi.advanceTimersByTime(250);
+  expect(document.getElementById('score-format').textContent).toBe('Deuce');
+  expect(document.getElementById('points-1').textContent).toBe('40');
+  expect(document.getElementById('points-2').textContent).toBe('40');
+  expect(document.getElementById('match-result').hidden).toBe(true);
+  expect(document.getElementById('set-result').hidden).toBe(true);
+  scoring.awardPoint('player1', 'player2');
+  runtime.world.score = scoring.getScore(); vi.advanceTimersByTime(250);
+  expect(document.getElementById('score-format').textContent).toBe('Advantage');
+  expect(document.getElementById('points-1').textContent).toBe('Adv');
+  scoring.awardPoint('player1', 'player2');
+  runtime.world.score = scoring.getScore(); vi.advanceTimersByTime(250);
+  expect(document.getElementById('games-progress').textContent).toBe('Games 1–0');
+  expect(document.getElementById('match-result').hidden).toBe(true);
+  expect(document.getElementById('set-result').hidden).toBe(true);
 });

@@ -35,6 +35,7 @@ import {
   isRoll,
   isGameHit,
   isTennisState,
+  isBowlingState,
   isStrokeResult,
   isController,
   isGameCommand,
@@ -367,11 +368,12 @@ export class RoomStore {
     }
     if (room.sport !== 'bowling') return { ok: false, error: 'not-playing' };
     const { phase, currentPlayer, frame } = payload ?? {};
-    const validPlayer = phase === 'complete' ? currentPlayer === null :
-      [...room.players.values()].some(player => player.slot + 1 === currentPlayer);
-    if (!['ready', 'rolling', 'complete'].includes(phase) || !validPlayer ||
-        !Number.isInteger(frame) || frame < 1 || frame > 10) return { ok: false, error: 'bad-game-state' };
-    room.gameState = { phase, currentPlayer, frame };
+    const roster = new Set([...room.players.values()].map(player => player.slot + 1));
+    if (!isBowlingState(payload) || (phase !== 'complete' && !roster.has(currentPlayer)) ||
+        payload.winners?.some(player => !roster.has(player))) return { ok: false, error: 'bad-game-state' };
+    room.gameState = { phase, currentPlayer, frame,
+      ...(phase === 'complete' && payload.winners !== undefined
+        ? { winners: [...payload.winners], winnerScore: payload.winnerScore } : {}) };
     return { ok: true, code: room.code };
   }
 

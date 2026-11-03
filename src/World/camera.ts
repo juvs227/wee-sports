@@ -11,11 +11,11 @@ export class WorldCamera {
 
     public constructor() {
         this.primary = new THREE.PerspectiveCamera(51, 1, 0.1, 180);
-        this.primary.position.set(0, 12, 22);
+        this.primary.position.set(0, 8, 21);
         this.primary.lookAt(0, 0, 1);
 
         this.secondary = new THREE.PerspectiveCamera(51, 1, 0.1, 180);
-        this.secondary.position.set(0, 12, -22);
+        this.secondary.position.set(0, 8, -21);
         this.secondary.lookAt(0, 0, -1);
     }
 

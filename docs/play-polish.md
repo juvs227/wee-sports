@@ -5,6 +5,39 @@ hitboxes and gravity remain in place. No changes were merged into `main`.
 
 ## Park Club selected — implemented
 
+### Winner and replay follow-up
+
+- The tennis camera is lower (8 units high instead of 12, one unit closer), with
+  both solo views preserved. Court dimensions and gameplay rules are unchanged.
+- Tennis announces a set winner with the finished set score, then continues the
+  match. The short set card clears before the next rally. The match winner has a
+  persistent result card with the final sets/tie-break score. Deuce, advantage
+  and a 7–6 tie-break do not incorrectly end a match.
+- Bowling's final card names the winner or tied winners and displays rankings.
+  A final Strike/Spare callout finishes before the result card appears.
+- Both games ask **Play again?** on the TV and open a matching result prompt on
+  the phone. Player 1 can replay with one tap once the completed match is ready;
+  tennis keeps the currently applied full/quick format. Other players see the
+  result and wait for Player 1. **Not now** dismisses without reopening on every
+  state update or reconnect. Replay clears the old result and preserves the
+  controller session, including its current motion setup.
+- Bowling result messages contain only validated winner seat numbers and a
+  bounded score; names come from the lobby roster. Stale/unauthorized results,
+  duplicate winners and result fields during active play are rejected.
+- Repeated tennis contact prediction now reuses scratch math objects without
+  changing its contact calculation. The measured allocation reduction and real
+  phone testing limits are recorded in [tennis response](tennis-response.md).
+
+Validation: **327 game + 83 platform tests passed (410 total)**, plus TypeScript,
+lint and the production build. A live built quick match finished 7–0 against
+the bot, displayed its winner on TV, opened the phone result at 390 × 844, and
+restarted to 0–0 from **Play again** without repeating controller setup. No
+browser console errors were captured. Full-set/deuce/extended tie-break and
+bowling tie/result ordering are covered by automated rule/runtime tests. Live
+input used desktop buttons; real phone sensor latency remains a device check.
+
+### Park Club foundation
+
 - **Tennis:** the selected Park Club design is now in the game. Low-detail trees,
   hedges and a path replace the debug grid; a higher camera frames the whole
   court with less empty sky. Both views remain on by default in solo play.
