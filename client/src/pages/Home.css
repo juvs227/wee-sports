@@ -9,7 +9,7 @@
 }
 
 .home--polished .join-card {
-  border-color: #cbdfe9;
+  border-color: var(--border-strong);
   box-shadow: 0 2px 4px rgb(24 39 56 / 0.04), 0 12px 30px rgb(10 100 153 / 0.07);
 }
 
@@ -23,11 +23,11 @@
 }
 
 .home--polished .tile__meta {
-  color: #46535d;
+  color: var(--text-muted);
 }
 
 .home--polished .how__num {
-  color: #687987;
+  color: var(--text-muted);
   font-size: 1rem;
 }
 

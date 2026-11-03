@@ -1,6 +1,5 @@
 /*
- * Wee Sports design tokens: Wii-inspired light. White and silver surfaces, a
- * Wii-channel blue accent, big rounded shapes. Type scales with the viewport
+ * Wee Sports shared light/dark surfaces and blue accents. Type scales with the viewport
  * because the TV is read from across a room.
  */
 :root {
@@ -10,6 +9,8 @@
   --bg-stripe: rgb(255 255 255 / 0.7);
   --surface: #ffffff;
   --surface-sunk: #eef1f4;
+  --surface-overlay: #fffffff2;
+  --page-overlay: #f4f6f8ed;
   --border: #dde2e7;
   --border-strong: #c3cad1;
 
@@ -48,6 +49,34 @@
   --font: 'Nunito', ui-rounded, 'SF Pro Rounded', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --gutter: clamp(16px, 4vw, 48px);
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #101a22;
+  --bg-stripe: rgb(255 255 255 / 0.015);
+  --surface: #1a2934;
+  --surface-sunk: #13212b;
+  --surface-overlay: #1a2934f5;
+  --page-overlay: #101a22ed;
+  --border: #344854;
+  --border-strong: #577080;
+  --text: #edf4f8;
+  --text-muted: #b2c3ce;
+  --accent: #53c8f5;
+  --accent-soft: #153c50;
+  --accent-ink: #8ad9fa;
+  --danger: #ffb2bd;
+  --danger-soft: #4b2632;
+  --warn-ink: #f9d887;
+  --warn-soft: #44371b;
+  --p1: #6eaafa;
+  --p2: #ff8c92;
+  --p3: #69c895;
+  --p4: #eabd4f;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.18);
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.18), 0 10px 28px rgb(0 0 0 / 0.2);
+  --shadow-lift: 0 2px 6px rgb(0 0 0 / 0.2), 0 18px 40px rgb(0 0 0 / 0.3);
 }
 
 *,

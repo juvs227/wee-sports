@@ -8,6 +8,7 @@ import { createSportsAudio } from './audio/sportsAudio';
 import '../client/src/styles/tokens.css';
 import './gameHud.css';
 import './play.css';
+import './theme.js';
 
 async function main(): Promise<void> {
     const container = document.querySelector('#scene-container');

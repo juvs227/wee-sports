@@ -3,6 +3,89 @@
 Implemented on `update-homepage`. The team's models, stroke classifier, racket
 hitboxes and gravity remain in place. No changes were merged into `main`.
 
+## Final follow-up: setup, direction and appearance
+
+- **Switching games:** recent same-address calibration now reuses the already
+  measured gyro zero after at least ten fresh finite readings over 150 ms. The
+  player can keep holding/moving the phone; this checks sensor delivery instead
+  of demanding another still-phone calibration. The original two-hour expiry is
+  retained. The controller URL also stays stable during an in-place sport change,
+  which cancels unfinished inputs while preserving its live sensor session.
+- **New link:** browser permissions and local storage belong to each website
+  origin. A different tunnel address cannot inherit the old address's setup.
+  One **Enable motion** tap requests permission and starts initial setup
+  automatically; no second calibration tap is needed. A permanent HTTPS address
+  keeps this consistent. Explicit **Reset motion setup** remains available in
+  settings if the saved zero drifts.
+- **Power setup:** comfortable-swing rehearsal is no longer offered after normal
+  setup or during play. Default power is ready immediately; optional tuning is
+  collapsed under advanced controller settings.
+- **Bowling motion:** only forward underhand pitch charges and releases a roll.
+  Backward motion neither fires nor adds power/curve to the subsequent forward
+  swing. A deliberate reversal cancels the unfinished delivery. Small negative
+  readings in the deceleration deadband do not add power. Keep the documented
+  grip: screen up, top of phone toward the TV.
+- **Bowling direction:** aim, hook and aiming preview now use screen-left/right
+  consistently. The lane camera faces world +Z, making world -X appear right;
+  conversion happens at the scene boundary. Rigid-body physics is unchanged.
+- **Bowling scores:** name and total share one compact row, with one frame/ball
+  indicator and one result/turn cue. The full ten-frame scorecard is collapsed.
+  An asterisk marks strike/spare totals waiting for bonus rolls. Totals still
+  count completed frames; scoring arithmetic was checked and left unchanged.
+- **Dark mode:** home, lobby, phone and embedded UI surfaces follow the device
+  preference initially. A sun/moon button saves an explicit light/dark choice on
+  that device/address. Same-origin frames synchronize even when browser storage
+  is blocked. Theme changes do not alter the 3D arena or gameplay.
+
+### Tennis design review — not applied to the game
+
+Four isolated previews are in [the design review](previews/tennis-designs.html).
+With the development server running, open `/docs/previews/tennis-designs.html`.
+They reuse the team's court, net and player modules without live game logic.
+
+1. **A — Park club (recommended):** green surroundings and one dark score strip;
+   the smallest departure from the current game.
+2. **B — Night match:** lit court and a small two-row broadcast scoreboard.
+3. **C — Clay courtyard:** warm surface colors and a cream score strip. Cosmetic
+   only; this is not a proposed change to bounce or friction.
+4. **D — Sports hall:** simple indoor surroundings and a flat score ribbon.
+
+Every concept keeps both solo cameras, frames more of the court, and shows only
+the brand/sport/code, score and one coach cue. Tennis's current environment,
+scoreboard layout and shared TV header are intentionally awaiting the user's
+choice. Moving tennis options to the phone needs allowlisted, authenticated
+commands scoped to the active match; it must not expose arbitrary iframe commands
+or grant players the host's close-lobby authority. Native fullscreen entry still
+uses the TV's direct Play gesture.
+
+### Follow-up validation
+
+- **289 game tests + 74 platform tests passed (363 total)**. Regressions cover
+  moving-phone restoration after actual controller teardown/rejoin into bowling,
+  setup expiry, forward/backward deliveries, projected lane direction, and theme
+  persistence/blocked storage/untrusted messages.
+- TypeScript, lint, diff checks and the production build passed. Build verification
+  checked all four pages and both model assets; existing large-bundle warning remains.
+- Live production build: home/lobby/controller dark mode, same-origin frame theme
+  synchronization, long phone names at 390 px without horizontal overflow,
+  lobby ready/start and a bowling roll advancing to ball two after six pins.
+- The normal development server homepage also loaded after a clean restart.
+- Four actual Three.js preview scenes rendered without console errors. The
+  development-only design page is not bundled into the deployed game.
+- Live input used desktop button fallback. Direction and calibration were tested
+  with simulated sensor data; real phone feel and permission prompts still need
+  device verification. No live two-human match was run.
+
+Research: [W3C motion axes](https://www.w3.org/TR/orientation-event/),
+[MDN origin-scoped storage](https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage),
+[Xbox HUD contrast guidance](https://learn.microsoft.com/en-us/xbox/accessibility/xbox-accessibility-guidelines/102)
+and [clear objective cues](https://learn.microsoft.com/en-us/xbox/accessibility/xbox-accessibility-guidelines/109).
+The design recommendation uses restrained backgrounds, readable score contrast
+and a single next-action cue; it does not copy another game's artwork.
+
+The sections below record the earlier pass; the follow-up above supersedes its
+500 ms stationary restoration check and bowling card layout.
+
 ## Sound and phone controls
 
 - Replaced the sound-testing panel with one compact speaker icon. It appears at

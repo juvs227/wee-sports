@@ -4,6 +4,7 @@ import {createSportsAudio} from './audio/sportsAudio';
 import '../client/src/styles/tokens.css';
 import './gameHud.css';
 import './bowling.css';
+import './theme.js';
 
 const embedded = window.parent !== window;
 const el = (id: string): HTMLElement => document.getElementById(id)!;
@@ -26,25 +27,29 @@ function audioEvent(event: string): void {
 function render(state: BowlingState): void {
   if (state.phase !== 'rolling') audioEvent('roll-end');
   const player = state.players.find(p => p.player === state.currentPlayer);
-  el('turn').textContent = state.complete ? 'Every pin counts.' : `P${player?.player} · ${player?.name}`;
-  el('frame-label').textContent = `Frame ${state.frame} / 10 · Ball ${state.ball}`;
+  el('frame-label').textContent = state.complete ? 'Final · 10 frames' : `Frame ${state.frame} / 10 · Ball ${state.ball}`;
   const last = state.lastRoll;
-  el('roll-status').textContent = paused ? 'Match paused. Waiting for controllers.' : state.phase === 'rolling' ? 'Ball in play…' : state.complete ? 'Final scores are in.' :
-    last ? `${last.strike ? 'Strike!' : last.spare ? 'Spare!' : `${last.pins} ${last.pins === 1 ? 'pin' : 'pins'} down.`} ${last.player !== state.currentPlayer ? 'Next player, your turn.' : 'Ready for your next roll.'}` : 'Your lane is ready. Line up and roll.';
-  el('pin-status').textContent = state.complete ? '' : `${state.pinsStanding.length} pins standing`;
+  const result = last ? last.strike ? 'Strike!' : last.spare ? 'Spare!' : `${last.pins} ${last.pins === 1 ? 'pin' : 'pins'} down` : '';
+  const cue = paused ? 'Paused · waiting for controllers' : state.complete ? 'Final scores' : state.phase === 'rolling' ? `${player?.name} · ball in play` :
+    `${result ? `${result} · ` : ''}${player?.name}, ${last?.player === state.currentPlayer ? 'roll again' : 'your turn'}`;
+  if (el('roll-status').textContent !== cue) el('roll-status').textContent = cue;
   const summary = el('score-summary'); summary.replaceChildren();
   const body = el('score-body'); body.replaceChildren();
   for (const score of state.players) {
-    const card = document.createElement('div'); card.className = 'match-player';
+    const card = document.createElement('div'); card.className = 'bowling-player'; card.setAttribute('role', 'listitem');
     card.dataset.player = String(score.player); card.dataset.active = String(!state.complete && score.player === state.currentPlayer);
-    const cardName = document.createElement('span'); cardName.className = 'match-player__name'; cardName.textContent = `P${score.player} · ${score.name}`;
-    const points = document.createElement('div'); points.className = 'match-player__score';
+    if (!state.complete && score.player === state.currentPlayer) card.setAttribute('aria-current', 'true');
+    const cardName = document.createElement('span'); cardName.className = 'bowling-player__name'; cardName.textContent = `P${score.player} · ${score.name}`;
+    const points = document.createElement('span'); points.className = 'bowling-player__total';
     const value = document.createElement('strong'); value.textContent = String(score.total);
-    const unit = document.createElement('span'); unit.className = 'match-player__unit'; unit.textContent = 'Points';
-    points.append(value, unit);
-    const status = document.createElement('div'); status.className = 'match-player__stats';
-    status.textContent = state.complete ? 'Final score' : score.player === state.currentPlayer ? state.phase === 'rolling' ? 'Ball in play' : 'Your turn' : 'Waiting';
-    card.append(cardName, points, status); summary.append(card);
+    const bonusPending = score.frames.some((rolls, index) => score.frameScores[index] === null &&
+      (rolls[0] === 10 || (rolls.length >= 2 && rolls[0] + rolls[1] === 10)));
+    points.setAttribute('aria-label', `${score.total} points${bonusPending ? ', bonus rolls pending' : ''}`);
+    points.append(value);
+    if (bonusPending) {
+      const pending = document.createElement('abbr'); pending.textContent = '*'; pending.title = 'Bonus rolls pending'; pending.setAttribute('aria-hidden', 'true'); points.append(pending);
+    }
+    card.append(cardName, points); summary.append(card);
     const row = document.createElement('tr');
     row.dataset.active = String(score.player === state.currentPlayer);
     row.style.setProperty('--player-color', `var(--p${score.player})`);
@@ -93,7 +98,7 @@ function receive(event: MessageEvent): void {
       world?.dispose(); world = null; gameId = data.gameId; delivered.clear();
       try { create(players); }
       catch (error) {
-        el('turn').textContent = 'Could not open the lane';
+        el('frame-label').textContent = 'Lane unavailable';
         el('roll-status').textContent = 'Enable hardware acceleration, then reload the TV page.';
         console.error(error); return;
       }
@@ -132,7 +137,7 @@ try {
   if (!embedded) { create([{player: 1, name: 'Player 1'}]); el('local-controls').hidden = false; el('help').textContent = 'Aim, choose your curve and power, then roll. X = strike · / = spare · ten frames to make your mark.'; }
   post({type: 'wee:bridge-ready'});
 } catch (error) {
-  el('turn').textContent = 'Could not open the lane';
+  el('frame-label').textContent = 'Lane unavailable';
   el('roll-status').textContent = 'Enable hardware acceleration in your browser, then reload.';
   console.error(error);
 }

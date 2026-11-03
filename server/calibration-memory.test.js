@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { createCalibrationMemory, matchesSavedBias, CALIBRATION_STORAGE_KEY, CALIBRATION_MAX_AGE_MS } from '../src/controller/calibrationMemory.js';
+import { createCalibrationMemory, createCalibrationResume, CALIBRATION_STORAGE_KEY, CALIBRATION_MAX_AGE_MS } from '../src/controller/calibrationMemory.js';
 
 const storage = () => {
   const values = new Map();
@@ -35,15 +35,12 @@ test('stored version, hand, timestamp, bias and strength must all be valid', () 
   expect(memory.read()).toBeNull();
 });
 
-test('blocked storage stays optional and cached bias only matches a fresh, similar still offset', () => {
+test('blocked storage stays optional', () => {
   const blocked = { getItem() { throw Error('blocked'); }, setItem() { throw Error('blocked'); }, removeItem() { throw Error('blocked'); } };
   const memory = createCalibrationMemory(blocked);
   expect(memory.save(setup)).toBe(false);
   expect(memory.read()).toBeNull();
   expect(() => memory.clear()).not.toThrow();
-  expect(matchesSavedBias(setup.bias, { alpha: .3, beta: 0, gamma: .4 })).toBe(true);
-  expect(matchesSavedBias(setup.bias, { alpha: 4, beta: 0, gamma: 0 })).toBe(false);
-  expect(matchesSavedBias(setup.bias, { alpha: NaN, beta: 0, gamma: 0 })).toBe(false);
 });
 
 test('persistent storage shares recent setup across tabs and blocked persistence falls back to session storage', () => {
@@ -61,4 +58,23 @@ test('persistent storage shares recent setup across tabs and blocked persistence
   const recovered = createCalibrationMemory(persistent, () => 2000, firstTab);
   expect(recovered.save({ ...setup, strength: null })).toBe(true);
   expect(firstTab.getItem(CALIBRATION_STORAGE_KEY)).toBeNull();
+});
+
+test('recent setup resumes from a fresh moving stream without measuring that motion as zero', () => {
+  const resume = createCalibrationResume(100, setup.bias);
+  for (let i = 0; i < 10; i++) resume.push({ alpha: i % 2 ? 90 : -90, beta: 50, gamma: 20 }, 100 + i * 20);
+  expect(resume.read(280)).toEqual({ state: 'done', bias: setup.bias, progress: 1 });
+});
+
+test('resume requires finite live readings and cannot combine stale or interrupted samples', () => {
+  const resume = createCalibrationResume(0, setup.bias);
+  for (let i = 0; i < 15; i++) resume.push({ alpha: null, beta: 0, gamma: 0 }, i * 20);
+  expect(resume.read(300).state).toBe('no-readings');
+  for (let i = 0; i < 9; i++) resume.push(setup.bias, 400 + i * 20);
+  expect(resume.read(560).state).toBe('collecting');
+  resume.push(setup.bias, 1000);
+  expect(resume.read(1000).state).toBe('collecting');
+  for (let i = 1; i < 10; i++) resume.push(setup.bias, 1000 + i * 20);
+  expect(resume.read(1700).state).toBe('stale');
+  expect(resume.read(6000)).toEqual({ state: 'failed', reason: 'stale', progress: 0 });
 });

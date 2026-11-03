@@ -52,7 +52,6 @@ export function createBowlingMotionDetector() {
   let rotation = 0;
   let pitchRotation = 0;
   let slowSince = null;
-  let direction = 0;
   let finished = false;
   let twist = 0;
   let accelerationPeak = 0;
@@ -68,7 +67,7 @@ export function createBowlingMotionDetector() {
     const spin = Math.sign(twist) * Math.pow(turn, 1.5) * .55 || 0;
     return { power, spin, peakRotation: peak };
   }
-  function reset() { started = null; peak = 0; rotation = 0; pitchRotation = 0; slowSince = null; direction = 0; twist = 0; accelerationPeak = 0; }
+  function reset() { started = null; peak = 0; rotation = 0; pitchRotation = 0; slowSince = null; twist = 0; accelerationPeak = 0; }
   return {
     push(sample) {
       if (finished) return null;
@@ -78,24 +77,29 @@ export function createBowlingMotionDetector() {
       previous = sample.timeMs;
       // DeviceMotion rates are alpha=X (underhand pitch), beta=Y (wrist
       // roll), gamma=Z. DeviceOrientation angle names use a different order.
-      const pitch = Math.abs(sample.rotationAlpha);
+      // Screen up, top toward the TV: +X rotation lifts the top forward/up.
+      // A backswing has the opposite sign. It must neither arm a release nor
+      // contribute power, angle or curve to the following forward delivery.
+      if (sample.rotationAlpha < -35) { reset(); return null; }
+      const pitch = Math.max(0, sample.rotationAlpha);
       const speed = Math.hypot(sample.rotationAlpha, sample.rotationBeta, sample.rotationGamma);
+      let dt = Math.max(0, Math.min(gap, 100)) / 1000;
       if (started === null) {
         if (pitch < 100 || pitch < speed * .55) return null;
         started = sample.timeMs;
-        direction = Math.sign(sample.rotationAlpha);
+        dt = 0; // No angle is credited from before this forward segment.
       }
-      if (sample.timeMs - started > 1800 || (pitch > 100 && Math.sign(sample.rotationAlpha) !== direction)) {
+      if (sample.timeMs - started > 1800) {
         reset(); return null;
       }
       peak = Math.max(peak, pitch);
-      const dt = Math.max(0, Math.min(gap, 100)) / 1000;
       rotation += speed * dt;
       pitchRotation += pitch * dt;
       // Wrist movement after the forward delivery must not add extra hook.
-      if (pitch >= Math.max(100, peak * .45)) twist += sample.rotationBeta * dt;
+      const forwardPower = pitch >= Math.max(100, peak * .45);
+      if (forwardPower) twist += sample.rotationBeta * dt;
       const acceleration = sample.acceleration;
-      if (acceleration && ['x', 'y', 'z'].every(axis => Number.isFinite(acceleration[axis]))) {
+      if (forwardPower && acceleration && ['x', 'y', 'z'].every(axis => Number.isFinite(acceleration[axis]))) {
         accelerationPeak = Math.max(accelerationPeak, Math.min(30, Math.hypot(acceleration.x, acceleration.y, acceleration.z)));
       }
       slowSince = pitch < peak * .45 ? slowSince ?? sample.timeMs : null;

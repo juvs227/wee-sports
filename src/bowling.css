@@ -3,12 +3,25 @@ html, body { width: 100%; height: 100%; overflow: hidden; }
 body { margin: 0; background: #203a32; color: var(--text); font-family: var(--font); }
 #bowling-app { position: relative; width: 100%; height: 100dvh; min-height: 0; overflow: hidden; }
 #lane { position: absolute; inset: 0; overflow: hidden; }
-.bowling-heading h1 { margin: 3px 0 0; font-size: 13px; line-height: 1.3; font-weight: 800; }
-.bowling-pill { border: 1px solid var(--border); background: var(--accent-soft); color: var(--accent-ink); border-radius: 30px; padding: 6px 10px; font-weight: 800; white-space: nowrap; font-size: 11px; }
-.bowling-players { grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); }
-.bowling-status { justify-content: space-between; }
-#roll-status { font-weight: 800; }
-#pin-status { color: var(--text-muted); }
+.bowling-hud { width: min(720px, calc(100% - 24px)); border-radius: 14px; padding: 10px 14px 8px; }
+.bowling-heading { gap: 8px; margin-bottom: 4px; }
+.bowling-heading h1 { margin: 0; color: var(--accent-ink); font-size: 12px; line-height: 1.3; font-weight: 900; }
+.bowling-pill { color: var(--text-muted); font-weight: 700; white-space: nowrap; font-size: 11px; font-variant-numeric: tabular-nums; }
+.bowling-players { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 4px 14px; }
+.bowling-player { --seat-color: var(--p1); display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; min-height: 40px; padding: 4px 0 4px 9px; border-left: 3px solid var(--border); }
+.bowling-player[data-player='2'] { --seat-color: var(--p2); }
+.bowling-player[data-player='3'] { --seat-color: var(--p3); }
+.bowling-player[data-player='4'] { --seat-color: var(--p4); }
+.bowling-player[data-active='true'] { border-left-color: var(--seat-color); }
+.bowling-player__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 800; }
+.bowling-player__total { display: flex; flex: 0 0 auto; align-items: flex-start; gap: 2px; font-variant-numeric: tabular-nums; }
+.bowling-player__total strong { font-size: 23px; line-height: 1.2; font-weight: 900; }
+.bowling-player__total abbr { color: var(--accent-ink); font-weight: 800; text-decoration: none; }
+.bowling-hud__footer { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 0 14px; margin-top: 4px; border-top: 1px solid var(--border); padding-top: 4px; }
+.bowling-hud #roll-status { flex: 1 1 250px; margin: 0; font-size: 11px; font-weight: 700; overflow-wrap: anywhere; }
+.bowling-score-details { flex: 0 0 auto; }
+.bowling-score-details[open] { flex-basis: 100%; }
+.bowling-hud .bowling-score-details > summary { padding: 3px 0; }
 .bowling-scores { overflow-x: auto; margin-top: 8px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); }
 .bowling-scores table { border-collapse: collapse; width: 100%; text-align: center; min-width: 690px; font-size: 12px; }
 .bowling-scores th { padding: 7px 9px; }
@@ -25,14 +38,14 @@ body { margin: 0; background: #203a32; color: var(--text); font-family: var(--fo
 #bowling-app button { border: 1px solid var(--accent-bottom); border-radius: var(--radius-sm); background: linear-gradient(var(--accent-top), var(--accent-bottom)); color: white; padding: 10px 18px; font: 800 13px var(--font); cursor: pointer; }
 #bowling-app button:disabled { opacity: .45; cursor: default; }
 #bowling-app button:focus-visible, #bowling-app input:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
-#local-controls { position: absolute; z-index: 2; bottom: 12px; left: 50%; transform: translateX(-50%); width: min(760px, calc(100% - 24px)); padding: 12px 16px; border-radius: 16px; background: #fffffff2; box-shadow: var(--shadow); }
+#local-controls { position: absolute; z-index: 2; bottom: 12px; left: 50%; transform: translateX(-50%); width: min(760px, calc(100% - 24px)); padding: 12px 16px; border-radius: 16px; background: var(--surface-overlay); box-shadow: var(--shadow); }
 #local-controls h2 { margin: 0 0 6px; font-size: 13px; }
 .bowling-controls { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; }
 .bowling-controls label { display: flex; gap: 8px; align-items: center; font-size: 12px; font-weight: 800; }
 .bowling-controls input { width: 110px; accent-color: var(--accent-ink); }
 #bowling-app:has(#local-controls:not([hidden])) .bowling-help { display: none; }
-.bowling-results { position: absolute; z-index: 4; top: 50%; left: 50%; transform: translate(-50%, -30%); width: min(360px, calc(100% - 24px)); max-height: 55%; overflow-y: auto; padding: 22px; border-radius: 20px; background: #fffffff5; box-shadow: var(--shadow-lift); text-align: center; }
+.bowling-results { position: absolute; z-index: 4; top: 50%; left: 50%; transform: translate(-50%, -30%); width: min(360px, calc(100% - 24px)); max-height: 55%; overflow-y: auto; padding: 22px; border-radius: 20px; background: var(--surface-overlay); box-shadow: var(--shadow-lift); text-align: center; }
 .bowling-results h2 { margin: 0 0 8px; font-size: 22px; }
 .bowling-results ol { padding: 0; list-style: none; }
 .bowling-results li { margin: 6px; font-size: 14px; font-weight: 800; }
-@media (max-width: 540px) { .bowling-players { grid-template-columns: repeat(2, minmax(0, 1fr)); } .bowling-players > :only-child { grid-column: 1 / -1; } .bowling-pill { padding: 5px 8px; font-size: 10px; } .bowling-help { font-size: 10px; } }
+@media (max-width: 540px) { .bowling-hud { width: calc(100% - 14px); padding: 8px 10px; } .bowling-players { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 10px; } .bowling-players > :only-child { grid-column: 1 / -1; } .bowling-player__name { font-size: 11px; } .bowling-player__total strong { font-size: 21px; } .bowling-pill, .bowling-help { font-size: 10px; } }

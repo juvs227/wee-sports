@@ -1,4 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
+
+// Theme behavior is covered independently; these fixtures model game/relay APIs.
+vi.mock('../src/theme.js', () => ({}));
 import { webcrypto } from 'node:crypto';
 import { createInputId } from '../src/network/inputId.js';
 import { connectSwings } from '../src/network/swingConnection.js';

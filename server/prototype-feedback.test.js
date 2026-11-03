@@ -66,3 +66,19 @@ test('stroke feedback is forwarded only to the current phone seat and match', ()
   receive(result);
   expect(f.contentWindow.postMessage).toHaveBeenCalledExactlyOnceWith({ ...result, type: 'wee:stroke-result' }, window.location.origin);
 });
+
+
+test('switching sports keeps the same controller document and sends sport through its bridge', () => {
+  const frames = [];
+  React.createElement = (tag, props) => { if (tag === 'iframe') frames.push(props); return null; };
+  const first = mount({ controller: true, sport: 'tennis' });
+  expect(first.contentWindow.postMessage).toHaveBeenCalledWith(expect.objectContaining({
+    type: 'wee:lobby-state', sport: 'tennis',
+  }), window.location.origin);
+  PrototypeFrame({ code: 'ABCD', controller: true, player: 1, sport: 'bowling', gameId: 'match-b' });
+  expect(frames[1].src).toBe(frames[0].src);
+  expect(frames[1].key).toBe(frames[0].key);
+  PrototypeFrame({ code: 'ABCD', controller: false, sport: 'tennis' });
+  PrototypeFrame({ code: 'ABCD', controller: false, sport: 'bowling' });
+  expect(frames[2].src).not.toBe(frames[3].src);
+});

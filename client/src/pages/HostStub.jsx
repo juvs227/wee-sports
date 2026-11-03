@@ -11,6 +11,7 @@ import { QrCode } from '../components/QrCode.jsx';
 import { TvCountdown } from '../components/TvCountdown.jsx';
 import { TvReady } from '../components/TvReady.jsx';
 import { TvTutorial } from '../components/TvTutorial.jsx';
+import { ThemeToggle } from '../components/ThemeToggle.jsx';
 import { errorText } from '../lib/errors.js';
 import { usePhoneLink } from '../lib/usePhoneLink.js';
 import { request } from '../lib/socket.js';
@@ -144,7 +145,7 @@ export default function HostStub() {
 
   return (
     <main className="stub host-lobby">
-      <p className="eyebrow">TV lobby</p>
+      <div className="session-heading"><p className="eyebrow">TV lobby</p><ThemeToggle /></div>
       <h1>{sportName(lobby.sport)} lobby</h1>
       <p className="stub__muted">{lobby.sport === 'bowling' ? 'One to four players. Take turns rolling through ten frames, with your phone as the controller.' : 'One or two players. Bring a friend for head-to-head tennis, or play solo against the bot.'}</p>
       {storageWarning ? <p className="alert">Browser storage is unavailable. Keep this tab open to preserve your session.</p> : null}

@@ -1,6 +1,6 @@
 .controller-page [hidden] { display: none !important; }
 .controller-page .sensor-status { border-left: 3px solid var(--accent-bottom); padding: 8px 12px; background: var(--accent-soft); border-radius: 0 8px 8px 0; font-size: .88rem; }
-.controller-page .sensor-status[data-state="error"] { border-color: #be5a36; background: #fff1e8; color: #73371e; }
+.controller-page .sensor-status[data-state="error"] { border-color: var(--danger); background: var(--danger-soft); color: var(--danger); }
 .controller-page progress { width: 100%; height: 12px; accent-color: var(--accent-bottom); margin: 8px 0; }
 .controller-page .range-label { display: flex; justify-content: space-between; gap: 10px; font-weight: 800; margin-top: 18px; }
 .controller-page .range-label output { color: var(--accent-ink); font-weight: 600; }

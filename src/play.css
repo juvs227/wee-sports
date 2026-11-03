@@ -86,7 +86,7 @@ select {
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
     min-height: 46px;
-    background: white;
+    background: var(--surface);
     padding: 10px 16px;
 }
 
@@ -147,8 +147,8 @@ summary {
 .game-panel label { display: block; margin: 6px 0; }
 .game-panel #feedback { color: var(--text-muted); }
 .game-panel #serve-status { padding: 3px 8px; border-radius: var(--radius-pill); font-weight: 800; }
-.game-panel #serve-status.serving-p1 { background: color-mix(in srgb, var(--p1) 14%, white); color: color-mix(in srgb, var(--p1) 65%, var(--text)); }
-.game-panel #serve-status.serving-p2 { background: color-mix(in srgb, var(--p2) 14%, white); color: color-mix(in srgb, var(--p2) 65%, var(--text)); }
+.game-panel #serve-status.serving-p1 { background: color-mix(in srgb, var(--p1) 14%, var(--surface)); color: color-mix(in srgb, var(--p1) 65%, var(--text)); }
+.game-panel #serve-status.serving-p2 { background: color-mix(in srgb, var(--p2) 14%, var(--surface)); color: color-mix(in srgb, var(--p2) 65%, var(--text)); }
 .game-panel #serve-status.rally { background: var(--surface-sunk); color: var(--text-muted); }
 .game-panel #serve-status.paused { background: var(--warn-soft); color: var(--warn-ink); }
 .game-panel #point-result { font-weight: 800; color: var(--accent-ink); }

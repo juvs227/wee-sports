@@ -15,7 +15,9 @@ export function PrototypeFrame({ code, controller = false, player = 1, players =
   const [height, setHeight] = useState(1050);
   const connection = useConnection();
   const room = `lobby-${code}`;
-  const src = `/${controller ? 'controller' : sport === 'bowling' ? 'bowling' : 'game'}.html?room=${encodeURIComponent(room)}&lobby=${code}&player=${player}&sport=${sport}`;
+  // A sport change is a bridge message, not a controller navigation: keep the
+  // phone’s sensor permission and verified setup alive for the next game.
+  const src = `/${controller ? 'controller' : sport === 'bowling' ? 'bowling' : 'game'}.html?room=${encodeURIComponent(room)}&lobby=${code}&player=${player}${controller ? '' : `&sport=${sport}`}`;
   function publishState() {
     const post = message => frame.current?.contentWindow?.postMessage(message, window.location.origin);
     post({ type: 'wee:lobby-state', paused: paused || connection !== 'online', connected: connection === 'online', players, playing, sport, gameId });

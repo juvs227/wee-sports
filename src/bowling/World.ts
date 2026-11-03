@@ -110,7 +110,9 @@ export class BowlingWorld {
     if (state.currentPlayer !== roll.player) return {ok: false, error: 'Wait for your turn.'};
     if (this.rolling) return {ok: false, error: 'Wait for the ball and pins to settle.'};
     if (!validRoll(roll)) return {ok: false, error: 'Choose a valid aim, power, and spin.'};
-    if (!this.physics.roll(roll)) return {ok: false, error: 'This delivery could not start.'};
+    // Inputs use the player's left/right. This camera faces world +Z, so
+    // screen-right is world -X. Keep the physics' world coordinates unchanged.
+    if (!this.physics.roll({...roll, aim: -roll.aim, spin: -roll.spin})) return {ok: false, error: 'This delivery could not start.'};
     this.rolling = true;
     this.trailCount = 0;
     this.trail.geometry.setDrawRange(0, 0);
@@ -130,7 +132,7 @@ export class BowlingWorld {
     this.aimLine?.geometry.dispose();
     if (this.aimLine) {
       this.aimLine.geometry = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(0, 0.012, 0.35), new THREE.Vector3(Math.tan(this.aim * 0.06) * 7, 0.012, 7.35),
+        new THREE.Vector3(0, 0.012, 0.35), new THREE.Vector3(-Math.tan(this.aim * 0.06) * 7, 0.012, 7.35),
       ]);
       this.aimLine.computeLineDistances();
     }

@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
+// Theme behavior is covered independently; these fixtures model game/relay APIs.
+vi.mock('../src/theme.js', () => ({}));
+
 const runtime = vi.hoisted(() => ({ world: null, close: vi.fn(),
   sound: { mountButton: vi.fn(), play: vi.fn(), setActive: vi.fn(), dispose: vi.fn() } }));
 vi.mock('../src/audio/sportsAudio', () => ({ createSportsAudio: () => runtime.sound }));

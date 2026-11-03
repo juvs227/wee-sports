@@ -55,8 +55,34 @@ export function createCalibrationMemory(storage, now = Date.now, fallbackStorage
   return { read, save, clear };
 }
 
-/** Fresh still readings must agree before a saved setup can be reused. */
-export function matchesSavedBias(saved, current) {
-  return validBias(saved) && validBias(current) &&
-    Math.hypot(...axes.map(axis => saved[axis] - current[axis])) <= 2;
+/** Resume a recent gyro zero once a real sensor stream is flowing again.
+ * Moving readings are expected when a player changes games while holding the
+ * phone: never mistake those readings for a new stationary zero. This verifies
+ * delivery, not stillness, and retains the previously verified bounded bias.
+ */
+export function createCalibrationResume(startedAt, bias) {
+  let firstReading = null;
+  let lastReading = null;
+  let count = 0;
+  return {
+    push(rate, at) {
+      if (!Number.isFinite(at) || at < startedAt ||
+          !axes.every(axis => Number.isFinite(rate?.[axis]))) return;
+      if (lastReading === null || at <= lastReading || at - lastReading > 250) {
+        firstReading = at; count = 0;
+      }
+      lastReading = at;
+      count++;
+    },
+    read(now) {
+      const fresh = lastReading !== null && now >= lastReading && now - lastReading < 500;
+      const duration = fresh ? lastReading - firstReading : 0;
+      if (validBias(bias) && fresh && count >= 10 && duration >= 150) {
+        return { state: 'done', bias: { ...bias }, progress: 1 };
+      }
+      const reason = lastReading === null ? 'no-readings' : !fresh ? 'stale' : 'collecting';
+      if (now - startedAt >= 6000) return { state: 'failed', reason, progress: 0 };
+      return { state: reason, progress: fresh ? Math.min(count / 10, duration / 150, 1) : 0 };
+    },
+  };
 }

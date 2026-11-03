@@ -26,6 +26,7 @@ import { sportName } from '../lib/sports.js';
 import { PrototypeFrame } from '../components/PrototypeFrame.jsx';
 import { usePhoneLink } from '../lib/usePhoneLink.js';
 import { PhoneSoundToggle } from '../components/PhoneSoundToggle.jsx';
+import { ThemeToggle } from '../components/ThemeToggle.jsx';
 
 const NAME_KEY = 'wee:name';
 
@@ -135,6 +136,7 @@ export default function JoinStub() {
             </p>
           </div>
           <PhoneSoundToggle lobby={lobby} disabled={reconnecting} />
+          <ThemeToggle />
         </div>
         {playing ? null : phase === PHASES.LOBBY ? (
           <p className="stub__status">Waiting for a player to join the P1 controller seat…</p>
@@ -165,7 +167,7 @@ export default function JoinStub() {
 
   return (
     <main className="stub">
-      <p className="eyebrow">Wee Sports · phone controller</p>
+      <div className="session-heading"><p className="eyebrow">Wee Sports · phone controller</p><ThemeToggle /></div>
       <h1>Join a game</h1>
       {ended ? <p className="alert" role="alert">{ended === 'replaced'
         ? 'This controller is active in another tab. Continue there or reload this page.'

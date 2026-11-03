@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createCalibrationMemory, CALIBRATION_STORAGE_KEY } from '../src/controller/calibrationMemory.js';
 
 const relay = vi.hoisted(() => ({ sendSwing: vi.fn(() => true), options: null }));
+vi.mock('../src/theme.js', () => ({}));
 vi.mock('../src/network/swingConnection.js', () => ({ connectSwings: options => { relay.options = options; return relay; } }));
 let elements;
 let listeners;
@@ -123,7 +124,61 @@ async function calibrate() {
   for (let i = 0; i < 110; i++) tick();
 }
 
-test('a controller reload reuses calibration after fresh still readings without a new permission request', async () => {
+test('live sport switching keeps motion setup and permission while discarding the old sport input', async () => {
+  await import('../src/controller/main.js');
+  await calibrate();
+  state({ playing: true, paused: false, sport: 'tennis', gameId: 'tennis-one' });
+  tick(20, { alpha: 300, beta: 600, gamma: 0 }); // Partial tennis stroke.
+  messages.length = 0;
+  state({ playing: false, paused: true, sport: 'bowling', gameId: 'bowling-one' });
+  expect(elements.get('controller-title').textContent).toBe('Your bowling ball');
+  expect(elements.get('motion-visual').dataset.sport).toBe('bowling');
+  expect(elements.get('setup-panel').hidden).toBe(true);
+  expect(elements.get('calibration-progress').hidden).toBe(true);
+  expect(messages.filter(message => message.type === 'wee:controller-setup')).toEqual([
+    { type: 'wee:controller-setup', setup: 'motion' },
+  ]);
+  expect(permission).toHaveBeenCalledOnce();
+  state({ playing: true, paused: false, sport: 'bowling', gameId: 'bowling-one' });
+  emit('message', { source: parent, origin: location.origin, data: {
+    type: 'wee:bowling-state', phase: 'ready', currentPlayer: 1, canRoll: true,
+  } });
+  elements.get('arm-roll').onclick();
+  expect(elements.get('arm-roll').hidden).toBe(true);
+  state({ playing: true, paused: false, sport: 'tennis', gameId: 'tennis-two' });
+  for (let i = 0; i < 40; i++) tick();
+  expect(elements.get('controller-title').textContent).toBe('Your racket');
+  expect(elements.get('motion-visual').dataset.sport).toBe('tennis');
+  expect(elements.get('setup-panel').hidden).toBe(true);
+  expect(elements.get('strength-panel').hidden).toBe(true);
+  expect(permission).toHaveBeenCalledOnce();
+  expect(relay.sendSwing).not.toHaveBeenCalled();
+  expect(messages.filter(message => message.type === 'wee:player-roll')).toHaveLength(0);
+});
+
+test('new address setup uses one permission tap then automatically verifies fresh still readings', async () => {
+  await import('../src/controller/main.js');
+  expect(elements.get('calibrate').textContent).toBe('Enable motion');
+  await elements.get('enable').onclick();
+  expect(permission).toHaveBeenCalledOnce();
+  expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBeNull();
+  for (let i = 0; i < 110; i++) tick();
+  expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBe('motion');
+  expect(elements.get('setup-panel').hidden).toBe(true);
+  expect(elements.get('strength-panel').hidden).toBe(true);
+  elements.get('toggle-settings').onclick();
+  expect(elements.get('strength-panel').hidden).toBe(false);
+});
+
+test('already permitted sensors can start initial setup without a separate calibration tap', async () => {
+  await import('../src/controller/main.js');
+  for (let i = 0; i < 115; i++) tick();
+  expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBe('motion');
+  expect(permission).not.toHaveBeenCalled();
+  expect(elements.get('setup-panel').hidden).toBe(true);
+});
+
+test('a controller reload reuses calibration after fresh sensor readings without a new permission request', async () => {
   await import('../src/controller/main.js');
   await calibrate();
   expect(window.sessionStorage.getItem(CALIBRATION_STORAGE_KEY)).not.toBeNull();
@@ -150,7 +205,7 @@ test('a controller reload reuses calibration after fresh still readings without 
   expect(permission).toHaveBeenCalledOnce();
 });
 
-test('a new controller tab for another sport restores origin storage only after new live verification', async () => {
+test('closing a tennis lobby and joining bowling reuses origin setup while the phone is moving', async () => {
   const persistent = new Map();
   window.localStorage = { getItem: key => persistent.get(key) ?? null,
     setItem: (key, value) => persistent.set(key, value), removeItem: key => persistent.delete(key) };
@@ -167,8 +222,9 @@ test('a new controller tab for another sport restores origin storage only after 
   state({ playing: false, gameId: 'new-bowling-match' });
   expect(elements.get('calibrate').textContent).toBe('Resume motion');
   expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBeNull();
-  for (let i = 0; i < 30; i++) tick();
+  for (let i = 0; i < 30; i++) tick(20, { alpha: i % 2 ? 100 : -100, beta: 70, gamma: -40 });
   expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBe('motion');
+  expect(elements.get('setup-panel').hidden).toBe(true);
   expect(permission).toHaveBeenCalledOnce();
 });
 
@@ -191,7 +247,7 @@ test('cached setup never substitutes for permission or live sensors and a Resume
   await elements.get('calibrate').onclick();
   for (let i = 0; i < 30; i++) tick();
   expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBe('motion');
-  expect(elements.get('tune-strength').textContent).toBe('Tune again');
+  expect(elements.get('tune-strength').textContent).toBe('Retune power');
   expect(elements.get('strength-status').textContent).toContain('restored');
 });
 
@@ -246,15 +302,20 @@ test('an older permission promise cannot clear the pending state or start setup 
   expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBe('motion');
 });
 
-test('saved calibration with changed sensor zero falls back to full still calibration and clears old power', async () => {
+test('resuming while moving retains the saved stationary zero and its original expiry', async () => {
   savedMotionSetup({ hand: 'Right', strength: { hand: 'Right', Forehand: 1.2, Backhand: 1.1 } });
+  const saved = createCalibrationMemory(window.sessionStorage).read();
   await import('../src/controller/main.js');
-  for (let i = 0; i < 35; i++) tick(20, { alpha: 4, beta: 0, gamma: 0 });
-  expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBeNull();
-  expect(window.sessionStorage.getItem(CALIBRATION_STORAGE_KEY)).toBeNull();
-  for (let i = 0; i < 110; i++) tick(20, { alpha: 4, beta: 0, gamma: 0 });
+  for (let i = 0; i < 35; i++) tick(20, { alpha: i % 2 ? 100 : -100, beta: 80, gamma: -40 });
   expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBe('motion');
-  expect(JSON.parse(window.sessionStorage.getItem(CALIBRATION_STORAGE_KEY)).strength).toBeNull();
+  const resumed = createCalibrationMemory(window.sessionStorage).read();
+  expect(resumed.bias).toEqual(saved.bias);
+  expect(resumed.strength).toEqual(saved.strength);
+  expect(resumed.verifiedAt).toBe(saved.verifiedAt);
+  await elements.get('calibrate').onclick(); // Explicit reset still requires a new still sample.
+  for (let i = 0; i < 110; i++) tick(20, { alpha: 4, beta: 0, gamma: 0 });
+  expect(createCalibrationMemory(window.sessionStorage).read().bias.alpha).toBe(4);
+  expect(createCalibrationMemory(window.sessionStorage).read().strength).toBeNull();
 });
 
 test('changing the selected hand before verification prevents restoring the previous hand profile', async () => {
@@ -263,14 +324,14 @@ test('changing the selected hand before verification prevents restoring the prev
   elements.get('hand').value = 'Right'; elements.get('hand').onchange();
   for (let i = 0; i < 30; i++) tick();
   expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBeNull();
-  expect(elements.get('calibrate').textContent).toBe('Calibrate');
+  expect(elements.get('calibrate').textContent).toBe('Enable motion');
   expect(window.sessionStorage.getItem(CALIBRATION_STORAGE_KEY)).toBeNull();
 });
 
-test('saved setup verification rejects moving samples and cancels when the phone is hidden', async () => {
+test('saved setup resume rejects missing readings and cancels when the phone is hidden', async () => {
   savedMotionSetup();
   await import('../src/controller/main.js');
-  for (let i = 0; i < 30; i++) tick(20, { alpha: i % 2 ? -10 : 10, beta: 0, gamma: 0 });
+  for (let i = 0; i < 30; i++) tick(20, { alpha: null, beta: null, gamma: null });
   expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBeNull();
   document.hidden = true; documentListeners.get('visibilitychange')();
   for (let i = 0; i < 30; i++) tick();
@@ -285,7 +346,7 @@ test('saved setup verification rejects moving samples and cancels when the phone
 test('optional strength rehearsal uses real completed strokes, pauses setup, and never sends a match swing', async () => {
   await import('../src/controller/main.js');
   await calibrate();
-  expect(elements.get('strength-panel').hidden).toBe(false);
+  expect(elements.get('strength-panel').hidden).toBe(true);
   state({ playing: true, paused: false });
   elements.get('toggle-settings').onclick();
   elements.get('tune-strength').onclick();
@@ -299,7 +360,7 @@ test('optional strength rehearsal uses real completed strokes, pauses setup, and
   expect(elements.get('strength-progress').value).toBe(3);
   for (let i = 0; i < 3; i++) rehearsalSwing(-1);
   expect(elements.get('strength-status').textContent).toContain('saved');
-  expect(elements.get('tune-strength').textContent).toBe('Tune again');
+  expect(elements.get('tune-strength').textContent).toBe('Retune power');
   expect(relay.sendSwing).not.toHaveBeenCalled();
   expect(messages.at(-1)).toEqual({ type: 'wee:controller-setup', setup: 'motion' });
   state({ playing: true, paused: false });
@@ -311,7 +372,7 @@ test('optional strength rehearsal uses real completed strokes, pauses setup, and
   elements.get('hand').value = 'Left';
   elements.get('hand').onchange();
   expect(elements.get('strength-status').textContent).toContain('Playing hand changed');
-  expect(elements.get('tune-strength').textContent).toBe('Tune comfortable swings');
+  expect(elements.get('tune-strength').textContent).toBe('Tune power');
 });
 
 test('rehearsal is optional, cancels cleanly on hidden page, and recalibration clears its profile', async () => {
@@ -331,7 +392,7 @@ test('rehearsal is optional, cancels cleanly on hidden page, and recalibration c
   document.hidden = false;
   documentListeners.get('visibilitychange')();
   await calibrate();
-  expect(elements.get('strength-status').textContent).toContain('Default strength');
+  expect(elements.get('strength-status').textContent).toContain('Default power');
 });
 
 test('tennis phone shows whose serve it is and stops input after a match', async () => {
