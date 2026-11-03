@@ -5,6 +5,7 @@ import { connectSwings } from './network/swingConnection.js';
 import { createInputId } from './network/inputId.js';
 import '../client/src/styles/tokens.css';
 import './play.css';
+import { Menu } from './Overlay/Menu';
 
 async function main(): Promise<void> {
     const container = document.querySelector('#scene-container');

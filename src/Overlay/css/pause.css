@@ -1,0 +1,33 @@
+#pause-btn {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: rgba(0, 0, 0, 0.3);
+  color: #fff;            /* the SVG's fill="currentColor" picks this up */
+  border: 2px solid #fff;
+  border-radius: 50%;
+  cursor: pointer;
+  z-index: 15;
+}
+
+#pause-btn:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+#pause-btn .icon-play {
+  display: none;
+}
+
+#pause-btn.is-paused .icon-pause {
+  display: none;
+}
+
+#pause-btn.is-paused .icon-play {
+  display: block;
+}

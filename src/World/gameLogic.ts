@@ -22,6 +22,8 @@ import { sweptRacketContact, contactWindowCrossed } from './components/racketCon
 import { ScoreSystem, type Score } from './scoreSystem';
 
 const AUTO_TRACKING_SPEED = 0.75;
+export const PLAYER1_START_Z = 10;
+export const PLAYER2_START_Z = -10;
 const PHYSICS_STEP = 1 / 120;
 // A phone reports a stroke after it has begun. Buffer a slightly early input,
 // then time the authored animation to the incoming ball; contact still has to
@@ -266,6 +268,13 @@ export class GameLogic {
         this.hasShotTarget = false;
         this.feedback('Round started · Player 1 serve');
         this.playerServe();
+    }
+
+    public resetRound(): void {
+        this.scoreSystem.reset();
+        this.player1.setPosition(0, PLAYER1_START_Z);
+        this.player2.setPosition(0, PLAYER2_START_Z);
+        this.startRound();
     }
 
     private hasShotTarget = false;
