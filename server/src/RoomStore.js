@@ -36,7 +36,7 @@ import {
   isGameHit,
   isController,
   playerCapacity,
-} from '@wee/shared/protocol.js';
+} from '../../shared/protocol.js';
 
 const MAX_CODE_ATTEMPTS = 50;
 
