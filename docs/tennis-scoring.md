@@ -107,6 +107,21 @@ repeatable aim, tie-break rotation, quick/full completion, practice score preser
 left/right-hand contact, diagnostic ID ownership and existing frame-rate regressions.
 No browser, game server, tunnel or physical phone session is launched by those tests.
 
+### Rules review — 2 November 2026
+
+The integration review checked the implemented points/games/sets transitions,
+tie-break service rotation, first and double faults, service lets, and completed
+match guards against the existing tests and the
+[ITF scoring and court-rules explanation](https://www.world.tennis/en/about-us/organisation/tennis-glossary/).
+No additional numerical scoring defect was established in that review. The
+team's gravity, bounce, racket contact and assisted shot parameters were retained.
+
+This is a review of the supported game rules and automated state transitions,
+not a certification of every professional tennis rule or real-world physics.
+Existing tests cannot establish physical phone latency, sensor accuracy, or how
+natural a swing feels. The unimplemented officiating and simulation features
+listed above remain outside this review.
+
 References:
 - [USTA serving rules](https://www.usta.com/en/home/improve/tips-and-instruction/national/tennis-serving-rules.html): diagonal service boxes, alternating sides, two attempts and lets.
 - [ITF-hosted 2026 ATP rulebook, Rules of Tennis](https://www.itftennis.com/media/15604/atp-2026-rulebook.pdf): court/net dimensions; scoring; service order; lets; ball on a line; loss of point.

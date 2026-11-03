@@ -93,3 +93,21 @@ test('the tenth-frame fill spare is announced once and its cumulative total is r
   expect(final.players[0].frameScores[9]).toBe(287);
   expect(awaitingBonus(final.players[0].frames[9], 9, final.players[0].frameScores[9])).toBe(false);
 });
+
+test('a strike on the spare-earned final rack matches the X mark and is announced once', () => {
+  const match = new BowlingMatch([{player: 1, name: 'Yit'}]);
+  for (let roll = 0; roll < 18; roll++) match.record([...FULL_RACK]);
+  const calls = createRollCallouts();
+  calls.observe(match.getState(), false);
+  match.record([7, 8, 9, 10]);
+  expect(calls.observe(match.getState(), false)).toBeNull();
+  match.record([]);
+  expect(calls.observe(match.getState(), false)).toEqual({kind: 'spare', player: 'Yit'});
+  match.record([]);
+  const final = match.getState();
+  expect(calls.observe(final, false)).toEqual({kind: 'strike', player: 'Yit'});
+  expect(calls.observe(final, false)).toBeNull();
+  expect(frameMarks(final.players[0].frames[9], 9)).toEqual(['6', '/', 'X']);
+  expect(final.players[0].total).toBe(20);
+  expect(final.complete).toBe(true);
+});

@@ -138,3 +138,24 @@ duplicates, host acceptance/rejection, room isolation and reconnection.
 Run `npm run compile`, `npm test`, `npm run check`, and `npm run build`.
 Browser testing supplements these checks; physical iPhone/Android gyroscope
 permissions and the feel of a real swing still require device playtesting.
+
+### Rules review — 2 November 2026
+
+The integration review checked strike/spare bonuses, tenth-frame fill deliveries,
+remaining-pin handling and tied final totals against the current implementation,
+its tests, and [USBC Rules 2, 6 and 7](https://images.bowl.com/bowl/media/assets/usbc/rules/general%20pdfs/usbc-playing-rulebook-26-27.pdf).
+The [USBC scoring examples](https://bowl.com/keeping-score) also explain why a
+spare earns one fill delivery and a strike earns two, including the tenth frame.
+
+Fixed one presentation inconsistency: a tenth-frame spare followed by ten pins
+(`6 / X` or `– / X`) already displayed X and scored correctly, but its result
+metadata did not trigger the strike announcement. The final fresh-rack strike
+now announces once and still ends the game. A gutter followed by ten remains a
+spare, including `X – /`; no extra delivery or bonus is awarded.
+
+Regression tests cover final-fill strike/spare classification, unchanged totals,
+rejected extra deliveries, matching scorecard marks and once-only callouts.
+The targeted scoring, callout, feedback and sound suites passed 42 tests after
+this fix. No physics constants or numerical scoring formulas changed. This
+review does not establish real-device motion quality, equipment certification,
+or professional officiating accuracy; the arcade approximations above remain.
