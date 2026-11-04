@@ -45,7 +45,10 @@ beforeEach(() => {
     querySelector: () => ({}),
     createElement: () => ({ setAttribute: vi.fn() }),
     body: { append: vi.fn() },
-    getElementById(id) { if (!elements.has(id)) elements.set(id, { checked: true }); return elements.get(id); },
+    getElementById(id) {
+      if (!elements.has(id)) elements.set(id, { checked: true, dataset: {}, setAttribute: vi.fn() });
+      return elements.get(id);
+    },
   });
   vi.stubGlobal('location', { origin: 'https://wee.test', href: 'https://wee.test/game.html?room=lobby-SOLO', search: '?room=lobby-SOLO' });
   vi.stubGlobal('history', { replaceState: vi.fn() });
@@ -60,6 +63,24 @@ const state = overrides => listeners.get('message')({ source: parent, origin: lo
 const command = (payload, event = {}) => listeners.get('message')({ source: parent, origin: location.origin,
   data: { type: 'wee:game-command', command: { id: 'command-1', gameId: 'solo-match', ...payload } }, ...event });
 const commandResults = () => parent.postMessage.mock.calls.filter(([message]) => message.type === 'wee:game-command-result').map(([message]) => message);
+
+test('serving indicators switch filled and outlined states with accessible labels', async () => {
+  await import('../src/main.ts');
+  state({});
+  const first = document.getElementById('server-1');
+  const second = document.getElementById('server-2');
+  expect(first.dataset.serving).toBe('true');
+  expect(second.dataset.serving).toBe('false');
+  expect(first.setAttribute).toHaveBeenLastCalledWith('aria-label', 'Solo player: Serving');
+  runtime.world.score.server = 'player2';
+  vi.advanceTimersByTime(250);
+  expect(first.dataset.serving).toBe('false');
+  expect(second.dataset.serving).toBe('true');
+  runtime.world.score.matchWinner = 'player2';
+  vi.advanceTimersByTime(250);
+  expect(first.dataset.serving).toBe('false');
+  expect(second.dataset.serving).toBe('false');
+});
 
 test('solo contact notifications use the current lobby match and stop while paused', async () => {
   await import('../src/main.ts');
