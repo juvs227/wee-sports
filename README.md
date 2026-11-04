@@ -115,3 +115,74 @@ overhead, but does not alter motion detection thresholds or network latency.
 For phone sensors, keep using a trusted HTTPS tunnel or deployment and provide
 its origin through `PUBLIC_GAME_URL` when needed. The bottom tennis swing-status
 pill is hidden; scores and the serving marker remain in the top scoreboard.
+
+## Use Case: Join and play a motion-controlled game
+
+### Primary actors: Host and player
+
+### Goal: Players join a shared game using their phones as controllers, complete the game, and view the results.
+
+### System: Wee Sports
+
+### Trigger: The host selects "create room"
+
+### Preconditions: The host has opened the application, and players have network access to the shared session
+
+### Basic Scenario
+
+Host first chooses to create the room
+
+1. The host creates a room, and the system/website displays a QR code
+2. Players scan the QR code, enter their names, and join the room.
+3. The system displays the connected players on the host's lobby screen, host selects a game.
+4. Players grant motion permission, complete controller calibration instructions, and mark themselves ready.
+5. Once all players are ready, host starts the game.
+6. Players move their phones to perform actions in selected game.
+7. The system responds to player input, displays corresponding game actions, and updates scores. Steps 6 - 7 repeated until the game is finished.
+8. The system identifies a winner based on game point counts, and displays this information.
+9. Results are displayed, participants may replay, return to lobby, or leave the game.
+
+### Variation flows
+
+2.1. Join using a room code
+2.1a. Player enters room manually instead of entering a room code
+2.1b. System validates code, player enters their name, and joins
+2.1c. Continue at step 3
+
+4.1. Use button controllers where supposed
+4.1a. Player makes decision on using button controller instead of motion controller
+4.1b. System displays supported controls, player marks themselves ready
+4.1c. Continue at step 5
+
+7.1. Tied scores
+7.1a. System applies the tied game rules
+7.1b. If ties are allowed, displays tied players. Else, return to step 6, repeat until game outcome is determined.
+
+### Exception flows
+
+2.1. Expired or invalid room code
+2.1a. The system displays an error and asks player to enter a valid code
+2.1b. Return to step 2, or player chooses to leave and their participation ends
+
+4.1. Motion permission denied or sensors unavailable
+4.1a. The system explains the issue and offers a retry
+4.1b. Return to step 4 or follow variation 4.1
+4.1c. If neither option succeeds, the player cannot become ready. They may retry or choose to leave.
+
+4.2 Calibration fails
+4.2a. System provides instructions and asks player to calibrate.
+4.2b. Return to step 4. Player cannot be ready until controller setup succeeds.  
+
+5.1. A required player is not ready
+5.1a. The system keeps the game in the lobby and identifies players who are not ready.
+5.1b. Return to step 4 for players that are not ready. Continue at step 5 once required players are ready.
+
+6.1. Player disconnects
+6.1a. System pauses the game.
+6.1b. The player reconnects and restores controller readiness, recalibrating if needed.
+6.1c. Resume step 6 only after connection and controller readiness are reachieved.
+6.1d. If connection period expires, system applies the 60-second session-expiration policy where their seat is removed,, and the room closes.  
+
+Any step- User ends session
+a. The system notifies the players and closes the room.
+b. Game ends without completion, active players returned to lobby.
