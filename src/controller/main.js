@@ -1,5 +1,5 @@
-import { createSwingStream } from './swingStream.js';
-import { createSimpleSwingStream, createBowlingMotionDetector, bowlingTiltAim } from './motionGestures.js';
+import { createSwingDetector } from './classifySwing.js';
+import { createBowlingMotionDetector, bowlingTiltAim } from './motionGestures.js';
 import { tennisPower, tennisStrength } from './tennisPower.js';
 import { createStrengthRehearsal } from './strengthRehearsal.js';
 import { connectSwings } from '../network/swingConnection.js';
@@ -342,26 +342,21 @@ for (const id of ['aim', 'spin', 'power']) {
       : `${value < 0 ? 'Left' : 'Right'} ${Math.round(Math.abs(value) * 100)}%`;
   };
 }
-function analyze() {
+function analyze(sample) {
   if (!recording || bowling) return;
-  for (const swing of stream?.analyze() ?? []) {
-    const power = tennisPower(swing.peakRotation, strengthProfile, swing.label);
-    element('latest').textContent = swing.label === 'Unknown' ? 'Try a clearer swing' : `${swing.label} · ${tennisStrength(power)}`;
-    feedbackUntil = performance.now() + 1500;
-    element('timing').textContent = swing.simple ? 'Simple motion mapping · your selected shot.' : swing.early || swing.fast
-      ? `Recognized in ${Math.round(swing.detectionDelayMs)} ms, before network and game response.`
-      : 'Stroke classified after completion.';
-    const recognitionMs = Number.isFinite(swing.detectionDelayMs) ? swing.detectionDelayMs
-      : Number.isFinite(swing.startMs) ? performance.now() - started - swing.startMs : undefined;
-    if ((swing.complete || swing.early || swing.fast) && swing.label !== 'Unknown') send(swing.label, power, recognitionMs);
-  }
+  const swing = stream?.push(sample);
+  if (!swing) return;
+  const power = tennisPower(swing.peakRotation, strengthProfile, swing.label);
+  element('latest').textContent = `${swing.label} · ${tennisStrength(power)}`;
+  feedbackUntil = performance.now() + 1500;
+  send(swing.label, power);
 }
 function stop(message = 'Motion paused. Tap Resume motion when you are ready.', user = false) {
   if (user) motionWanted = false;
   const wasRecording = recording;
   recording = false;
   lastTiltReading = null;
-  stream = null; // Never flush an unfinished gesture when stopping or disconnecting.
+  stream = null;
   cancelArmedRoll();
   if (wasRecording || user) element('motion').textContent = message;
   controls();
@@ -369,10 +364,7 @@ function stop(message = 'Motion paused. Tap Resume motion when you are ready.', 
 function startMotion() {
   if (!bowling && tennisState?.phase === 'complete') return;
   if (recording || settingsOpen || rehearsal || !motionWanted || !bias || buttonMode || calibration || !enabled || !gameActive || lobbyPaused || !connected || document.hidden || !recentReadings()) return;
-  const mode = element('stroke-mode').value;
-  stream = bowling ? null : mode === 'auto' ? createSwingStream(element('hand').value, {
-    early: element('response').value === 'early', fast: element('response').value === 'fast', suppressReturns: element('suppress-returns').checked,
-  }) : createSimpleSwingStream(mode);
+  stream = bowling ? null : createSwingDetector();
   started = performance.now();
   recording = true;
   element('latest').textContent = '';
@@ -516,9 +508,11 @@ function motion(event) {
   }
   calibration?.push(rate, now);
   if ((!recording && !rehearsal) || !bias) return;
+  const ag = event.accelerationIncludingGravity
+  const accelMag = ag ? Math.hypot(ag.x ?? 0, ag.y ?? 0, ag.z ?? 0) : 0
   const sample = { timeMs: now - (rehearsal ? rehearsalStarted : started), rotationAlpha: rate.alpha - bias.alpha,
     rotationBeta: rate.beta - bias.beta, rotationGamma: rate.gamma - bias.gamma,
-    acceleration: event.acceleration };
+    acceleration: event.acceleration, accelMag };
   if (rehearsal) {
     rehearsalStream.push(sample);
     for (const swing of rehearsalStream.analyze()) {
@@ -544,7 +538,7 @@ function motion(event) {
       showBowlingReadout(bowlingReadout);
     }
     if (result) roll(result.power, result.spin);
-  } else { stream.push(sample); if (element('response').value !== 'complete') analyze(); }
+  } else { analyze(sample); }
 }
 function currentSetupIntent(intent) { return intent === setupIntent && pageActive && !document.hidden; }
 async function requestMotion(intent) {
@@ -663,7 +657,7 @@ function sensorStatus(now) {
   } else status.textContent = enabled ? 'Waiting for sensor readings…' : 'Tap Enable motion to allow sensors. Setup completes automatically while you hold still.';
   element('sensor-detail').textContent = `${window.isSecureContext ? 'Secure context' : 'Insecure context'} · ${eventsSeen} events · ${validReadings} valid gyro readings${latestRate ? ` · ${Math.round(Math.hypot(...Object.values(latestRate)))}°/s · last reading ${Math.round(now - lastReading)} ms ago` : ''}`;
   element('detector-state').textContent = !recording ? 'Motion idle' : bowling ? bowlingDetector ? 'Armed for one underhand delivery' : 'Motion live · arm your roll on your turn'
-    : stream?.phase === 'recovering' ? 'Return to rest for the next stroke' : 'Motion live · ready for a swing';
+    : 'Motion live · ready for a swing';
   renderPlayState();
 }
 setInterval(() => {
@@ -712,7 +706,6 @@ setInterval(() => {
     pendingRoll = null; playNotice = 'No roll confirmation yet. Watch the TV before trying again.'; element('delivery').textContent = playNotice; controls();
   }
   startMotion();
-  analyze();
 }, 30);
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) {
