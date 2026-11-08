@@ -11,6 +11,7 @@ import { shouldTogglePause } from '../../../src/network/pauseShortcut.js';
 export function TvGame({ lobby, paused, onClose, error, immersive = true, fullscreen = false, onToggleView, onAudio,
   onReturnToLobby, returning = false, returnDisabled = false, onPauseToggle, pauseDisabled = false }) {
   const [confirmReturn, setConfirmReturn] = useState(false);
+  const [debugOn, setDebugOn] = useState(false);
   const [swingLabel, setSwingLabel] = useState(null);
   const swingTimer = useRef(null);
   const handleSwing = useCallback(event => {
@@ -65,7 +66,9 @@ export function TvGame({ lobby, paused, onClose, error, immersive = true, fullsc
         pauseMessage={lobby.reconnecting?.length ? `Waiting for ${lobby.reconnecting.map(member => member.name).join(', ')} to reconnect.`
           : lobby.setupPending?.length ? `Waiting for ${lobby.setupPending.join(', ')} to finish controller setup.`
             : lobby.manuallyPaused ? 'Game paused · resume on Player 1\u2019s phone or press P on the TV.' : undefined} />
-      {swingLabel ? <div className="tv-swing-debug" aria-hidden="true">{swingLabel}</div> : null}
+      {/* later should be an easier way to register things inside the debug view*/}
+      <button type="button" className="tv-debug-toggle" onClick={() => setDebugOn(v => !v)} aria-pressed={debugOn} title="Toggle debug">D</button>
+      {debugOn && swingLabel ? <div className="tv-swing-debug" aria-hidden="true">{swingLabel}</div> : null}
     </main>
   );
 }
