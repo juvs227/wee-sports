@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { io } from 'socket.io-client';
 import { EVENTS, PROTOCOL_VERSION as v } from '@wee/shared/protocol.js';
-import { RoomStore } from './RoomStore.js';
-import { createGameServer } from './app.js';
+import { RoomStore } from '@server/src/RoomStore.js';
+import { createGameServer } from '@server/src/app.js';
 
 test('shared sound is scoped to members and initialization never overwrites a chosen mute', () => {
   const store = new RoomStore();

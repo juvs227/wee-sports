@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { io } from 'socket.io-client';
 import { EVENTS, PROTOCOL_VERSION, PHASES, VOTE_SECONDS } from '@wee/shared/protocol.js';
-import { createGameServer } from './app.js';
-import { RoomStore } from './RoomStore.js';
+import { createGameServer } from '@server/src/app.js';
+import { RoomStore } from '@server/src/RoomStore.js';
 const v = PROTOCOL_VERSION;
 const send = (socket, event, payload = {}) => socket.timeout(2000).emitWithAck(event, payload);
 async function connect(url) {

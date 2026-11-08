@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {setTimeout as delay} from 'node:timers/promises';
 import {io} from 'socket.io-client';
-import {EVENTS, PROTOCOL_VERSION as v, VOTE_SECONDS} from '../../shared/protocol.js';
-import {sendSwingRequest} from '../../src/network/swingRequest.js';
-import {createGameServer} from './app.js';
-import {RoomStore} from './RoomStore.js';
+import {EVENTS, PROTOCOL_VERSION as v, VOTE_SECONDS} from '@wee/shared/protocol.js';
+import {sendSwingRequest} from '@wee/src/network/swingRequest.js';
+import {createGameServer} from '@server/src/app.js';
+import {RoomStore} from '@server/src/RoomStore.js';
 
 const send = (socket, event, data = {}) => socket.timeout(2000).emitWithAck(event, data);
 async function fixture(t, transport = 'websocket') {

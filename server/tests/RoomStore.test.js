@@ -14,7 +14,7 @@ import {
   isRoomCode,
   playerCapacity,
 } from '@wee/shared/protocol.js';
-import { RoomStore } from './RoomStore.js';
+import { RoomStore } from '@server/src/RoomStore.js';
 
 const v = PROTOCOL_VERSION;
 

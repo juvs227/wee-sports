@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PHASES, PROTOCOL_VERSION, RECONNECT_MS, VOTE_SECONDS } from '@wee/shared/protocol.js';
-import { RoomStore } from './RoomStore.js';
+import { RoomStore } from '@server/src/RoomStore.js';
 const v = PROTOCOL_VERSION;
 function setup(count = 1) {
   const clock = { now: 1000 };

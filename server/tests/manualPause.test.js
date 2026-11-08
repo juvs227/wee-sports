@@ -2,9 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { io } from 'socket.io-client';
-import { EVENTS, PHASES, PROTOCOL_VERSION as v, VOTE_SECONDS } from '../../shared/protocol.js';
-import { RoomStore } from './RoomStore.js';
-import { createGameServer } from './app.js';
+import { EVENTS, PHASES, PROTOCOL_VERSION as v, VOTE_SECONDS } from '@wee/shared/protocol.js';
+import { RoomStore } from '@server/src/RoomStore.js';
+import { createGameServer } from '@server/src/app.js';
 
 function fixture(sport = 'tennis') {
   let now = 0;
