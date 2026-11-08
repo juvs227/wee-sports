@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { createSwingStream } from '../src/controller/swingStream.js';
+import { createSwingStream } from '@wee/src/controller/swingStream.js';
 
 test('continuous play beyond ten seconds sends each swing once and bounds history', () => {
   const stream = createSwingStream('Right');

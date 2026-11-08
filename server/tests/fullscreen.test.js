@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { enterFullscreen, exitFullscreen, fullscreenElement } from '../client/src/lib/fullscreen.js';
+import { enterFullscreen, exitFullscreen, fullscreenElement } from '@client/lib/fullscreen.js';
 
 describe('host fullscreen request', () => {
   it('requests synchronously in the user gesture, before waiting for a server start', async () => {

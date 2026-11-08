@@ -1,5 +1,5 @@
 import { test, expect } from 'vitest';
-import { securePhoneOrigin, phoneLinkHandler } from './phoneLink.js';
+import { securePhoneOrigin, phoneLinkHandler } from '@server/phoneLink.js';
 
 test('phone origins require HTTPS and cannot carry credentials, paths or query data', () => {
   expect(securePhoneOrigin('https://demo.trycloudflare.com/')).toBe('https://demo.trycloudflare.com');

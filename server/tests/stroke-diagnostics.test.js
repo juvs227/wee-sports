@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
-import { RoomStore } from './src/RoomStore.js';
-import { PROTOCOL_VERSION as v, VOTE_SECONDS, isStrokeResult, isGameSoundEvent } from '../shared/protocol.js';
-import { createTimingStats } from '../src/network/timingStats.js';
+import { RoomStore } from '@server/src/RoomStore.js';
+import { PROTOCOL_VERSION as v, VOTE_SECONDS, isStrokeResult, isGameSoundEvent } from '@wee/shared/protocol.js';
+import { createTimingStats } from '@wee/src/network/timingStats.js';
 
 function game() {
   let now = 0;

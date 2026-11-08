@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import { createPhoneFeedback, createScreenAwake } from '../src/controller/phoneExperience.js';
+import { createPhoneFeedback, createScreenAwake } from '@wee/src/controller/phoneExperience.js';
 
 const settle = async () => { await Promise.resolve(); await Promise.resolve(); };
 function sentinel() {

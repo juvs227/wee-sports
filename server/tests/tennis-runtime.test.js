@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { ScoreSystem } from '../src/Tennis/scoreSystem';
+import { ScoreSystem } from '@wee/src/Tennis/scoreSystem';
 
 // Theme behavior is covered independently; these fixtures model game/relay APIs.
-vi.mock('../src/theme.js', () => ({}));
+vi.mock('@wee/src/theme.js', () => ({}));
 
 const runtime = vi.hoisted(() => ({ world: null, onSwing: null, close: vi.fn(),
   sound: { mountButton: vi.fn(), play: vi.fn(), setActive: vi.fn(), dispose: vi.fn() } }));
-vi.mock('../src/audio/sportsAudio', () => ({ createSportsAudio: () => runtime.sound }));
-vi.mock('../src/Tennis/World', () => ({ World: class {
+vi.mock('@wee/src/audio/sportsAudio', () => ({ createSportsAudio: () => runtime.sound }));
+vi.mock('@wee/src/Tennis/World', () => ({ World: class {
   constructor() {
     this.start = vi.fn(); this.stop = vi.fn(); this.dispose = vi.fn(); this.swing = vi.fn();
     this.setPlayerInput = vi.fn();
@@ -26,8 +26,8 @@ vi.mock('../src/Tennis/World', () => ({ World: class {
   getServeState() { return { attempt: 1, side: 'deuce', status: 'ready' }; }
   getSettings() { return { ...this.settings }; }
 } }));
-vi.mock('../src/Controllers/inputController', () => ({ InputController: class {} }));
-vi.mock('../src/network/swingConnection.js', () => ({ connectSwings: options => { runtime.onSwing = options.onSwing; return { close: runtime.close }; } }));
+vi.mock('@wee/src/Controllers/inputController', () => ({ InputController: class {} }));
+vi.mock('@wee/src/network/swingConnection.js', () => ({ connectSwings: options => { runtime.onSwing = options.onSwing; return { close: runtime.close }; } }));
 
 let listeners;
 let parent;
@@ -65,7 +65,7 @@ const command = (payload, event = {}) => listeners.get('message')({ source: pare
 const commandResults = () => parent.postMessage.mock.calls.filter(([message]) => message.type === 'wee:game-command-result').map(([message]) => message);
 
 test('serving indicators switch filled and outlined states with accessible labels', async () => {
-  await import('../src/main.ts');
+  await import('@wee/src/main.ts');
   state({});
   const first = document.getElementById('server-1');
   const second = document.getElementById('server-2');
@@ -83,7 +83,7 @@ test('serving indicators switch filled and outlined states with accessible label
 });
 
 test('solo contact notifications use the current lobby match and stop while paused', async () => {
-  await import('../src/main.ts');
+  await import('@wee/src/main.ts');
   runtime.world.onBallHit(1);
   expect(parent.postMessage).not.toHaveBeenCalled();
   state({});
@@ -99,7 +99,7 @@ test('solo contact notifications use the current lobby match and stop while paus
 });
 
 test('restoring a solo game from browser history asks the lobby for fresh state before resuming', async () => {
-  await import('../src/main.ts');
+  await import('@wee/src/main.ts');
   state({});
   runtime.world.start.mockClear();
   listeners.get('pagehide')({ persisted: true });
@@ -114,7 +114,7 @@ test('restoring a solo game from browser history asks the lobby for fresh state 
 });
 
 test('tennis P requests the current room pause without locally changing play or overriding server state', async () => {
-  await import('../src/main.ts');
+  await import('@wee/src/main.ts');
   const key = overrides => listeners.get('keydown')({ key: 'p', preventDefault: vi.fn(), ...overrides });
   key({});
   expect(parent.postMessage).not.toHaveBeenCalled();
@@ -139,7 +139,7 @@ test('tennis P requests the current room pause without locally changing play or 
 });
 
 test('hidden tennis ignores unpaused snapshots and input until pageshow receives fresh lobby state', async () => {
-  await import('../src/main.ts'); state({});
+  await import('@wee/src/main.ts'); state({});
   const swing = { type: 'swing', id: 'held-input', label: 'Forehand', hand: 'Right', player: 1 };
   listeners.get('pagehide')({ persisted: true });
   runtime.world.start.mockClear(); parent.postMessage.mockClear();
@@ -163,7 +163,7 @@ test('hidden tennis ignores unpaused snapshots and input until pageshow receives
 });
 
 test('tennis stops when its lobby no longer has an active game', async () => {
-  await import('../src/main.ts'); state({}); runtime.world.stop.mockClear();
+  await import('@wee/src/main.ts'); state({}); runtime.world.stop.mockClear();
   state({ gameId: null, playing: false });
   expect(runtime.world.stop).toHaveBeenCalledOnce();
   parent.postMessage.mockClear();
@@ -172,7 +172,7 @@ test('tennis stops when its lobby no longer has an active game', async () => {
 });
 
 test('serve status reaches the phone only on a state change and is refreshed after reconnect', async () => {
-  await import('../src/main.ts');
+  await import('@wee/src/main.ts');
   state({});
   const published = () => parent.postMessage.mock.calls.filter(([message]) => message.type === 'wee:tennis-state');
   expect(published().at(-1)[0]).toEqual({ type: 'wee:tennis-state', gameId: 'solo-match', phase: 'serve', server: 1, winner: null, practice: false, serveAttempt: 1 });
@@ -196,7 +196,7 @@ test('serve status reaches the phone only on a state change and is refreshed aft
 });
 
 test('tennis audio follows real game events, not score polls, and pauses with the game', async () => {
-  await import('../src/main.ts');
+  await import('@wee/src/main.ts');
   runtime.world.onGameEvent({ kind: 'hit', player: 1 });
   expect(runtime.sound.play).not.toHaveBeenCalled();
   state({});
@@ -216,7 +216,7 @@ test('tennis audio follows real game events, not score polls, and pauses with th
 });
 
 test('solo shows both views and actual stroke results carry the current match ID', async () => {
-  await import('../src/main.ts'); state({});
+  await import('@wee/src/main.ts'); state({});
   expect(runtime.world.setSplitScreen).toHaveBeenLastCalledWith(true);
   runtime.world.onStrokeResult({ id: 'stroke-1', player: 1, result: 'hit', reason: 'Good contact', receivedToContactMs: 75 });
   expect(parent.postMessage).toHaveBeenLastCalledWith({ type: 'wee:stroke-result', gameId: 'solo-match',
@@ -227,7 +227,7 @@ test('solo shows both views and actual stroke results carry the current match ID
 });
 
 test('phone match commands require the trusted parent, current match, and a running game', async () => {
-  await import('../src/main.ts'); state({});
+  await import('@wee/src/main.ts'); state({});
   const configure = { action: 'configure', settings: { assistance: 'beginner' } };
   command(configure, { source: {} });
   command(configure, { origin: 'https://unrelated.test' });
@@ -243,7 +243,7 @@ test('phone match commands require the trusted parent, current match, and a runn
 });
 
 test('phone options apply existing game settings and split views, then publish actual settings', async () => {
-  await import('../src/main.ts'); state({});
+  await import('@wee/src/main.ts'); state({});
   command({ action: 'configure', settings: { assistance: 'beginner', timingAssist: false, splitView: false } });
   expect(runtime.world.configure).toHaveBeenLastCalledWith({ assistance: 'beginner', timingAssist: false });
   expect(runtime.world.setSplitScreen).toHaveBeenLastCalledWith(false);
@@ -260,7 +260,7 @@ test('phone options apply existing game settings and split views, then publish a
 });
 
 test('new-match retries acknowledge once without resetting a second time', async () => {
-  await import('../src/main.ts'); state({});
+  await import('@wee/src/main.ts'); state({});
   command({ action: 'new-match', format: 'full' });
   command({ action: 'new-match', format: 'full' });
   expect(runtime.world.startRound).toHaveBeenCalledOnce();
@@ -273,7 +273,7 @@ test('new-match retries acknowledge once without resetting a second time', async
 });
 
 test('solo practice controls work while human-opponent commands cannot enable practice or hide their view', async () => {
-  await import('../src/main.ts'); state({});
+  await import('@wee/src/main.ts'); state({});
   command({ action: 'practice-start', stroke: 'backhand', hand: 'Left' });
   expect(runtime.world.startPractice).toHaveBeenLastCalledWith('backhand', 'Left');
   command({ id: 'stop-practice', action: 'practice-stop' });
@@ -289,7 +289,7 @@ test('solo practice controls work while human-opponent commands cannot enable pr
 });
 
 test('a completed set announces its winner once, then continues the match until two sets are won', async () => {
-  await import('../src/main.ts'); state({});
+  await import('@wee/src/main.ts'); state({});
   const scoring = new ScoreSystem();
   for (let point = 0; point < 24; point++) scoring.awardPoint('player2', 'player1');
   runtime.world.score = scoring.getScore();
@@ -333,7 +333,7 @@ test('a completed set announces its winner once, then continues the match until 
 
 test('quick-match result waits for a two-point margin and offers standalone replay', async () => {
   window.parent = window;
-  await import('../src/main.ts');
+  await import('@wee/src/main.ts');
   const scoring = new ScoreSystem('quick');
   for (let point = 0; point < 6; point++) {
     scoring.awardPoint('player1', 'player2'); scoring.awardPoint('player2', 'player1');
@@ -354,7 +354,7 @@ test('quick-match result waits for a two-point margin and offers standalone repl
 });
 
 test('deuce and advantage stay in the score strip without announcing a set or match winner', async () => {
-  await import('../src/main.ts'); state({});
+  await import('@wee/src/main.ts'); state({});
   const scoring = new ScoreSystem();
   for (let point = 0; point < 3; point++) {
     scoring.awardPoint('player1', 'player2'); scoring.awardPoint('player2', 'player1');

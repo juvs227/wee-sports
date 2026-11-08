@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { shouldTogglePause } from '../src/network/pauseShortcut.js';
+import { shouldTogglePause } from '@wee/src/network/pauseShortcut.js';
 
 test('P pauses once without taking Escape, modified shortcuts, or text input', () => {
   expect(shouldTogglePause({ key: 'p' })).toBe(true);

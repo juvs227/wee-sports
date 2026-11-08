@@ -1,9 +1,9 @@
 import {afterEach, beforeEach, expect, test, vi} from 'vitest';
-import {BowlingMatch} from '../src/bowling/match';
+import {BowlingMatch} from '@wee/src/bowling/match';
 
-vi.mock('../src/theme.js', () => ({}));
+vi.mock('@wee/src/theme.js', () => ({}));
 const runtime = vi.hoisted(() => ({world: null, match: null}));
-vi.mock('../src/bowling/World', () => ({BowlingWorld: class {
+vi.mock('@wee/src/bowling/World', () => ({BowlingWorld: class {
   constructor() {
     runtime.world = this;
     this.rolling = false;
@@ -45,7 +45,7 @@ const command = overrides => receive({type: 'wee:game-command', command: {id: 'c
 const result = () => parent.postMessage.mock.calls.filter(([message]) => message.type === 'wee:game-command-result').at(-1)?.[0].result;
 
 test('phone restart is scoped to the current match and a duplicate cannot restart twice', async () => {
-  await import('../src/bowlingMain.ts'); state({});
+  await import('@wee/src/bowlingMain.ts'); state({});
   expect(document.getElementById('replay').hidden).toBe(true);
   command({});
   expect(runtime.world.reset).toHaveBeenCalledOnce();
@@ -57,7 +57,7 @@ test('phone restart is scoped to the current match and a duplicate cannot restar
 });
 
 test('invalid, stale, paused, rolling and foreign-origin commands cannot reset a match', async () => {
-  await import('../src/bowlingMain.ts'); state({});
+  await import('@wee/src/bowlingMain.ts'); state({});
   command({gameId: 'old-match'}); expect(result().ok).toBe(false);
   command({action: 'close-lobby'}); expect(result().ok).toBe(false);
   state({paused: true}); command({}); expect(result().ok).toBe(false);
@@ -70,7 +70,7 @@ test('invalid, stale, paused, rolling and foreign-origin commands cannot reset a
 });
 
 test('bowling P requests server pause/resume for the current game without resetting or locally resuming', async () => {
-  await import('../src/bowlingMain.ts'); parent.postMessage.mockClear();
+  await import('@wee/src/bowlingMain.ts'); parent.postMessage.mockClear();
   const key = overrides => listeners.get('keydown')({ key: 'p', preventDefault: vi.fn(), ...overrides });
   key({}); expect(parent.postMessage).not.toHaveBeenCalled();
   state({}); runtime.world.start.mockClear(); runtime.world.stop.mockClear(); parent.postMessage.mockClear();
@@ -92,7 +92,7 @@ test('bowling P requests server pause/resume for the current game without resett
 });
 
 test('hidden bowling cannot resume or release a ball until pageshow receives a fresh unpaused snapshot', async () => {
-  await import('../src/bowlingMain.ts'); state({});
+  await import('@wee/src/bowlingMain.ts'); state({});
   const roll = () => receive({ type: 'wee:game-roll', event: { id: 'held-roll', gameId: 'bowl-one', player: 1, power: .6, aim: 0, spin: 0 } });
   listeners.get('pagehide')({ persisted: true }); runtime.world.start.mockClear();
   state({}); roll(); command({});
@@ -112,7 +112,7 @@ test('hidden bowling cannot resume or release a ball until pageshow receives a f
 });
 
 test('bowling stops when a lobby snapshot no longer contains an active game', async () => {
-  await import('../src/bowlingMain.ts'); state({}); runtime.world.stop.mockClear();
+  await import('@wee/src/bowlingMain.ts'); state({}); runtime.world.stop.mockClear();
   state({ gameId: null, playing: false });
   expect(runtime.world.stop).toHaveBeenCalledOnce();
   expect(document.getElementById('roll').disabled).toBe(true);
@@ -122,7 +122,7 @@ test('bowling stops when a lobby snapshot no longer contains an active game', as
 });
 
 test('strike callout expires once and a repeated state does not show it again', async () => {
-  await import('../src/bowlingMain.ts'); state({});
+  await import('@wee/src/bowlingMain.ts'); state({});
   runtime.match.record([]); runtime.world.onState(runtime.world.getState());
   expect(document.getElementById('callout-title').textContent).toBe('Strike!');
   expect(document.getElementById('roll-callout').hidden).toBe(false);
@@ -133,7 +133,7 @@ test('strike callout expires once and a repeated state does not show it again', 
 });
 
 test('pause and starting the next roll clear a spare or strike callout immediately', async () => {
-  await import('../src/bowlingMain.ts'); state({});
+  await import('@wee/src/bowlingMain.ts'); state({});
   runtime.match.record([1, 2]); runtime.world.onState(runtime.world.getState());
   runtime.match.record([]); runtime.world.onState(runtime.world.getState());
   expect(document.getElementById('callout-title').textContent).toBe('Spare!');
@@ -148,7 +148,7 @@ test('pause and starting the next roll clear a spare or strike callout immediate
 });
 
 test('a final fill-ball strike appears before the ranking, then a phone restart clears both', async () => {
-  await import('../src/bowlingMain.ts'); state({});
+  await import('@wee/src/bowlingMain.ts'); state({});
   for (let roll = 0; roll < 12; roll++) {
     runtime.match.record([]);
     runtime.world.onState(runtime.world.getState());
@@ -180,7 +180,7 @@ test('a final fill-ball strike appears before the ranking, then a phone restart 
 
 test('tied bowling totals name both winners without choosing the first seat', async () => {
   runtime.match = new BowlingMatch([{player: 1, name: 'Yit'}, {player: 2, name: 'Teammate'}]);
-  await import('../src/bowlingMain.ts');
+  await import('@wee/src/bowlingMain.ts');
   state({players: [{slot: 0, name: 'Yit'}, {slot: 1, name: 'Teammate'}]});
   while (!runtime.match.getState().complete) {
     runtime.match.record([]); runtime.world.onState(runtime.world.getState());

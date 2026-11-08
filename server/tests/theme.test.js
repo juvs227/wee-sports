@@ -24,7 +24,7 @@ const theme = () => document.documentElement.dataset.theme;
 const receive = (data, source = window.parent, origin = location.origin) => events.get('message')({ data, source, origin });
 
 test('system appearance is followed until a player chooses and persists a theme', async () => {
-  const api = await import('../src/theme.js');
+  const api = await import('@wee/src/theme.js');
   expect(theme()).toBe('light');
   expect(window.matchMedia).toHaveBeenCalledWith('(prefers-color-scheme: dark)');
   system.matches = true; systemChanged();
@@ -44,19 +44,21 @@ test('system appearance is followed until a player chooses and persists a theme'
   expect(changed).toHaveBeenCalledOnce();
 });
 
+
+// server/src/theme.js
 test('saved choice survives a reload and overrides a different system preference', async () => {
   values.set('wee:theme', 'dark');
-  const api = await import('../src/theme.js');
+  const api = await import('@wee/src/theme.js');
   expect(api.getTheme()).toBe('dark');
   expect(theme()).toBe('dark');
   api.setTheme('light');
   vi.resetModules(); system.matches = true;
-  await import('../src/theme.js');
+  await import('@wee/src/theme.js');
   expect(theme()).toBe('light');
 });
 
 test('storage updates sync other pages while unrelated changes do nothing', async () => {
-  await import('../src/theme.js');
+  await import('@wee/src/theme.js');
   events.get('storage')({ key: 'another-setting', newValue: 'dark' });
   expect(theme()).toBe('light');
   events.get('storage')({ key: 'wee:theme', newValue: 'dark' });
@@ -73,7 +75,7 @@ test('parent theme reaches existing and newly ready owned frames when storage is
   storage.setItem.mockImplementation(() => { throw Error('blocked'); });
   const current = { postMessage: vi.fn() };
   frames.push({ contentWindow: current });
-  const api = await import('../src/theme.js');
+  const api = await import('@wee/src/theme.js');
   expect(current.postMessage).toHaveBeenLastCalledWith({ type: 'wee:theme', theme: 'light' }, location.origin);
   api.setTheme('dark');
   expect(theme()).toBe('dark');
@@ -93,7 +95,7 @@ test('embedded frames accept only a valid theme from their same-origin parent', 
   storage.getItem.mockImplementation(() => { throw Error('blocked'); });
   const parent = { postMessage: vi.fn() };
   window.parent = parent;
-  await import('../src/theme.js');
+  await import('@wee/src/theme.js');
   expect(parent.postMessage).toHaveBeenCalledExactlyOnceWith({ type: 'wee:theme-ready' }, location.origin);
   receive({ type: 'wee:theme', theme: 'dark' }, parent, 'https://unrelated.test');
   receive({ type: 'wee:theme', theme: 'dark' }, {});

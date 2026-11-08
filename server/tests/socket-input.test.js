@@ -12,7 +12,7 @@ beforeEach(async () => {
   packets = [];
   manager._packet = packet => packets.push(packet);
   h.socket = manager.socket('/'); h.socket.connected = true;
-  ({request, requestSwing} = await import('../client/src/lib/socket.js'));
+  ({request, requestSwing} = await import('@client/lib/socket.js'));
 });
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); });
 const input = {type: 'swing', id: 'one', gameId: 'current', hand: 'Right', label: 'Forehand'};

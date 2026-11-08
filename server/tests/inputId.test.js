@@ -1,10 +1,10 @@
 import { afterEach, expect, test, vi } from 'vitest';
 
 // Theme behavior is covered independently; these fixtures model game/relay APIs.
-vi.mock('../src/theme.js', () => ({}));
+vi.mock('@wee/src/theme.js', () => ({}));
 import { webcrypto } from 'node:crypto';
-import { createInputId } from '../src/network/inputId.js';
-import { connectSwings } from '../src/network/swingConnection.js';
+import { createInputId } from '@wee/src/network/inputId.js';
+import { connectSwings } from '@wee/src/network/swingConnection.js';
 
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 const lanCrypto = () => vi.stubGlobal('crypto', { getRandomValues: webcrypto.getRandomValues.bind(webcrypto) });
@@ -78,7 +78,7 @@ test('HTTP bowling button controller sends a release without enabling motion or 
     getElementById(id) { if (!elements.has(id)) elements.set(id, { dataset: {}, value: id === 'power' ? '.7' : '0' }); return elements.get(id); },
     addEventListener() {},
   });
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   const message = data => { for (const listener of listeners) listener({ source: parent, origin: location.origin, data }); };
   elements.get('use-buttons').onclick();
   message({ type: 'wee:lobby-state', connected: true, paused: false, playing: true });

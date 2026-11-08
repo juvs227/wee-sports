@@ -5,10 +5,10 @@ import { once } from 'node:events';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { WebSocket } from 'ws';
-import { attachRelay } from './relay.js';
-import { createGameServer } from './src/app.js';
+import { attachRelay } from '@server/relay.js';
+import { createGameServer } from '@server/src/app.js';
 import { io } from 'socket.io-client';
-import { EVENTS, PROTOCOL_VERSION } from '../shared/protocol.js';
+import { EVENTS, PROTOCOL_VERSION } from '@wee/shared/protocol.js';
 
 test('lobby websocket and swing relay coexist on one port and keep separate rooms', async () => {
   const app = createGameServer();

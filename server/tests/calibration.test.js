@@ -1,5 +1,5 @@
 import { test, expect } from 'vitest';
-import { calibrationBias, createCalibrationSession } from '../src/controller/calibration.js';
+import { calibrationBias, createCalibrationSession } from '@wee/src/controller/calibration.js';
 test('calibration requires enough recent, finite, still samples', () => {
   const still = Array.from({ length: 20 }, () => ({ alpha: .2, beta: -.1, gamma: .3 }));
   expect(calibrationBias(still, 10)).toEqual(expect.objectContaining({ alpha: expect.closeTo(.2), beta: expect.closeTo(-.1) }));

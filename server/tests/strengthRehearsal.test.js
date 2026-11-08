@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
-import { createStrengthRehearsal, fitStrengthProfile } from '../src/controller/strengthRehearsal.js';
-import { tennisPower } from '../src/controller/tennisPower.js';
+import { createStrengthRehearsal, fitStrengthProfile } from '@wee/src/controller/strengthRehearsal.js';
+import { tennisPower } from '@wee/src/controller/tennisPower.js';
 
 const stroke = (label, peakRotation, startMs = 0) => ({ label, peakRotation, startMs,
   endMs: startMs + 300, complete: true });

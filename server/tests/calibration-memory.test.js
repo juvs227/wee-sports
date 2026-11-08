@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { createCalibrationMemory, createCalibrationResume, CALIBRATION_STORAGE_KEY, CALIBRATION_MAX_AGE_MS } from '../src/controller/calibrationMemory.js';
+import { createCalibrationMemory, createCalibrationResume, CALIBRATION_STORAGE_KEY, CALIBRATION_MAX_AGE_MS } from '@wee/src/controller/calibrationMemory.js';
 
 const storage = () => {
   const values = new Map();

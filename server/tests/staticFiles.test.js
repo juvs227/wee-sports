@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Writable } from 'node:stream';
 import { once } from 'node:events';
-import { createStaticHandler } from './staticFiles.js';
+import { createStaticHandler } from '@server/staticFiles.js';
 
 let root, handler;
 beforeAll(async () => {

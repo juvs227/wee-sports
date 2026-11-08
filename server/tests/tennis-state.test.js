@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
-import { RoomStore } from './src/RoomStore.js';
-import { COUNTDOWN_SECONDS, PROTOCOL_VERSION as v, VOTE_SECONDS, isTennisState } from '../shared/protocol.js';
+import { RoomStore } from '@server/src/RoomStore.js';
+import { COUNTDOWN_SECONDS, PROTOCOL_VERSION as v, VOTE_SECONDS, isTennisState } from '@wee/shared/protocol.js';
 
 test('only the current host can publish validated tennis serve/match status', () => {
   let now = 0;

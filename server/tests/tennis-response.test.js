@@ -1,8 +1,8 @@
 import { test, expect } from 'vitest';
-import { createSwingStream } from '../src/controller/swingStream.js';
-import { tennisPower } from '../src/controller/tennisPower.js';
-import { isSwing, PROTOCOL_VERSION, COUNTDOWN_SECONDS, VOTE_SECONDS } from '../shared/protocol.js';
-import { RoomStore } from './src/RoomStore.js';
+import { createSwingStream } from '@wee/src/controller/swingStream.js';
+import { tennisPower } from '@wee/src/controller/tennisPower.js';
+import { isSwing, PROTOCOL_VERSION, COUNTDOWN_SECONDS, VOTE_SECONDS } from '@wee/shared/protocol.js';
+import { RoomStore } from '@server/src/RoomStore.js';
 
 function detect(ratesAt, fast = true) {
   const stream = createSwingStream('Right', { fast });

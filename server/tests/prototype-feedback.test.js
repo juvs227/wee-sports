@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { EVENTS } from '../shared/protocol.js';
+import { EVENTS } from '@wee/shared/protocol.js';
 
 const h = vi.hoisted(() => ({ refs: [], effects: [], refIndex: 0, reuseRefs: false, socketHandlers: new Map(),
   emit: vi.fn(), requestSwing: vi.fn(async () => ({ ok: true })), request: vi.fn(async () => ({ ok: true })), connection: 'online' }));
@@ -11,10 +11,10 @@ vi.mock('react', async () => ({ ...(await vi.importActual('react')),
   useState(value) { return [value, () => {}]; },
   useEffect(effect, deps) { h.effects.push({ effect, deps }); },
 }));
-vi.mock('../client/src/lib/socket.js', () => ({ request: h.request, requestSwing: h.requestSwing, useConnection: () => h.connection,
+vi.mock('@client/lib/socket.js', () => ({ request: h.request, requestSwing: h.requestSwing, useConnection: () => h.connection,
   socket: { connected: true, volatile: { emit: h.emit },
     on(name, fn) { h.socketHandlers.set(name, fn); }, off(name) { h.socketHandlers.delete(name); } } }));
-import { PrototypeFrame } from '../client/src/components/PrototypeFrame.jsx';
+import { PrototypeFrame } from '@client/components/PrototypeFrame.jsx';
 
 let listener;
 let cleanups;

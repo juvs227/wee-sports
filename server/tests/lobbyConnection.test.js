@@ -1,5 +1,5 @@
 import { test, expect, vi, afterEach } from 'vitest';
-import { connectSwings } from '../src/network/swingConnection.js';
+import { connectSwings } from '@wee/src/network/swingConnection.js';
 
 afterEach(() => vi.unstubAllGlobals());
 

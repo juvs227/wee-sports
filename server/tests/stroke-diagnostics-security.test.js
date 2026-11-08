@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
-import { RoomStore } from './src/RoomStore.js';
-import { COUNTDOWN_SECONDS, PROTOCOL_VERSION as v, VOTE_SECONDS } from '../shared/protocol.js';
+import { RoomStore } from '@server/src/RoomStore.js';
+import { COUNTDOWN_SECONDS, PROTOCOL_VERSION as v, VOTE_SECONDS } from '@wee/shared/protocol.js';
 
 function fixture() {
   let now = 0;

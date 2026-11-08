@@ -1,5 +1,5 @@
 import { test, expect, vi } from 'vitest';
-import { phoneBuildEnvironment, waitForGameServer } from '../scripts/phone-session.mjs';
+import { phoneBuildEnvironment, waitForGameServer } from '../../scripts/phone-session.mjs';
 
 test('a phone build overrides stale origins without mutating the caller environment', () => {
   const original = { PATH: '/bin', VITE_SERVER_URL: 'http://localhost:3001', VITE_PUBLIC_URL: 'https://old.example', NGROK_HOST: 'old.example' };

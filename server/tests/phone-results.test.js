@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { EVENTS, PHASES } from '../shared/protocol.js';
+import { EVENTS, PHASES } from '@wee/shared/protocol.js';
 
 const h = vi.hoisted(() => ({ refs: [], states: [], effects: [], ri: 0, si: 0, request: vi.fn() }));
 vi.mock('react', async () => ({ ...(await vi.importActual('react')),
@@ -8,9 +8,9 @@ vi.mock('react', async () => ({ ...(await vi.importActual('react')),
     return [h.states[i], next => { h.states[i] = typeof next === 'function' ? next(h.states[i]) : next; }]; },
   useEffect(effect, deps) { h.effects.push({ effect, deps }); },
 }));
-vi.mock('../client/src/lib/socket.js', () => ({ request: h.request }));
-vi.mock('../client/src/components/ThemeToggle.jsx', () => ({ ThemeToggle: () => null }));
-import { PhoneGameOptions } from '../client/src/components/PhoneGameOptions.jsx';
+vi.mock('@client/lib/socket.js', () => ({ request: h.request }));
+vi.mock('@client/components/ThemeToggle.jsx', () => ({ ThemeToggle: () => null }));
+import { PhoneGameOptions } from '@client/components/PhoneGameOptions.jsx';
 
 beforeEach(() => {
   h.refs = []; h.states = []; h.effects = []; h.request.mockReset(); h.request.mockResolvedValue({ ok: true });

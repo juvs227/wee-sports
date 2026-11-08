@@ -9,11 +9,11 @@ vi.mock('react', () => ({
   },
   useEffect(effect) { hooks.effects.push(effect); },
 }));
-vi.mock('../client/src/lib/joinUrl.js', () => ({
+vi.mock('@client/lib/joinUrl.js', () => ({
   joinOrigin: () => window.location.origin,
   joinUrl: (code, origin) => `${origin}/join?code=${code}`,
 }));
-import { usePhoneLink } from '../client/src/lib/usePhoneLink.js';
+import { usePhoneLink } from '@client/lib/usePhoneLink.js';
 
 let cleanup;
 const response = data => ({ ok: true, json: async () => data });

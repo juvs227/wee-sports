@@ -1,5 +1,5 @@
 import { test, expect } from 'vitest';
-import { createSimpleSwingStream, createBowlingMotionDetector, bowlingTiltAim } from '../src/controller/motionGestures.js';
+import { createSimpleSwingStream, createBowlingMotionDetector, bowlingTiltAim } from '@wee/src/controller/motionGestures.js';
 
 const sample = (timeMs, beta, alpha = 0, gamma = 0) => ({ timeMs,
   rotationAlpha: alpha, rotationBeta: beta, rotationGamma: gamma });

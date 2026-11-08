@@ -1,10 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { createCalibrationMemory, CALIBRATION_STORAGE_KEY } from '../src/controller/calibrationMemory.js';
+import { createCalibrationMemory, CALIBRATION_STORAGE_KEY } from '@wee/src/controller/calibrationMemory.js';
 
 const relay = vi.hoisted(() => ({ sendSwing: vi.fn(() => true), options: null }));
-vi.mock('../src/theme.js', () => ({}));
-vi.mock('../src/network/swingConnection.js', () => ({ connectSwings: options => { relay.options = options; return relay; } }));
+vi.mock('@wee/src/theme.js', () => ({}));
+vi.mock('@wee/src/network/swingConnection.js', () => ({ connectSwings: options => { relay.options = options; return relay; } }));
 let elements;
 let listeners;
 let documentListeners;
@@ -52,7 +52,7 @@ const tick = (ms = 20, rate = { alpha: 0.1, beta: -.1, gamma: .2 }, sensors = {}
 };
 
 test('phone diagnostics keep delivery and contact separate and ignore unrelated or replayed results', async () => {
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   state({ gameId: 'match-a' }); elements.get('use-buttons').onclick();
   state({ playing: true, paused: false, gameId: 'match-a' });
   relay.options.onSent({ id: 'actual-stroke' });
@@ -77,7 +77,7 @@ test('phone diagnostics keep delivery and contact separate and ignore unrelated 
 });
 
 test('a miss notice survives its delivery acknowledgement then clears from the play screen', async () => {
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   state({ gameId: 'match-a' }); elements.get('use-buttons').onclick();
   state({ playing: true, paused: false, gameId: 'match-a' });
   relay.options.onSent({ id: 'missed-stroke' });
@@ -97,7 +97,7 @@ test.each(['tennis', 'bowling'])('%s contact vibrates only its active phone from
   const vibrate = vi.fn(() => true);
   vi.stubGlobal('navigator', { vibrate, userActivation: { hasBeenActive: true } });
   location.search += `&sport=${sport}`;
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   state({ paused: false });
   elements.get('use-buttons').onclick();
   const hit = (data = {}, envelope = {}) => emit('message', { source: parent, origin: location.origin,
@@ -125,7 +125,7 @@ async function calibrate() {
 }
 
 test('manual pause explains resume and preserves calibration; reconnect keeps its own cue', async () => {
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   await calibrate();
   state({playing: true, paused: false, sport: 'tennis', gameId: 'match-a'});
   state({playing: true, paused: true, manuallyPaused: true, gameId: 'match-a'});
@@ -139,7 +139,7 @@ test('manual pause explains resume and preserves calibration; reconnect keeps it
 });
 
 test('live sport switching keeps motion setup and permission while discarding the old sport input', async () => {
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   await calibrate();
   state({ playing: true, paused: false, sport: 'tennis', gameId: 'tennis-one' });
   tick(20, { alpha: 300, beta: 600, gamma: 0 }); // Partial tennis stroke.
@@ -171,7 +171,7 @@ test('live sport switching keeps motion setup and permission while discarding th
 });
 
 test('new address setup uses one permission tap then automatically verifies fresh still readings', async () => {
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   expect(elements.get('calibrate').textContent).toBe('Enable motion');
   await elements.get('enable').onclick();
   expect(permission).toHaveBeenCalledOnce();
@@ -185,7 +185,7 @@ test('new address setup uses one permission tap then automatically verifies fres
 });
 
 test('already permitted sensors can start initial setup without a separate calibration tap', async () => {
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   for (let i = 0; i < 115; i++) tick();
   expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBe('motion');
   expect(permission).not.toHaveBeenCalled();
@@ -193,7 +193,7 @@ test('already permitted sensors can start initial setup without a separate calib
 });
 
 test('a controller reload reuses calibration after fresh sensor readings without a new permission request', async () => {
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   await calibrate();
   expect(window.sessionStorage.getItem(CALIBRATION_STORAGE_KEY)).not.toBeNull();
   expect(createCalibrationMemory(window.sessionStorage).read()).not.toBeNull();
@@ -202,7 +202,7 @@ test('a controller reload reuses calibration after fresh sensor readings without
   vi.clearAllTimers(); vi.setSystemTime(wallClock); vi.resetModules();
   elements.clear(); listeners.clear(); documentListeners.clear(); messages.length = 0;
   expect(createCalibrationMemory(window.sessionStorage).read()).not.toBeNull();
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   expect(createCalibrationMemory(window.sessionStorage).read()).not.toBeNull();
   state({ playing: true, paused: false, gameId: 'new-match' });
   expect(elements.get('calibrate').textContent).toBe('Resume motion');
@@ -223,7 +223,7 @@ test('closing a tennis lobby and joining bowling reuses origin setup while the p
   const persistent = new Map();
   window.localStorage = { getItem: key => persistent.get(key) ?? null,
     setItem: (key, value) => persistent.set(key, value), removeItem: key => persistent.delete(key) };
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   await calibrate();
   expect(window.localStorage.getItem(CALIBRATION_STORAGE_KEY)).not.toBeNull();
   expect(window.sessionStorage.getItem(CALIBRATION_STORAGE_KEY)).toBeNull();
@@ -232,7 +232,7 @@ test('closing a tennis lobby and joining bowling reuses origin setup while the p
   elements.clear(); listeners.clear(); documentListeners.clear(); messages.length = 0;
   window.sessionStorage = { getItem: () => null, setItem: vi.fn(), removeItem: vi.fn() };
   location.search = '?room=lobby-NEXT&lobby=NEXT&player=1&sport=bowling';
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   state({ playing: false, gameId: 'new-bowling-match' });
   expect(elements.get('calibrate').textContent).toBe('Resume motion');
   expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBeNull();
@@ -249,7 +249,7 @@ const savedMotionSetup = (overrides = {}) => createCalibrationMemory(window.sess
 
 test('cached setup never substitutes for permission or live sensors and a Resume tap can restore it', async () => {
   savedMotionSetup();
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   expect(elements.get('hand').value).toBe('Left');
   expect(permission).not.toHaveBeenCalled();
   tick(7000, null);
@@ -269,7 +269,7 @@ test.each([
   ['enable', 'granted'], ['enable', 'denied'], ['calibrate', 'granted'], ['calibrate', 'denied'],
 ])('late %s permission result (%s) cannot replace a newer button choice', async (action, grant) => {
   savedMotionSetup();
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   let resolvePermission;
   permission.mockImplementationOnce(() => new Promise(resolve => { resolvePermission = resolve; }));
   const pending = elements.get(action).onclick();
@@ -285,7 +285,7 @@ test.each([
 
 test.each(['hand', 'hidden', 'pagehide'])('pending permission cannot begin calibration after a newer %s intent', async change => {
   savedMotionSetup();
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   let resolvePermission;
   permission.mockImplementationOnce(() => new Promise(resolve => { resolvePermission = resolve; }));
   const pending = elements.get('calibrate').onclick();
@@ -301,7 +301,7 @@ test.each(['hand', 'hidden', 'pagehide'])('pending permission cannot begin calib
 
 test('an older permission promise cannot clear the pending state or start setup for a newer request', async () => {
   savedMotionSetup();
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   let resolveFirst, resolveSecond;
   permission.mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve; }))
     .mockImplementationOnce(() => new Promise(resolve => { resolveSecond = resolve; }));
@@ -319,7 +319,7 @@ test('an older permission promise cannot clear the pending state or start setup 
 test('resuming while moving retains the saved stationary zero and its original expiry', async () => {
   savedMotionSetup({ hand: 'Right', strength: { hand: 'Right', Forehand: 1.2, Backhand: 1.1 } });
   const saved = createCalibrationMemory(window.sessionStorage).read();
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   for (let i = 0; i < 35; i++) tick(20, { alpha: i % 2 ? 100 : -100, beta: 80, gamma: -40 });
   expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBe('motion');
   const resumed = createCalibrationMemory(window.sessionStorage).read();
@@ -334,7 +334,7 @@ test('resuming while moving retains the saved stationary zero and its original e
 
 test('changing the selected hand before verification prevents restoring the previous hand profile', async () => {
   savedMotionSetup();
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   elements.get('hand').value = 'Right'; elements.get('hand').onchange();
   for (let i = 0; i < 30; i++) tick();
   expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBeNull();
@@ -344,7 +344,7 @@ test('changing the selected hand before verification prevents restoring the prev
 
 test('saved setup resume rejects missing readings and cancels when the phone is hidden', async () => {
   savedMotionSetup();
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   for (let i = 0; i < 30; i++) tick(20, { alpha: null, beta: null, gamma: null });
   expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBeNull();
   document.hidden = true; documentListeners.get('visibilitychange')();
@@ -358,7 +358,7 @@ test('saved setup resume rejects missing readings and cancels when the phone is 
 });
 
 test('optional strength rehearsal uses real completed strokes, pauses setup, and never sends a match swing', async () => {
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   await calibrate();
   expect(elements.get('strength-panel').hidden).toBe(true);
   state({ playing: true, paused: false });
@@ -390,7 +390,7 @@ test('optional strength rehearsal uses real completed strokes, pauses setup, and
 });
 
 test('rehearsal is optional, cancels cleanly on hidden page, and recalibration clears its profile', async () => {
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   await calibrate();
   elements.get('skip-strength').onclick();
   expect(elements.get('strength-panel').hidden).toBe(true);
@@ -410,7 +410,7 @@ test('rehearsal is optional, cancels cleanly on hidden page, and recalibration c
 });
 
 test('tennis phone shows whose serve it is and stops input after a match', async () => {
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   state({ playing: true, paused: false, gameId: 'match-one' });
   elements.get('use-buttons').onclick();
   const tennis = (data, source = parent) => emit('message', { source, origin: location.origin,
@@ -434,7 +434,7 @@ test('tennis phone shows whose serve it is and stops input after a match', async
 });
 
 test('Calibrate itself requests permission; only real still readings unlock setup and play starts automatically', async () => {
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   expect(elements.get('calibrate').disabled).toBe(false);
   expect(elements.get('setup-panel').hidden).toBe(false);
   expect(elements.get('play-panel').hidden).toBe(true);
@@ -455,7 +455,7 @@ test('Calibrate itself requests permission; only real still readings unlock setu
 });
 
 test('opening settings preserves calibration but drops a partial swing and prevents strokes until returning', async () => {
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   await calibrate();
   state({ playing: true, paused: false });
   const savedSetupCount = messages.filter(message => message.type === 'wee:controller-setup').length;
@@ -480,7 +480,7 @@ test('opening settings preserves calibration but drops a partial swing and preve
 });
 
 test('pause, reconnect and stale sensors show the next action while preserving calibration and dropping partial motion', async () => {
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   await calibrate();
   state({ playing: true, paused: false });
   tick(20, { alpha: 300, beta: 600, gamma: 0 });
@@ -501,7 +501,7 @@ test('pause, reconnect and stale sensors show the next action while preserving c
 });
 
 test('a rejected setup save remains visible on the calibrated waiting screen', async () => {
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   state({});
   await calibrate();
   emit('message', { source: parent, origin: location.origin,
@@ -517,7 +517,7 @@ test('a rejected setup save remains visible on the calibrated waiting screen', a
 
 test('bowling presents the other player, own turn, armed roll, delivery and persistent completion states', async () => {
   location.search += '&sport=bowling';
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   await calibrate();
   state({ playing: true, paused: false });
   const bowlingState = data => emit('message', { source: parent, origin: location.origin,
@@ -556,7 +556,7 @@ test('bowling presents the other player, own turn, armed roll, delivery and pers
 });
 
 test('granted permission without gyro readings does not claim calibration success', async () => {
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   state({});
   await elements.get('calibrate').onclick();
   for (let i = 0; i < 51; i++) tick(200, { alpha: null, beta: null, gamma: null });
@@ -567,7 +567,7 @@ test('granted permission without gyro readings does not claim calibration succes
 
 test('insecure phone links and denied permission provide a usable explanation', async () => {
   window.isSecureContext = false;
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   await elements.get('calibrate').onclick();
   expect(elements.get('motion').textContent).toContain('HTTPS');
   expect(permission).not.toHaveBeenCalled();
@@ -589,7 +589,7 @@ test('insecure phone links and denied permission provide a usable explanation', 
 });
 
 test('explicit Stop stays stopped across lobby updates; hiding or pausing cannot emit a partial stroke', async () => {
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   await calibrate();
   state({ playing: true, paused: false });
   tick(20, { alpha: 300, beta: 600, gamma: 0 });
@@ -612,7 +612,7 @@ test('explicit Stop stays stopped across lobby updates; hiding or pausing cannot
 
 test('bowling sends bounded aim, spin and power for its own turn and blocks repeated taps', async () => {
   location.search += '&sport=bowling';
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   elements.get('use-buttons').onclick();
   state({ playing: true, paused: false });
   const bowlingState = currentPlayer => emit('message', { source: parent, origin: location.origin,
@@ -638,7 +638,7 @@ test('bowling sends bounded aim, spin and power for its own turn and blocks repe
 
 test('calibrated bowling motion only rolls when explicitly armed on the current turn', async () => {
   location.search += '&sport=bowling';
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   await calibrate();
   state({ playing: true, paused: false });
   emit('message', { source: parent, origin: location.origin,
@@ -654,7 +654,7 @@ test('calibrated bowling motion only rolls when explicitly armed on the current 
 
 test('bowling tilt aims before arming, locks during delivery and sends measured power and twist', async () => {
   location.search += '&sport=bowling';
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   await calibrate();
   state({ playing: true, paused: false });
   emit('message', { source: parent, origin: location.origin,
@@ -681,7 +681,7 @@ test('bowling tilt aims before arming, locks during delivery and sends measured 
 
 test('losing usable gravity restores manual aim while gyro motion remains live', async () => {
   location.search += '&sport=bowling';
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   await calibrate();
   state({ playing: true, paused: false });
   emit('message', { source: parent, origin: location.origin,
@@ -710,7 +710,7 @@ test('phone stays awake from calibrated lobby into play and haptics only accept 
   });
   const vibrate = vi.fn(() => true);
   vi.stubGlobal('navigator', { wakeLock: { request }, vibrate, userActivation: { hasBeenActive: true } });
-  await import('../src/controller/main.js');
+  await import('@wee/src/controller/main.js');
   state({});
   expect(request).not.toHaveBeenCalled();
   await calibrate();
@@ -757,8 +757,8 @@ test('phone stays awake from calibrated lobby into play and haptics only accept 
 
 for (const [name, hand, expected] of teamRecordings) {
   test(`team's recorded sensor swings reach gameplay after calibration: ${name}`, async () => {
-    const recording = JSON.parse(readFileSync(new URL(`./fixtures/team-motion/${name}.json`, import.meta.url), 'utf8'));
-    await import('../src/controller/main.js');
+    const recording = JSON.parse(readFileSync(new URL(`../fixtures/team-motion/${name}.json`, import.meta.url), 'utf8'));
+    await import('@wee/src/controller/main.js');
     elements.get('hand').value = hand;
     await calibrate();
     state({ playing: true, paused: false });

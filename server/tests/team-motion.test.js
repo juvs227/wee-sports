@@ -1,8 +1,8 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { classifySwings } from '../src/controller/classifySwing.js';
-import { createSwingStream } from '../src/controller/swingStream.js';
+import { classifySwings } from '@wee/src/controller/classifySwing.js';
+import { createSwingStream } from '@wee/src/controller/swingStream.js';
 
 // Exact recordings from the teammate's 52597e7 branch; source attribution is
 // next to the fixtures. Keep this separate from synthetic gesture coverage.
@@ -35,7 +35,7 @@ const previousFastLag = {
 };
 for (const [name, hand, expected] of cases) {
   test(`team recording keeps every stroke, label and peak with return suppression: ${name}`, () => {
-    const data = JSON.parse(readFileSync(new URL(`./fixtures/team-motion/${name}.json`, import.meta.url)));
+    const data = JSON.parse(readFileSync(new URL(`../fixtures/team-motion/${name}.json`, import.meta.url)));
     const samples = data.samples ?? data;
     const complete = actions(classifySwings(samples, { hand }));
     assert.deepEqual(complete.map(event => event.label), expected);
