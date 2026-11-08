@@ -3,7 +3,8 @@ import { createBowlingMotionDetector, bowlingTiltAim } from './motionGestures.js
 import { connectSwings } from '../network/swingConnection.js';
 import { createInputId } from '../network/inputId.js';
 import { createPhoneFeedback, createScreenAwake } from './phoneExperience.js';
-import { isTennisState, isStrokeResult } from '../../shared/protocol.js';
+import { isTennisState, isStrokeResult, PHASES } from '../../shared/protocol.js';
+import { createOrientationCalibration, eulerToNormal } from './orientationCalibration.js';
 import '../theme.js';
 import '../../client/src/styles/tokens.css';
 import '../play.css';
@@ -65,6 +66,9 @@ let bowlingReadout = null;
 let pageActive = true;
 let strokeNotice = '';
 let strokeNoticeUntil = 0;
+let orientationCalibration = null;
+let netOrientation = null;   // { normal: number[] } saved from calibration
+let currentNormal = null;    // screen normal updated each deviceorientation frame
 
 function renderSport() {
   element('controller-title').textContent = bowling ? 'Your bowling ball' : 'Your racket';
@@ -72,12 +76,35 @@ function renderSport() {
   element('motion-visual').dataset.sport = bowling ? 'bowling' : 'tennis';
 }
 renderSport();
+function startOrientationCalibration() {
+  if (orientationCalibration) return;
+  element('motion').textContent = 'Hold your phone with the screen facing the net and keep still.';
+  orientationCalibration = createOrientationCalibration({
+    onProgress(progress, state) {
+      post({ type: 'wee:calibration-progress', slot: player - 1, progress, state });
+      if (state === 'moving') {
+        element('motion').textContent = 'Movement detected — keep still.';
+      } else if (state === 'settling') {
+        element('motion').textContent = 'Hold still…';
+      } else if (state === 'calibrating') {
+        element('motion').textContent = `Calibrating… ${Math.round(progress * 100)}%`;
+      }
+    },
+    onDone(normal, quat) {
+      orientationCalibration = null;
+      netOrientation = { normal };
+      post({ type: 'wee:calibration-done', slot: player - 1, netOrientation: { normal, quat } });
+      element('motion').textContent = 'Calibrated ✓ Net direction saved.';
+    },
+  });
+  orientationCalibration.start();
+}
 const phoneFeedback = createPhoneFeedback({ visual: element('motion-visual'), object: element('motion-object'),
   navigator: globalThis.navigator, document, reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)') });
 const screenAwake = createScreenAwake({ navigator: globalThis.navigator, document,
   onState: state => {
     element('wake-status').textContent = state === 'awake' ? 'Screen stays awake while your controller is ready.'
-      : state === 'unavailable' || state === 'released' ? 'Your browser could not keep the screen awake. Keep this page visible and check your phone's screen-lock setting.'
+      : state === 'unavailable' || state === 'released' ? "Your browser could not keep the screen awake. Keep this page visible and check your phone's screen-lock setting."
       : 'The screen stays awake during play when your browser allows it.';
   },
 });
@@ -108,7 +135,7 @@ function renderPlayState() {
   element('stop').hidden = !setup || buttonMode || !gameActive || !settingsOpen;
   let state = 'ready';
   let status = buttonMode ? 'Buttons ready' : 'Motion ready';
-  let title = 'You're ready';
+  let title = "You're ready";
   let help = 'Press Ready above, then watch the TV.';
   if (!connected) {
     state = 'paused'; status = 'Connection lost'; title = 'Reconnecting…';
@@ -145,7 +172,7 @@ function renderPlayState() {
     } else if (!bowling && tennisState?.phase === 'serve') {
       const serving = tennisState.server === player;
       title = serving ? 'Your serve' : `P${tennisState.server} is serving`;
-      help = serving ? 'Swing when you're ready to serve.' : 'Get ready to return. Watch the ball on the TV.';
+      help = serving ? "Swing when you're ready to serve." : 'Get ready to return. Watch the ball on the TV.';
       if (serving && tennisState.serveAttempt === 2) { title = 'Your second serve'; help = 'Take your time and swing comfortably.'; }
     }
     if (bowling) {
@@ -187,7 +214,7 @@ function renderPlayState() {
   phoneFeedback.setActive(activeController);
 }
 function controls() {
-  element('setup-next').textContent = settingsOpen ? 'Return to the controller when you're ready.' : gameActive
+  element('setup-next').textContent = settingsOpen ? "Return to the controller when you're ready." : gameActive
     ? 'Motion starts automatically once setup is complete and everyone is connected.'
     : 'Once motion is ready, press Ready above.';
   element('enable').disabled = permissionPending || (enabled && recentReadings());
@@ -284,9 +311,15 @@ function analyze(sample) {
   if (!recording || bowling) return;
   const swing = stream?.push(sample);
   if (!swing) return;
-  element('latest').textContent = swing.label;
+  let label = swing.label;
+  if (netOrientation && currentNormal) {
+    const n = netOrientation.normal;
+    const dot = currentNormal[0]*n[0] + currentNormal[1]*n[1] + currentNormal[2]*n[2];
+    label = dot >= 0 ? 'Forehand' : 'Backhand';
+  }
+  element('latest').textContent = label;
   feedbackUntil = performance.now() + 1500;
-  send(swing.label, 0.5);
+  send(label, 0.5);
 }
 function stop(message = 'Motion paused. Tap Resume motion when you are ready.', user = false) {
   if (user) motionWanted = false;
@@ -368,6 +401,7 @@ window.addEventListener('message', event => {
   lobbyPaused = data.paused;
   manuallyPaused = data.manuallyPaused === true;
   if (lobbyPaused || !connected || !gameActive) stop('Paused. Motion will resume when the match is ready.');
+  if (data.phase === PHASES.CALIBRATION && !orientationCalibration && enabled) startOrientationCalibration();
   startMotion();
   controls();
 });
@@ -419,7 +453,7 @@ async function requestMotion(intent) {
     const permission = typeof DeviceMotionEvent.requestPermission === 'function'
       ? await DeviceMotionEvent.requestPermission() : 'granted';
     if (!currentSetupIntent(intent)) return;
-    if (permission !== 'granted') throw new Error('Motion access was denied. Allow Motion & Orientation in this site's browser permissions, then reload and try again. Button controls are available now.');
+    if (permission !== 'granted') throw new Error("Motion access was denied. Allow Motion & Orientation in this site's browser permissions, then reload and try again. Button controls are available now.");
     window.addEventListener('devicemotion', motion);
     enabled = true;
     motionWanted = true;
@@ -509,6 +543,12 @@ window.addEventListener('pageshow', () => { pageActive = true; controls(); scree
   if (window.isSecureContext && window.DeviceMotionEvent && allowed) {
     window.addEventListener('devicemotion', motion);
   }
+  function orientationFrame(e) {
+    if (e.alpha == null) return;
+    currentNormal = eulerToNormal(e.alpha, e.beta, e.gamma);
+  }
+  window.addEventListener('deviceorientationabsolute', orientationFrame, true);
+  window.addEventListener('deviceorientation', orientationFrame, true);
   element('motion').textContent = 'Tap Enable motion and allow access to start playing.';
 }
 controls();

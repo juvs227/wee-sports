@@ -53,6 +53,23 @@ export function createGameServer({ store = new RoomStore(), origins = [], tickMs
       reply(ack, result);
       if (result.ok) broadcast(result.code);
     });
+    socket.on(EVENTS.HOST_CALIBRATION_DONE, (payload, ack) => {
+      const result = store.calibrationDone(socket.id);
+      reply(ack, result);
+      if (result.ok) broadcast(result.code);
+    });
+    socket.on(EVENTS.PLAYER_CALIBRATION_DONE, (payload, ack) => {
+      const result = store.playerCalibrationDone(socket.id);
+      reply(ack, result);
+      if (result.ok) broadcast(result.code);
+    });
+    socket.on(EVENTS.PLAYER_CALIBRATION_PROGRESS, (payload) => {
+      if (!Number.isFinite(payload?.progress)) return;
+      const info = store.memberRoom(socket.id);
+      if (!info?.hostSocketId) return;
+      const host = io.sockets.sockets.get(info.hostSocketId);
+      host?.volatile.emit(EVENTS.PLAYER_CALIBRATION_PROGRESS, { slot: info.slot, progress: payload.progress, state: payload.state });
+    });
     socket.on(EVENTS.PLAYER_SETUP, (payload, ack) => {
       const result = store.setSetup(socket.id, payload);
       reply(ack, result);

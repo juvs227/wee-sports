@@ -4,7 +4,7 @@
  * (leave), with every failure said in plain words.
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   CODE_LENGTH,
@@ -22,7 +22,7 @@ import { PhoneTutorial } from '../components/PhoneTutorial.jsx';
 import { PhoneVote } from '../components/PhoneVote.jsx';
 import { useRevealHold } from '../lib/useRevealHold.js';
 import { errorText } from '../lib/errors.js';
-import { request } from '../lib/socket.js';
+import { request, socket } from '../lib/socket.js';
 import { useReconnect } from '../lib/useReconnect.js';
 import { ReconnectNotice } from '../components/ReconnectNotice.jsx';
 import { sportName } from '../lib/sports.js';
@@ -31,6 +31,7 @@ import { usePhoneLink } from '../lib/usePhoneLink.js';
 import { PhoneSoundToggle } from '../components/PhoneSoundToggle.jsx';
 import { ThemeToggle } from '../components/ThemeToggle.jsx';
 import { PhoneGameOptions } from '../components/PhoneGameOptions.jsx';
+import { PhoneCalibration } from '../components/PhoneCalibration.jsx';
 
 const NAME_KEY = 'wee:name';
 
@@ -69,7 +70,32 @@ export default function JoinStub() {
   const revealing = useRevealHold(lobby?.phase) && Boolean(lobby?.vote?.picks);
   const [error, setError] = useState(null);
   const [joining, setJoining] = useState(false);
+  const [calibrationProgress, setCalibrationProgress] = useState(0);
+  const [calibrationState, setCalibrationState] = useState('settling');
+  const [calibrationStarted, setCalibrationStarted] = useState(false);
+  const lastProgressEmit = useRef(0);
+  // Reset if calibration phase is re-entered (e.g. someone un-readied).
+  useEffect(() => {
+    if (lobby?.phase !== PHASES.CALIBRATION) {
+      setCalibrationStarted(false);
+      setCalibrationProgress(0);
+      setCalibrationState('settling');
+    }
+  }, [lobby?.phase]);
   const canJoin = !openingSecurePage && isRoomCode(code) && cleanName(name) !== '' && !joining;
+
+  const handleCalibrationProgress = useCallback((progress, state) => {
+    setCalibrationProgress(progress);
+    if (state) setCalibrationState(state);
+    const now = Date.now();
+    if (now - lastProgressEmit.current >= 100) {
+      lastProgressEmit.current = now;
+      socket.volatile.emit(EVENTS.PLAYER_CALIBRATION_PROGRESS, { progress, state });
+    }
+  }, []);
+  const handleCalibrationDone = useCallback(() => {
+    setCalibrationProgress(1);
+  }, []);
 
   async function join(event) {
     event.preventDefault();
@@ -146,6 +172,22 @@ export default function JoinStub() {
         </div>
         {playing ? null : phase === PHASES.LOBBY ? (
           <p className="stub__status">Waiting for a player to join the P1 controller seat…</p>
+        ) : phase === PHASES.CALIBRATION ? (
+          isController(seat.sport, seat.slot) ? (
+            calibrationStarted ? (
+              <PhoneCalibration progress={calibrationProgress} calState={calibrationState} />
+            ) : (
+              <div className="phone-cal-prompt">
+                <p className="phone-cal-prompt__title">Face the net</p>
+                <p className="phone-cal-prompt__help">When ready, hold your phone with the screen pointing toward the net, then tap Calibrate.</p>
+                <button type="button" className="btn btn--primary phone-cal-prompt__btn" onClick={() => setCalibrationStarted(true)}>
+                  Calibrate
+                </button>
+              </div>
+            )
+          ) : (
+            <p className="stub__status">Waiting for players to calibrate…</p>
+          )
         ) : phase === PHASES.VOTE || revealing ? (
           // Keyed by game, so a fresh vote forgets this phone's last pick.
           <PhoneVote key={lobby.gameId} lobby={lobby} slot={seat.slot} />
@@ -160,9 +202,12 @@ export default function JoinStub() {
           <>
             <PrototypeFrame code={seat.code} controller player={seat.slot + 1} sport={seat.sport} gameId={seat.gameId} gameState={seat.gameState}
               playing={phase === PHASES.GAME}
-              paused={phase !== PHASES.GAME || reconnecting || seat.paused}
+              paused={(phase !== PHASES.GAME && !(phase === PHASES.CALIBRATION && calibrationStarted)) || reconnecting || seat.paused}
               manuallyPaused={Boolean(lobby.manuallyPaused && !reconnecting && !lobby.reconnecting?.length && !lobby.setupPending?.length)}
-              showPause={reconnecting} />
+              showPause={reconnecting}
+              phase={phase === PHASES.CALIBRATION && !calibrationStarted ? PHASES.READY : phase}
+              onCalibrationProgress={handleCalibrationProgress}
+              onCalibrationDone={handleCalibrationDone} />
           </>
         ) : null}
         {playing ? (

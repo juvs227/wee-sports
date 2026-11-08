@@ -12,11 +12,12 @@ import { TvCountdown } from '../components/TvCountdown.jsx';
 import { TvGame } from '../components/TvGame.jsx';
 import { TvReady } from '../components/TvReady.jsx';
 import { TvTutorial } from '../components/TvTutorial.jsx';
+import { TvCalibration } from '../components/TvCalibration.jsx';
 import { TvVote } from '../components/TvVote.jsx';
 import { ThemeToggle } from '../components/ThemeToggle.jsx';
 import { errorText } from '../lib/errors.js';
 import { usePhoneLink } from '../lib/usePhoneLink.js';
-import { request } from '../lib/socket.js';
+import { request, socket } from '../lib/socket.js';
 import { useReconnect } from '../lib/useReconnect.js';
 import { ReconnectNotice } from '../components/ReconnectNotice.jsx';
 import { sportName } from '../lib/sports.js';
@@ -34,6 +35,7 @@ export default function HostStub() {
   // Holds the vote's reveal on screen for a moment before the tutorial or game.
   // A vote cancelled by someone leaving has nothing to reveal.
   const revealing = useRevealHold(lobby?.phase) && Boolean(lobby?.vote?.picks);
+  const [calibrationProgress, setCalibrationProgress] = useState({});
   const [startError, setStartError] = useState(null);
   const [returning, setReturning] = useState(false);
   const returnPending = useRef(false);
@@ -108,6 +110,38 @@ export default function HostStub() {
   }, [activateForPlay]);
   useEffect(() => { if (phase === PHASES.COUNTDOWN) void activateForPlay(); }, [phase, activateForPlay]);
 
+  useEffect(() => {
+    if (lobby?.phase !== PHASES.CALIBRATION) {
+      setCalibrationProgress({});
+      return;
+    }
+    function onMessage(event) {
+      if (event.origin !== location.origin) return;
+      const data = event.data;
+      if (data?.type !== 'wee:calibration-progress') return;
+      setCalibrationProgress(prev => {
+        const next = { ...prev, [data.slot]: data.progress };
+        if (data.state) next[`${data.slot}_state`] = data.state;
+        const allDone = lobby.players.every(p => (next[p.slot] ?? 0) >= 1);
+        if (allDone) void request(EVENTS.HOST_CALIBRATION_DONE, {});
+        return next;
+      });
+    }
+    function onSocketProgress(data) {
+      setCalibrationProgress(prev => {
+        const next = { ...prev, [data.slot]: data.progress };
+        if (data.state) next[`${data.slot}_state`] = data.state;
+        return next;
+      });
+    }
+    window.addEventListener('message', onMessage);
+    socket.on(EVENTS.PLAYER_CALIBRATION_PROGRESS, onSocketProgress);
+    return () => {
+      window.removeEventListener('message', onMessage);
+      socket.off(EVENTS.PLAYER_CALIBRATION_PROGRESS, onSocketProgress);
+    };
+  }, [lobby?.phase, lobby?.players]);
+
   async function returnToLobby() {
     if (reconnecting || !lobby?.gameId || returnPending.current) return;
     const gameId = lobby.gameId;
@@ -166,6 +200,8 @@ export default function HostStub() {
       </main>
     );
   }
+
+  if (lobby.phase === PHASES.CALIBRATION) return <TvCalibration lobby={lobby} calibrationProgress={calibrationProgress} />;
 
   // The vote, then its reveal for a moment, then the tutorial if anyone asked.
   if (lobby.phase === PHASES.VOTE || revealing) return <TvVote lobby={lobby} />;

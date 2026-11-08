@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calibration Mock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f4f6f8;
+  --bg-stripe: rgb(255 255 255 / .7);
+  --surface: #ffffff;
+  --surface-sunk: #eef1f4;
+  --border: #dde2e7;
+  --text: #22272c;
+  --text-muted: #5b646c;
+  --accent: #34bdef;
+  --accent-top: #0d7ab8;
+  --accent-bottom: #0a6499;
+  --p1: #2f80ed;
+  --p2: #e5484d;
+  --p3: #2b9a66;
+  --p4: #e0a100;
+  --radius-sm: 12px;
+  --radius: 18px;
+  --radius-lg: 26px;
+  --radius-pill: 999px;
+  --shadow: 0 1px 2px rgb(24 39 56 / .06), 0 10px 28px rgb(24 39 56 / .07);
+  --shadow-lift: 0 2px 6px rgb(24 39 56 / .08), 0 18px 40px rgb(24 39 56 / .14);
+  --font: "Nunito", ui-rounded, system-ui, sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  background-image: repeating-linear-gradient(180deg, transparent 0 3px, var(--bg-stripe) 3px 4px);
+  color: var(--text);
+  min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, p { margin: 0; }
+button { font: inherit; cursor: pointer; }
+
+/* ── Toggle ───────────────────────────────── */
+.toggle {
+  position: fixed; top: 14px; right: 14px; z-index: 100;
+  display: flex; gap: 6px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-pill); padding: 4px;
+  box-shadow: var(--shadow);
+}
+.toggle button {
+  padding: 6px 18px; border-radius: var(--radius-pill); border: none;
+  background: transparent; color: var(--text-muted);
+  font-size: 13px; font-weight: 700;
+}
+.toggle button.active { background: var(--accent-top); color: #fff; }
+
+/* ── Instruction card scale ───────────────── */
+/* ↓ change this one value to resize the whole instruction card */
+:root { --scene-scale: 0.85; }
+.tv-card { zoom: var(--scene-scale); }
+
+/* ── TV view ──────────────────────────────── */
+#tv {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; min-height: 100dvh;
+  padding: 48px 64px; gap: 40px;
+}
+
+.tv-card {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lift);
+  padding: 36px 48px 40px;
+  width: 100%; max-width: 740px;
+  display: flex; flex-direction: column; align-items: center; gap: 24px;
+}
+
+/* z-depth scene: TV fills the card, phone floats centered on top */
+.orient-scene {
+  position: relative;
+  width: 480px;
+  height: 290px; /* TV body 230px + stand 30px + margin */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* TV shell: fills scene horizontally, leaves room below for stand */
+.orient-tv-shell {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 240px;
+  background: #1a2530;
+  border-radius: 16px;
+  border: 3px solid #2e3f4f;
+  box-shadow: 0 8px 32px rgb(0 0 0 / .22);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.orient-tv-screen {
+  flex: 1;
+  margin: 14px 14px 0;
+  background: radial-gradient(ellipse at 50% 35%, #1a3f5c, #071420);
+  border-radius: 7px 7px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.orient-tv-logo {
+  width: 60px; height: 60px; background: #d7f34a;
+  border-radius: 50%; border: 2.5px solid #9cb81f;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 30px;
+}
+.orient-tv-chin {
+  height: 14px;
+  margin: 0 14px;
+  background: #111d26;
+  border-radius: 0 0 6px 6px;
+}
+
+/* stand sits below the shell */
+.orient-tv-stand {
+  position: absolute;
+  top: 240px; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center;
+}
+.orient-tv-neck { width: 22px; height: 18px; background: #2e3f4f; border-radius: 2px 2px 0 0; }
+.orient-tv-base { width: 90px; height: 10px; background: #2e3f4f; border-radius: 5px; }
+
+/* iPhone floats centered in front, slightly larger than TV height */
+.orient-iphone {
+  position: relative;
+  z-index: 2;
+  height: 270px;
+  filter: drop-shadow(0 16px 36px rgb(0 0 0 / .55));
+}
+
+
+.tv-title {
+  font-size: 48px; font-weight: 900; letter-spacing: -1.5px;
+  color: var(--text); line-height: 1.1;
+}
+
+.tv-help {
+  font-size: 20px; color: var(--text-muted);
+  line-height: 1.5; text-align: center; max-width: 460px;
+}
+
+.tv-players {
+  list-style: none;
+  display: flex; flex-direction: row; gap: 16px;
+  width: 100%; max-width: 860px;
+}
+
+.tv-player {
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 24px 20px 20px;
+  flex: 1;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+}
+
+.tv-slot {
+  width: 46px; height: 46px; border-radius: var(--radius-pill);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 900; font-size: 14px; color: #fff;
+  letter-spacing: .5px;
+}
+.tv-slot[data-slot="0"] { background: var(--p1); }
+.tv-slot[data-slot="1"] { background: var(--p2); }
+.tv-slot[data-slot="2"] { background: var(--p3); }
+.tv-slot[data-slot="3"] { background: var(--p4); color: #000; }
+
+.tv-name {
+  font-size: 20px; font-weight: 800; color: var(--text); text-align: center;
+}
+
+.tv-bar-wrap {
+  width: 100%; height: 12px; background: var(--surface-sunk);
+  border-radius: var(--radius-pill); overflow: hidden;
+}
+
+.tv-bar {
+  height: 100%; border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--accent-top), var(--accent));
+  transition: width 0.1s linear;
+}
+
+.tv-player[data-done="true"] .tv-bar { background: linear-gradient(90deg, #2b9a66, #34d896); }
+
+.tv-status {
+  font-size: 16px; font-weight: 700; color: var(--text-muted);
+  font-variant-numeric: tabular-nums; min-height: 24px;
+}
+.tv-player[data-done="true"] .tv-status { color: #2b9a66; font-size: 18px; }
+
+.tv-alert {
+  font-size: 13px; font-weight: 800; min-height: 28px;
+  border-radius: var(--radius-pill); padding: 4px 14px;
+  display: flex; align-items: center;
+}
+.tv-alert.moving { background: #fff4d6; color: #6b4a00; }
+.tv-alert.hidden { visibility: hidden; }
+
+/* ── Phone view ───────────────────────────── */
+#phone {
+  display: none; flex-direction: column; align-items: center;
+  justify-content: center; min-height: 100dvh;
+  padding: 32px 24px; gap: 28px; max-width: 400px; margin: 0 auto;
+  text-align: center;
+}
+
+.phone-step {
+  font-size: 12px; font-weight: 800; color: var(--text-muted);
+  letter-spacing: 1.5px; text-transform: uppercase;
+  background: var(--surface-sunk); border-radius: var(--radius-pill);
+  padding: 5px 14px;
+}
+
+.phone-card {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lift);
+  padding: 36px 32px;
+  width: 100%;
+  display: flex; flex-direction: column; align-items: center; gap: 20px;
+}
+
+.phone-icon { font-size: 72px; line-height: 1; }
+
+.phone-title {
+  font-size: 26px; font-weight: 900; line-height: 1.2;
+  color: var(--text); letter-spacing: -.5px;
+}
+
+.phone-help {
+  font-size: 15px; color: var(--text-muted);
+  line-height: 1.6; max-width: 300px;
+}
+
+.phone-ring-wrap { position: relative; width: 160px; height: 160px; }
+
+.phone-ring-bg { fill: none; stroke: var(--surface-sunk); stroke-width: 11; }
+
+.phone-ring-fg {
+  fill: none; stroke: var(--accent-top); stroke-width: 11; stroke-linecap: round;
+  stroke-dasharray: 440; stroke-dashoffset: 440;
+  transform: rotate(-90deg); transform-origin: center;
+  transition: stroke-dashoffset 0.1s linear, stroke 0.3s;
+}
+
+.phone-ring-label {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 30px; font-weight: 900; color: var(--text);
+}
+
+.phone-status-pill {
+  font-size: 14px; font-weight: 700;
+  border-radius: var(--radius-pill);
+  padding: 7px 18px;
+  background: var(--surface-sunk);
+  color: var(--text-muted);
+  min-height: 36px;
+  display: flex; align-items: center;
+}
+.phone-status-pill.moving { background: #fff4d6; color: #6b4a00; }
+.phone-status-pill.done { background: #d4f5e6; color: #1a7046; }
+</style>
+</head>
+<body>
+
+<div class="toggle">
+  <button class="active" onclick="show('tv', this)">TV</button>
+  <button onclick="show('phone', this)">Phone</button>
+</div>
+
+<!-- TV view -->
+<div id="tv">
+  <div class="tv-card">
+    <!-- phone floating in front of TV (z-depth) -->
+    <div class="orient-scene">
+      <div class="orient-tv-shell">
+        <div class="orient-tv-screen">
+          <div class="orient-tv-logo">🎾</div>
+        </div>
+        <div class="orient-tv-chin"></div>
+        <div class="orient-tv-stand">
+          <div class="orient-tv-neck"></div>
+          <div class="orient-tv-base"></div>
+        </div>
+      </div>
+      <!-- Wii-style illustrated iPhone (back view) -->
+      <svg class="orient-iphone" viewBox="0 0 148 290" xmlns="http://www.w3.org/2000/svg">
+        <!-- body -->
+        <rect x="4" y="4" width="140" height="282" rx="28"
+          fill="#edeae4" stroke="#c8c0b4" stroke-width="2.5"/>
+        <!-- subtle highlight -->
+        <rect x="14" y="12" width="52" height="90" rx="14"
+          fill="white" opacity="0.14"/>
+
+        <!-- side buttons -->
+        <rect x="1.5" y="54" width="3.5" height="11" rx="1.75"
+          fill="#d4cfc8" stroke="#bfb8b0" stroke-width="1.5"/>
+        <rect x="1.5" y="72" width="3.5" height="20" rx="1.75"
+          fill="#d4cfc8" stroke="#bfb8b0" stroke-width="1.5"/>
+        <rect x="1.5" y="98" width="3.5" height="20" rx="1.75"
+          fill="#d4cfc8" stroke="#bfb8b0" stroke-width="1.5"/>
+        <rect x="143" y="80" width="3.5" height="24" rx="1.75"
+          fill="#d4cfc8" stroke="#bfb8b0" stroke-width="1.5"/>
+
+        <!-- camera island -->
+        <rect x="12" y="14" width="80" height="72" rx="16"
+          fill="#d8d4cc" stroke="#bfb8b0" stroke-width="2"/>
+
+        <!-- lens 1: top-left -->
+        <circle cx="34" cy="34" r="13.5" fill="#2e2e2e" stroke="#bfb8b0" stroke-width="1.5"/>
+        <circle cx="34" cy="34" r="10.5" fill="#0e1a26"/>
+        <circle cx="34" cy="34" r="5.5" fill="#070e18"/>
+        <circle cx="30.5" cy="30.5" r="3" fill="white" opacity="0.45"/>
+
+        <!-- lens 2: top-right -->
+        <circle cx="70" cy="34" r="13.5" fill="#2e2e2e" stroke="#bfb8b0" stroke-width="1.5"/>
+        <circle cx="70" cy="34" r="10.5" fill="#0e1a26"/>
+        <circle cx="70" cy="34" r="5.5" fill="#070e18"/>
+        <circle cx="66.5" cy="30.5" r="3" fill="white" opacity="0.45"/>
+
+        <!-- lens 3: bottom-center -->
+        <circle cx="52" cy="64" r="13.5" fill="#2e2e2e" stroke="#bfb8b0" stroke-width="1.5"/>
+        <circle cx="52" cy="64" r="10.5" fill="#0e1a26"/>
+        <circle cx="52" cy="64" r="5.5" fill="#070e18"/>
+        <circle cx="48.5" cy="60.5" r="3" fill="white" opacity="0.45"/>
+
+        <!-- flash -->
+        <circle cx="80" cy="20" r="5" fill="#f0cc58" stroke="#c8a830" stroke-width="1.5"/>
+        <circle cx="80" cy="20" r="2.2" fill="white" opacity="0.6"/>
+
+        <!-- lidar -->
+        <circle cx="19" cy="64" r="4" fill="#c8c4bc" stroke="#bfb8b0" stroke-width="1.2"/>
+        <circle cx="19" cy="64" r="2" fill="#b4b0a8"/>
+
+        <!-- home indicator -->
+        <rect x="52" y="275" width="44" height="4.5" rx="2.25" fill="#ccc8c0"/>
+      </svg>
+
+    </div>
+
+    <h1 class="tv-title">Face your screen at the TV</h1>
+    <p class="tv-help">Hold your phone upright with the screen pointing toward this TV. Keep perfectly still.</p>
+  </div>
+
+  <ul class="tv-players">
+    <li class="tv-player" data-done="true">
+      <div class="tv-slot" data-slot="0">P1</div>
+      <span class="tv-name">Akshat</span>
+      <div class="tv-bar-wrap"><div class="tv-bar" style="width:100%"></div></div>
+      <span class="tv-status">✓</span>
+      <span class="tv-alert hidden">Keep it still!</span>
+    </li>
+    <li class="tv-player" id="p2row">
+      <div class="tv-slot" data-slot="1">P2</div>
+      <span class="tv-name">Priya</span>
+      <div class="tv-bar-wrap"><div class="tv-bar" id="p2bar" style="width:38%"></div></div>
+      <span class="tv-status" id="p2status">38%</span>
+      <span class="tv-alert hidden" id="p2alert">Keep it still!</span>
+    </li>
+    <li class="tv-player" id="p3row">
+      <div class="tv-slot" data-slot="2">P3</div>
+      <span class="tv-name">Sam</span>
+      <div class="tv-bar-wrap"><div class="tv-bar" id="p3bar" style="width:0%"></div></div>
+      <span class="tv-status" id="p3status">0%</span>
+      <span class="tv-alert hidden" id="p3alert">Keep it still!</span>
+    </li>
+  </ul>
+</div>
+
+<!-- Phone view -->
+<div id="phone">
+  <span class="phone-step">Step 2 of 3 · Calibration</span>
+
+  <div class="phone-card">
+    <div class="phone-icon">📱</div>
+    <h2 class="phone-title">Screen facing the TV</h2>
+    <p class="phone-help">Hold your phone upright and point the screen toward the TV. Keep still until the circle fills.</p>
+
+    <div class="phone-ring-wrap">
+      <svg width="160" height="160" viewBox="0 0 160 160">
+        <circle class="phone-ring-bg" cx="80" cy="80" r="70"/>
+        <circle class="phone-ring-fg" id="ring" cx="80" cy="80" r="70"/>
+      </svg>
+      <div class="phone-ring-label" id="ring-label">0%</div>
+    </div>
+
+    <div class="phone-status-pill" id="phone-status">Hold still…</div>
+  </div>
+</div>
+
+<script>
+function show(id, btn) {
+  document.getElementById('tv').style.display = id === 'tv' ? 'flex' : 'none';
+  document.getElementById('phone').style.display = id === 'phone' ? 'flex' : 'none';
+  document.querySelectorAll('.toggle button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+// Generic player animator
+function animatePlayer({ barId, statusId, alertId, rowId, startPct, joltChance, speed, startDelay }) {
+  let progress = startPct;
+  let draining = 0;   // ticks left draining progress
+  let alertUntil = 0; // timestamp until alert stays visible
+  setTimeout(() => {
+    setInterval(() => {
+      // trigger jolt
+      if (Math.random() < joltChance && progress > 0.05 && progress < 0.92 && draining === 0) {
+        draining = 6;
+        alertUntil = Date.now() + 2000;
+      }
+      // drain or advance
+      if (draining > 0) {
+        progress = Math.max(0, progress - 0.035);
+        draining--;
+      } else if (progress < 1) {
+        progress = Math.min(1, progress + speed);
+      }
+
+      const showAlert = Date.now() < alertUntil && progress < 1;
+      document.getElementById(alertId).className = showAlert ? 'tv-alert moving' : 'tv-alert hidden';
+
+      const pct = Math.round(progress * 100);
+      document.getElementById(barId).style.width = pct + '%';
+      if (progress >= 1) {
+        document.getElementById(rowId).dataset.done = 'true';
+        document.getElementById(statusId).textContent = '✓';
+      } else {
+        document.getElementById(statusId).textContent = pct + '%';
+      }
+    }, 80);
+  }, startDelay);
+}
+
+animatePlayer({ barId:'p2bar', statusId:'p2status', alertId:'p2alert', rowId:'p2row', startPct:0.38, joltChance:0.04, speed:0.012, startDelay:0 });
+animatePlayer({ barId:'p3bar', statusId:'p3status', alertId:'p3alert', rowId:'p3row', startPct:0,    joltChance:0.05, speed:0.009, startDelay:1800 });
+
+// Animate phone ring
+const CIRC = 2 * Math.PI * 70;
+let phoneProgress = 0;
+let phoneJolt = false;
+const ring = document.getElementById('ring');
+const ringLabel = document.getElementById('ring-label');
+const phoneStatus = document.getElementById('phone-status');
+
+setInterval(() => {
+  if (phoneJolt) {
+    phoneProgress = Math.max(0, phoneProgress - 0.18);
+    phoneJolt = false;
+    phoneStatus.textContent = 'Movement detected — keep still';
+    phoneStatus.className = 'phone-status-pill moving';
+  } else if (phoneProgress < 1) {
+    phoneProgress = Math.min(1, phoneProgress + 0.015);
+    if (phoneStatus.className !== 'phone-status-pill') {
+      phoneStatus.textContent = 'Hold still…';
+      phoneStatus.className = 'phone-status-pill';
+    }
+  }
+  if (Math.random() < 0.03 && phoneProgress < 0.88) phoneJolt = true;
+
+  const pct = Math.round(phoneProgress * 100);
+  if (phoneProgress >= 1) {
+    ring.style.strokeDashoffset = '0';
+    ring.style.stroke = '#2b9a66';
+    ringLabel.textContent = '✓';
+    phoneStatus.textContent = 'Calibrated — net direction saved';
+    phoneStatus.className = 'phone-status-pill done';
+  } else {
+    ring.style.strokeDashoffset = CIRC * (1 - phoneProgress);
+    ring.style.stroke = '';
+    ringLabel.textContent = pct + '%';
+  }
+}, 80);
+</script>
+</body>
+</html>

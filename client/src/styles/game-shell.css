@@ -105,3 +105,17 @@
   .game-session__bar { min-height: 44px; padding-block: 2px; }
   .game-session button, .game-session summary { min-height: 36px; padding-block: 6px; }
 }
+.tv-swing-debug {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  font-size: clamp(2.5rem, 7vw, 5rem);
+  font-weight: 900;
+  color: #e00;
+  text-shadow: 0 2px 12px rgba(0,0,0,.7);
+  pointer-events: none;
+  white-space: nowrap;
+  letter-spacing: .02em;
+}

@@ -1575,3 +1575,223 @@
 .prototype-frame--phone iframe { box-shadow: none; border: 0; height: 1050px; }
 .prototype-frame__pause { border-radius: var(--radius-lg); }
 @media (max-width: 600px) { .host-lobby .stub__row { padding: 16px; justify-content: center; text-align: center; } .tennis-session { padding: 16px; } }
+
+/* Calibration – TV side --------------------------------------------------- */
+.cal-tv { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+
+.cal-tv__scene {
+  position: relative;
+  width: 220px;
+  height: 140px;
+  margin: 0.5rem 0 0.75rem;
+  align-self: center;
+}
+
+.cal-tv__shell {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.cal-tv__screen {
+  width: 190px;
+  height: 110px;
+  border-radius: 10px 10px 0 0;
+  background: var(--surface-sunk);
+  border: 3px solid var(--border-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cal-tv__chin {
+  width: 190px;
+  height: 10px;
+  background: var(--border-strong);
+  border-radius: 0 0 4px 4px;
+}
+
+.cal-tv__stand {
+  width: 50px;
+  height: 20px;
+  background: var(--border-strong);
+  clip-path: polygon(20% 0, 80% 0, 100% 100%, 0% 100%);
+}
+
+.cal-tv__phone {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  filter: drop-shadow(0 4px 12px rgb(0 0 0 / .22));
+}
+
+.cal-tv__title {
+  font-size: 1.7rem;
+  font-weight: 900;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.cal-tv__help {
+  color: var(--text-muted);
+  margin: 0.1rem 0 0.75rem;
+}
+
+.cal-tv__players {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  width: 100%;
+}
+
+.cal-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 180px;
+  flex: 1;
+  padding: 0.75rem 1rem;
+  border: 4px solid var(--player, var(--border-strong));
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.cal-card[data-done='true'] { border-color: var(--p3); }
+
+.cal-card .seat__badge {
+  width: 2.6rem;
+  height: 2.6rem;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.cal-card__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.cal-card__name {
+  font-weight: 800;
+  font-size: 1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cal-card__bar-wrap {
+  height: 7px;
+  border-radius: 999px;
+  background: var(--surface-sunk);
+  overflow: hidden;
+}
+
+.cal-card__bar {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 0.15s ease;
+}
+
+.cal-card[data-done='true'] .cal-card__bar { background: var(--p3); }
+
+.cal-card__pct {
+  font-weight: 900;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.cal-card[data-done='true'] .cal-card__pct { color: var(--p3); }
+
+.cal-card__alert {
+  position: absolute;
+  top: -0.6rem;
+  right: 0.75rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--radius-pill);
+  background: var(--danger);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  white-space: nowrap;
+  animation: cal-alert-pop 0.15s ease;
+}
+
+@keyframes cal-alert-pop {
+  from { transform: scale(0.7); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+
+/* Calibration – phone pre-start prompt ------------------------------------- */
+.phone-cal-prompt {
+  margin-top: 1.25rem;
+  padding: 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+
+.phone-cal-prompt__title {
+  font-size: 1.1rem;
+  font-weight: 900;
+  margin: 0 0 0.35rem;
+}
+
+.phone-cal-prompt__help {
+  color: var(--text-muted);
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+}
+
+.phone-cal-prompt__btn { width: 100%; }
+
+/* Calibration – phone side ------------------------------------------------- */
+.phone-cal {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  margin-top: 1.25rem;
+  padding: 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+
+.phone-cal__ring-wrap { flex-shrink: 0; }
+.phone-cal__ring { display: block; }
+
+.phone-cal__text { flex: 1; min-width: 0; }
+
+.phone-cal__title {
+  font-size: 1.1rem;
+  font-weight: 900;
+  margin: 0 0 0.25rem;
+}
+
+.phone-cal__status {
+  font-weight: 800;
+  margin: 0 0 0.3rem;
+}
+
+.phone-cal__status[data-state='moving'] { color: var(--danger); }
+.phone-cal__status[data-done='true']    { color: var(--p3); }
+
+.phone-cal__help {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
