@@ -15,7 +15,8 @@
     <div class="play-card-heading"><h2>Phone setup</h2><span class="visually-hidden" id="setup-status" role="status">Set up your controller</span></div>
     <label class="hand-label">Playing hand <select id="hand"><option>Right</option><option>Left</option></select></label>
     <p id="motion" role="status">Tap Enable motion and allow access. Hold still briefly; setup completes automatically.</p>
-    <div class="buttons"><button id="enable" class="primary" disabled>Enable motion</button></div>
+    <progress id="calibration-progress" max="1" value="0" aria-label="Calibration progress" hidden></progress>
+    <div class="buttons"><button id="calibrate" class="primary" disabled>Enable motion</button></div>
     <p class="play-muted" id="setup-next">Once set up, press Ready above. Your recent setup can be reused between games on this phone.</p>
   </section>
   <details class="play-card strength-rehearsal" id="strength-panel" hidden>
@@ -99,6 +100,7 @@
   </details>
   <details class="play-card"><summary>Controller help</summary>
     <p id="sensor-status" class="sensor-status" role="status">Checking motion support…</p>
+    <button id="enable">Enable motion</button>
     <p class="play-muted" id="motion-help">Open this link directly in Safari or Chrome on your phone and allow Motion &amp; Orientation access. Keep the screen on. If readings stay at zero events, check the browser’s site permissions. Button controls work without motion permission.</p>
     <p class="play-muted">Motion setup is shared between games on this address. A new website address needs its own browser permission; a permanent HTTPS address keeps setup consistent. If motion drifts, open Controller settings and choose Reset motion setup.</p>
     <p class="play-muted">A local address beginning with http:// can open the lobby but cannot provide phone motion. Use the host’s secure HTTPS link.</p>

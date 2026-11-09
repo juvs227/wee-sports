@@ -10,6 +10,7 @@ function fixture() {
     const phone = store.join(`${prefix}-phone`, { v, code: host.code, name: 'Player' });
     store.setSetup(`${prefix}-phone`, { setup: 'motion' });
     store.setReady(`${prefix}-phone`, { ready: true });
+    store.calibrationDone(`${prefix}-tv`);
     now += COUNTDOWN_SECONDS * 1000;
     store.finishCountdown(host.code);
     now += VOTE_SECONDS * 1000;

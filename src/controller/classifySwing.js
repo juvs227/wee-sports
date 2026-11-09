@@ -13,7 +13,14 @@ export function createSwingDetector() {
         if (!above && timeMs - lastSwing >= COOLDOWN_MS) {
           above = true
           lastSwing = timeMs
-          return { label: 'Forehand', complete: true, peakRotation: 500, startMs: timeMs, peakTimeMs: timeMs }
+          let label = 'Forehand';
+          if (sample.netOrientation && sample.currentNormal) {
+            const n = sample.netOrientation.normal;
+            const c = sample.currentNormal;
+            const dot = c[0]*n[0] + c[1]*n[1] + c[2]*n[2];
+            label = dot >= 0 ? 'Forehand' : 'Backhand';
+          }
+          return { label, complete: true, peakRotation: 500, startMs: timeMs, peakTimeMs: timeMs }
         }
       } else {
         above = false

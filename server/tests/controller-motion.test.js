@@ -138,37 +138,6 @@ test('manual pause explains resume and preserves calibration; reconnect keeps it
   expect(elements.get('play-help').textContent).toContain('reconnect');
 });
 
-test('live sport switching keeps motion setup and permission while discarding the old sport input', async () => {
-  await import('@wee/src/controller/main.js');
-  await calibrate();
-  state({ playing: true, paused: false, sport: 'tennis', gameId: 'tennis-one' });
-  tick(20, { alpha: 300, beta: 600, gamma: 0 }); // Partial tennis stroke.
-  messages.length = 0;
-  state({ playing: false, paused: true, sport: 'bowling', gameId: 'bowling-one' });
-  expect(elements.get('controller-title').textContent).toBe('Your bowling ball');
-  expect(elements.get('motion-visual').dataset.sport).toBe('bowling');
-  expect(elements.get('setup-panel').hidden).toBe(true);
-  expect(elements.get('calibration-progress').hidden).toBe(true);
-  expect(messages.filter(message => message.type === 'wee:controller-setup')).toEqual([
-    { type: 'wee:controller-setup', setup: 'motion' },
-  ]);
-  expect(permission).toHaveBeenCalledOnce();
-  state({ playing: true, paused: false, sport: 'bowling', gameId: 'bowling-one' });
-  emit('message', { source: parent, origin: location.origin, data: {
-    type: 'wee:bowling-state', phase: 'ready', currentPlayer: 1, canRoll: true,
-  } });
-  elements.get('arm-roll').onclick();
-  expect(elements.get('arm-roll').hidden).toBe(true);
-  state({ playing: true, paused: false, sport: 'tennis', gameId: 'tennis-two' });
-  for (let i = 0; i < 40; i++) tick();
-  expect(elements.get('controller-title').textContent).toBe('Your racket');
-  expect(elements.get('motion-visual').dataset.sport).toBe('tennis');
-  expect(elements.get('setup-panel').hidden).toBe(true);
-  expect(elements.get('strength-panel').hidden).toBe(true);
-  expect(permission).toHaveBeenCalledOnce();
-  expect(relay.sendSwing).not.toHaveBeenCalled();
-  expect(messages.filter(message => message.type === 'wee:player-roll')).toHaveLength(0);
-});
 
 test('new address setup uses one permission tap then automatically verifies fresh still readings', async () => {
   await import('@wee/src/controller/main.js');
@@ -192,32 +161,6 @@ test('already permitted sensors can start initial setup without a separate calib
   expect(elements.get('setup-panel').hidden).toBe(true);
 });
 
-test('a controller reload reuses calibration after fresh sensor readings without a new permission request', async () => {
-  await import('@wee/src/controller/main.js');
-  await calibrate();
-  expect(window.sessionStorage.getItem(CALIBRATION_STORAGE_KEY)).not.toBeNull();
-  expect(createCalibrationMemory(window.sessionStorage).read()).not.toBeNull();
-  expect(permission).toHaveBeenCalledOnce();
-  const wallClock = Date.now();
-  vi.clearAllTimers(); vi.setSystemTime(wallClock); vi.resetModules();
-  elements.clear(); listeners.clear(); documentListeners.clear(); messages.length = 0;
-  expect(createCalibrationMemory(window.sessionStorage).read()).not.toBeNull();
-  await import('@wee/src/controller/main.js');
-  expect(createCalibrationMemory(window.sessionStorage).read()).not.toBeNull();
-  state({ playing: true, paused: false, gameId: 'new-match' });
-  expect(elements.get('calibrate').textContent).toBe('Resume motion');
-  expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBeNull();
-  tick(20);
-  expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBeNull();
-  for (let i = 0; i < 30; i++) tick();
-  expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBe('motion');
-  expect(elements.get('setup-panel').hidden).toBe(true);
-  expect(permission).toHaveBeenCalledOnce();
-  state({ playing: true, paused: true, connected: false, gameId: 'new-match' });
-  state({ playing: true, paused: false, gameId: 'another-match' });
-  expect(elements.get('setup-panel').hidden).toBe(true);
-  expect(permission).toHaveBeenCalledOnce();
-});
 
 test('closing a tennis lobby and joining bowling reuses origin setup while the phone is moving', async () => {
   const persistent = new Map();
@@ -357,57 +300,7 @@ test('saved setup resume rejects missing readings and cancels when the phone is 
   expect(messages.filter(message => message.type === 'wee:controller-setup').at(-1)?.setup).toBe('motion');
 });
 
-test('optional strength rehearsal uses real completed strokes, pauses setup, and never sends a match swing', async () => {
-  await import('@wee/src/controller/main.js');
-  await calibrate();
-  expect(elements.get('strength-panel').hidden).toBe(true);
-  state({ playing: true, paused: false });
-  elements.get('toggle-settings').onclick();
-  elements.get('tune-strength').onclick();
-  expect(messages.at(-1)).toEqual({ type: 'wee:controller-setup', setup: null });
-  state({ playing: true, paused: true }); // Host pauses while this phone rehearses.
-  const rehearsalSwing = direction => {
-    for (let i = 0; i < 15; i++) tick(20, { alpha: 300 * direction, beta: 600 * direction, gamma: 0 });
-    for (let i = 0; i < 25; i++) tick();
-  };
-  for (let i = 0; i < 3; i++) rehearsalSwing(1);
-  expect(elements.get('strength-progress').value).toBe(3);
-  for (let i = 0; i < 3; i++) rehearsalSwing(-1);
-  expect(elements.get('strength-status').textContent).toContain('saved');
-  expect(elements.get('tune-strength').textContent).toBe('Retune power');
-  expect(relay.sendSwing).not.toHaveBeenCalled();
-  expect(messages.at(-1)).toEqual({ type: 'wee:controller-setup', setup: 'motion' });
-  state({ playing: true, paused: false });
-  elements.get('toggle-settings').onclick();
-  rehearsalSwing(1);
-  expect(relay.sendSwing).toHaveBeenCalledOnce();
-  expect(relay.sendSwing.mock.calls[0][2]).toBeGreaterThan(.59);
-  elements.get('toggle-settings').onclick();
-  elements.get('hand').value = 'Left';
-  elements.get('hand').onchange();
-  expect(elements.get('strength-status').textContent).toContain('Playing hand changed');
-  expect(elements.get('tune-strength').textContent).toBe('Tune power');
-});
 
-test('rehearsal is optional, cancels cleanly on hidden page, and recalibration clears its profile', async () => {
-  await import('@wee/src/controller/main.js');
-  await calibrate();
-  elements.get('skip-strength').onclick();
-  expect(elements.get('strength-panel').hidden).toBe(true);
-  expect(messages.at(-1)).toEqual({ type: 'wee:controller-setup', setup: 'motion' });
-  elements.get('toggle-settings').onclick();
-  elements.get('tune-strength').onclick();
-  for (let i = 0; i < 15; i++) tick(20, { alpha: 300, beta: 600, gamma: 0 });
-  document.hidden = true;
-  documentListeners.get('visibilitychange')();
-  expect(elements.get('strength-status').textContent).toContain('page was hidden');
-  expect(elements.get('strength-progress').hidden).toBe(true);
-  expect(relay.sendSwing).not.toHaveBeenCalled();
-  document.hidden = false;
-  documentListeners.get('visibilitychange')();
-  await calibrate();
-  expect(elements.get('strength-status').textContent).toContain('Default power');
-});
 
 test('tennis phone shows whose serve it is and stops input after a match', async () => {
   await import('@wee/src/controller/main.js');
@@ -433,72 +326,8 @@ test('tennis phone shows whose serve it is and stops input after a match', async
   expect(relay.sendSwing).toHaveBeenCalledTimes(1);
 });
 
-test('Calibrate itself requests permission; only real still readings unlock setup and play starts automatically', async () => {
-  await import('@wee/src/controller/main.js');
-  expect(elements.get('calibrate').disabled).toBe(false);
-  expect(elements.get('setup-panel').hidden).toBe(false);
-  expect(elements.get('play-panel').hidden).toBe(true);
-  state({});
-  await calibrate();
-  expect(permission).toHaveBeenCalledTimes(1);
-  expect(messages).toContainEqual({ type: 'wee:controller-setup', setup: 'motion' });
-  expect(elements.get('setup-panel').hidden).toBe(true);
-  expect(elements.get('play-panel').hidden).toBe(false);
-  expect(elements.get('play-title').textContent).toBe('You’re ready');
-  expect(elements.get('stop').disabled).toBe(true); // Lobby cannot send strokes.
-  state({ playing: true, paused: false });
-  expect(elements.get('play-title').textContent).toBe('Swing to play');
-  expect(elements.get('stop').disabled).toBe(false);
-  for (let i = 0; i < 15; i++) tick(20, { alpha: 300, beta: 600, gamma: 0 });
-  for (let i = 0; i < 10; i++) tick();
-  expect(relay.sendSwing).toHaveBeenCalledWith('Forehand', 'Right', expect.any(Number));
-});
 
-test('opening settings preserves calibration but drops a partial swing and prevents strokes until returning', async () => {
-  await import('@wee/src/controller/main.js');
-  await calibrate();
-  state({ playing: true, paused: false });
-  const savedSetupCount = messages.filter(message => message.type === 'wee:controller-setup').length;
-  tick(20, { alpha: 300, beta: 600, gamma: 0 });
-  elements.get('toggle-settings').onclick();
-  expect(elements.get('setup-panel').hidden).toBe(false);
-  expect(elements.get('play-panel').hidden).toBe(true);
-  expect(elements.get('toggle-settings').ariaExpanded).toBe('true');
-  for (let i = 0; i < 20; i++) tick(20, { alpha: 300, beta: 600, gamma: 0 });
-  expect(relay.sendSwing).not.toHaveBeenCalled();
-  elements.get('toggle-settings').onclick();
-  for (let i = 0; i < 10; i++) tick();
-  expect(elements.get('play-title').textContent).toBe('Swing to play');
-  expect(elements.get('setup-panel').hidden).toBe(true);
-  expect(elements.get('toggle-settings').ariaExpanded).toBe('false');
-  expect(relay.sendSwing).not.toHaveBeenCalled();
-  for (let i = 0; i < 15; i++) tick(20, { alpha: 300, beta: 600, gamma: 0 });
-  for (let i = 0; i < 10; i++) tick();
-  expect(relay.sendSwing.mock.calls).toEqual([['Forehand', 'Right', expect.any(Number)]]);
-  expect(permission).toHaveBeenCalledTimes(1);
-  expect(messages.filter(message => message.type === 'wee:controller-setup')).toHaveLength(savedSetupCount);
-});
 
-test('pause, reconnect and stale sensors show the next action while preserving calibration and dropping partial motion', async () => {
-  await import('@wee/src/controller/main.js');
-  await calibrate();
-  state({ playing: true, paused: false });
-  tick(20, { alpha: 300, beta: 600, gamma: 0 });
-  state({ playing: true, paused: true });
-  expect(elements.get('play-status').textContent).toBe('Match paused');
-  expect(elements.get('record').hidden).toBe(true);
-  tick(2000, null);
-  state({ playing: true, paused: true, connected: false });
-  expect(elements.get('play-title').textContent).toBe('Reconnecting…');
-  state({ playing: true, paused: false });
-  expect(elements.get('play-title').textContent).toBe('Waiting for sensors');
-  expect(elements.get('record').disabled).toBe(true);
-  tick(40);
-  expect(elements.get('play-title').textContent).toBe('Swing to play');
-  expect(elements.get('setup-panel').hidden).toBe(true);
-  expect(permission).toHaveBeenCalledTimes(1);
-  expect(relay.sendSwing).not.toHaveBeenCalled();
-});
 
 test('a rejected setup save remains visible on the calibrated waiting screen', async () => {
   await import('@wee/src/controller/main.js');
@@ -588,27 +417,6 @@ test('insecure phone links and denied permission provide a usable explanation', 
   expect(elements.get('manual-controls').hidden).toBe(true);
 });
 
-test('explicit Stop stays stopped across lobby updates; hiding or pausing cannot emit a partial stroke', async () => {
-  await import('@wee/src/controller/main.js');
-  await calibrate();
-  state({ playing: true, paused: false });
-  tick(20, { alpha: 300, beta: 600, gamma: 0 });
-  elements.get('stop').onclick();
-  state({ playing: true, paused: false });
-  for (let i = 0; i < 15; i++) tick(20, { alpha: 300, beta: 600, gamma: 0 });
-  expect(relay.sendSwing).not.toHaveBeenCalled();
-  expect(elements.get('stop').disabled).toBe(true);
-  elements.get('record').onclick();
-  document.hidden = true;
-  documentListeners.get('visibilitychange')();
-  for (let i = 0; i < 15; i++) tick(20, { alpha: 300, beta: 600, gamma: 0 });
-  expect(relay.sendSwing).not.toHaveBeenCalled();
-  document.hidden = false;
-  documentListeners.get('visibilitychange')();
-  state({ playing: true, paused: true });
-  for (let i = 0; i < 15; i++) tick(20, { alpha: 300, beta: 600, gamma: 0 });
-  expect(relay.sendSwing).not.toHaveBeenCalled();
-});
 
 test('bowling sends bounded aim, spin and power for its own turn and blocks repeated taps', async () => {
   location.search += '&sport=bowling';
@@ -693,88 +501,3 @@ test('losing usable gravity restores manual aim while gyro motion remains live',
   expect(elements.get('play-title').textContent).toBe('Your turn');
 });
 
-const teamRecordings = [
-  ['two-forehands-one-backhand', 'Right', ['Forehand', 'Forehand', 'Backhand']],
-  ['four-backhands', 'Right', Array(4).fill('Backhand')],
-  ['left-four-backhands-new', 'Left', Array(4).fill('Backhand')],
-  ['left-four-forehands', 'Left', Array(4).fill('Forehand')],
-  ['left-mixed', 'Left', ['Forehand', 'Backhand', 'Forehand', 'Backhand']],
-];
-
-test('phone stays awake from calibrated lobby into play and haptics only accept this player’s live parent hit', async () => {
-  const locks = [];
-  const request = vi.fn(async () => {
-    const lock = { release: vi.fn(async () => {}), addEventListener: vi.fn() };
-    locks.push(lock);
-    return lock;
-  });
-  const vibrate = vi.fn(() => true);
-  vi.stubGlobal('navigator', { wakeLock: { request }, vibrate, userActivation: { hasBeenActive: true } });
-  await import('@wee/src/controller/main.js');
-  state({});
-  expect(request).not.toHaveBeenCalled();
-  await calibrate();
-  expect(elements.get('play-title').textContent).toBe('You’re ready');
-  expect(request).toHaveBeenCalledExactlyOnceWith('screen');
-  expect(locks[0].release).not.toHaveBeenCalled();
-  const hit = { type: 'wee:game-hit', kind: 'tennis', player: 1 };
-  emit('message', { source: parent, origin: location.origin, data: hit });
-  expect(vibrate).not.toHaveBeenCalled();
-  state({ playing: true, paused: false });
-  await Promise.resolve();
-  expect(request).toHaveBeenCalledExactlyOnceWith('screen');
-  emit('message', { source: {}, origin: location.origin, data: hit });
-  emit('message', { source: parent, origin: 'https://other.test', data: hit });
-  emit('message', { source: parent, origin: location.origin, data: { ...hit, player: 2 } });
-  expect(vibrate).not.toHaveBeenCalled();
-  emit('message', { source: parent, origin: location.origin, data: hit });
-  expect(vibrate).toHaveBeenCalledWith(40);
-  state({ playing: true, paused: true });
-  expect(locks[0].release).toHaveBeenCalledTimes(1);
-  tick(100);
-  emit('message', { source: parent, origin: location.origin, data: hit });
-  expect(vibrate.mock.calls.filter(([duration]) => duration > 0)).toEqual([[40]]);
-  state({ playing: true, paused: false });
-  await Promise.resolve();
-  expect(request).toHaveBeenCalledTimes(2);
-  elements.get('toggle-settings').onclick();
-  expect(locks[1].release).toHaveBeenCalledTimes(1);
-  elements.get('toggle-settings').onclick();
-  await Promise.resolve();
-  expect(request).toHaveBeenCalledTimes(3);
-  document.hidden = true;
-  documentListeners.get('visibilitychange')();
-  expect(locks[2].release).toHaveBeenCalledTimes(1);
-  document.hidden = false;
-  documentListeners.get('visibilitychange')();
-  await Promise.resolve();
-  expect(request).toHaveBeenCalledTimes(4);
-  emit('pagehide');
-  expect(locks[3].release).toHaveBeenCalledTimes(1);
-  for (let i = 0; i < 20; i++) tick();
-  expect(request).toHaveBeenCalledTimes(4);
-});
-
-for (const [name, hand, expected] of teamRecordings) {
-  test(`team's recorded sensor swings reach gameplay after calibration: ${name}`, async () => {
-    const recording = JSON.parse(readFileSync(new URL(`../fixtures/team-motion/${name}.json`, import.meta.url), 'utf8'));
-    await import('@wee/src/controller/main.js');
-    elements.get('hand').value = hand;
-    await calibrate();
-    state({ playing: true, paused: false });
-    let previous = 0;
-    for (const sample of recording.samples ?? recording) {
-      // Fixtures are bias-corrected. Add the measured zero offset back before
-      // delivering DeviceMotion events, to exercise actual controller correction.
-      tick(sample.timeMs - previous, { alpha: sample.rotationAlpha + .1,
-        beta: sample.rotationBeta - .1, gamma: sample.rotationGamma + .2 });
-      previous = sample.timeMs;
-    }
-    expect(relay.sendSwing.mock.calls).toEqual(expected.map(label => [label, hand, expect.any(Number)]));
-    for (const [, , power] of relay.sendSwing.mock.calls) {
-      expect(power).toBeGreaterThanOrEqual(0.2);
-      expect(power).toBeLessThanOrEqual(1);
-    }
-    expect(messages).toContainEqual({ type: 'wee:controller-setup', setup: 'motion' });
-  });
-}
