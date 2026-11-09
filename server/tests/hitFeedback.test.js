@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { io } from 'socket.io-client';
@@ -17,6 +17,7 @@ function game(sport = 'tennis') {
   const phone = store.join('phone', { v, code: host.code, name: 'Player' });
   store.setSetup('phone', { setup: 'motion' });
   store.setReady('phone', { ready: true });
+  store.calibrationDone('tv');
   now = 5000;
   store.finishCountdown(host.code);
   now += VOTE_SECONDS * 1000;
@@ -98,7 +99,7 @@ for (const sport of ['tennis', 'bowling']) test(`${sport}: real socket feedback 
   await once(app.http, 'listening');
   const url = `http://127.0.0.1:${app.http.address().port}`;
   const clients = [];
-  t.after(async () => { clients.forEach(client => client.disconnect()); await app.close(); });
+  t.onTestFinished(async () => { clients.forEach(client => client.disconnect()); await app.close(); });
   async function client() {
     const socket = io(url, { transports: ['websocket'], reconnection: false });
     clients.push(socket);
@@ -111,6 +112,7 @@ for (const sport of ['tennis', 'bowling']) test(`${sport}: real socket feedback 
   const seat = await send(phone, EVENTS.PLAYER_JOIN, { v, code: room.code, name: 'Player' });
   await send(phone, EVENTS.PLAYER_SETUP, { setup: 'motion' });
   await send(phone, EVENTS.PLAYER_READY, { ready: true });
+  await send(host, EVENTS.HOST_CALIBRATION_DONE, {});
   now = 5000; store.finishCountdown(room.code);
   now += VOTE_SECONDS * 1000; store.expireVote(room.code);
   const hit = { id: 'actual-contact', gameId: store.lobby(room.code).gameId, player: 1 };

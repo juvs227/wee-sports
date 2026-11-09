@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { io } from 'socket.io-client';
@@ -19,6 +19,7 @@ function fixture(sport = 'tennis', count = 1) {
     store.setSetup(`p${index + 1}`, { setup: 'buttons' });
     store.setReady(`p${index + 1}`, { ready: true });
   }
+  store.calibrationDone('tv');
   now += 5000; store.finishCountdown(room.code); now += VOTE_SECONDS * 1000; store.expireVote(room.code);
   const gameId = store.lobby(room.code).gameId;
   const options = sport === 'tennis' ? tennisOptions(gameId) : { gameId, sport };
@@ -132,7 +133,7 @@ test('real sockets deliver actual game results, publish applied settings and iso
   const app = createGameServer({ store });
   app.http.listen(0, '127.0.0.1'); await once(app.http, 'listening');
   const clients = [];
-  t.after(async () => { clients.forEach(client => client.disconnect()); await app.close(); });
+  t.onTestFinished(async () => { clients.forEach(client => client.disconnect()); await app.close(); });
   const send = (client, event, payload) => client.timeout(3500).emitWithAck(event, payload);
   async function connect() {
     const client = io(`http://127.0.0.1:${app.http.address().port}`, { transports: ['websocket'], reconnection: false });
@@ -144,6 +145,7 @@ test('real sockets deliver actual game results, publish applied settings and iso
     await send(phone, EVENTS.PLAYER_JOIN, { v, code: room.code, name: 'Player' });
     await send(phone, EVENTS.PLAYER_SETUP, { setup: 'buttons' });
     await send(phone, EVENTS.PLAYER_READY, { ready: true });
+    await send(tv, EVENTS.HOST_CALIBRATION_DONE, {});
     now += 5000; store.finishCountdown(room.code); now += VOTE_SECONDS * 1000; store.expireVote(room.code);
     const gameId = store.lobby(room.code).gameId;
     await send(tv, EVENTS.HOST_GAME_OPTIONS, tennisOptions(gameId));

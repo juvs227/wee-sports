@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   COUNTDOWN_SECONDS,
@@ -257,18 +257,19 @@ test('the last player to ready up starts the countdown on its own', () => {
   for (let i = 0; i < MAX_PLAYERS - 1; i += 1) store.setReady(`p${i}`, { ready: true });
   assert.equal(store.lobby(code).countdown, null);
   assert.deepEqual(store.setReady(`p${MAX_PLAYERS - 1}`, { ready: true }),
-    { ok: true, code, countdownStarted: true, msLeft: COUNTDOWN_MS });
+    { ok: true, code, calibrationStarted: true });
   const lobby = store.lobby(code);
-  assert.equal(lobby.phase, PHASES.COUNTDOWN);
-  assert.deepEqual(lobby.countdown, { msLeft: COUNTDOWN_MS });
-  assert.equal(typeof lobby.gameId, 'string');
-  // Everyone stays ready while the countdown runs, so anyone can still back out.
+  assert.equal(lobby.phase, PHASES.CALIBRATION);
+  assert.equal(lobby.countdown, null);
+  assert.equal(lobby.gameId, null);
+  // Everyone stays ready while calibrating, so anyone can still back out.
   assert.deepEqual(readyFlags(store, code), [true, true, true, true]);
 });
 
 test('msLeft counts down with the clock and never goes negative', () => {
   const { store, code, clock } = startReadyCheck();
   everyoneReady(store);
+  store.calibrationDone('tv');
   clock.t += 2000;
   assert.deepEqual(store.lobby(code).countdown, { msLeft: COUNTDOWN_MS - 2000 });
   clock.t += COUNTDOWN_MS;
@@ -278,6 +279,7 @@ test('msLeft counts down with the clock and never goes negative', () => {
 test('un-readying during the countdown cancels it, and everyone else stays ready', () => {
   const { store, code, clock } = startReadyCheck();
   everyoneReady(store);
+  store.calibrationDone('tv');
   assert.deepEqual(store.setReady('p2', { ready: false }), { ok: true, code, countdownCancelled: true });
   const lobby = store.lobby(code);
   assert.equal(lobby.phase, PHASES.READY);
@@ -287,13 +289,14 @@ test('un-readying during the countdown cancels it, and everyone else stays ready
   // The cancelled countdown's deadline passing later changes nothing.
   clock.t += COUNTDOWN_MS;
   assert.equal(store.finishCountdown(code), null);
-  // Readying up again restarts it straight away.
-  assert.equal(store.setReady('p2', { ready: true }).countdownStarted, true);
+  // Readying up again starts calibration straight away.
+  assert.equal(store.setReady('p2', { ready: true }).calibrationStarted, true);
 });
 
 test('a bowling countdown ends in the game, and not a moment early', () => {
   const { store, code, clock } = startReadyCheck();
   everyoneReady(store);
+  store.calibrationDone('tv');
   clock.t += COUNTDOWN_MS - 1;
   assert.equal(store.finishCountdown(code), null);
   assert.equal(store.lobby(code).phase, PHASES.COUNTDOWN);
@@ -313,6 +316,7 @@ test('a bowling countdown ends in the game, and not a moment early', () => {
 test('a player leaving during the countdown cancels it and clears the ready flags', () => {
   const { store, code, clock } = startReadyCheck();
   everyoneReady(store);
+  store.calibrationDone('tv');
   assert.deepEqual(store.remove('p1'), { code, closed: false, countdownCancelled: true });
   const lobby = store.lobby(code);
   assert.equal(lobby.phase, PHASES.READY);
@@ -329,6 +333,7 @@ test('nobody can join during the countdown', () => {
   store.join('p0', { v, code, name: 'P0' });
   store.setSetup('p0', { setup: 'buttons' });
   store.setReady('p0', { ready: true });
+  store.calibrationDone('tv');
   assert.equal(store.lobby(code).phase, PHASES.COUNTDOWN);
   assert.deepEqual(store.join('late', { v, code, name: 'Late' }), { ok: false, error: ERRORS.IN_PROGRESS });
 });
@@ -336,6 +341,7 @@ test('nobody can join during the countdown', () => {
 test('the host leaving during the countdown closes the room', () => {
   const { store, code, clock } = startReadyCheck();
   everyoneReady(store);
+  store.calibrationDone('tv');
   const result = store.remove('tv');
   assert.equal(result.closed, true);
   assert.equal(result.playerIds.length, MAX_PLAYERS);
@@ -350,6 +356,7 @@ test('the host leaving during the countdown closes the room', () => {
 function openVote() {
   const fixture = startReadyCheck('tennis');
   everyoneReady(fixture.store);
+  fixture.store.calibrationDone('tv');
   fixture.clock.t += COUNTDOWN_MS;
   assert.deepEqual(fixture.store.finishCountdown(fixture.code), { code: fixture.code, msLeft: VOTE_MS });
   return fixture;
@@ -358,6 +365,7 @@ function openVote() {
 test('a tennis countdown opens the vote, keeping the same game id', () => {
   const { store, code, clock } = startReadyCheck('tennis');
   everyoneReady(store);
+  store.calibrationDone('tv');
   const { gameId } = store.lobby(code);
   clock.t += COUNTDOWN_MS;
   assert.deepEqual(store.finishCountdown(code), { code, msLeft: VOTE_MS });
@@ -471,6 +479,7 @@ test('nobody can join during the vote', () => {
   store.join('solo', { v, code, name: 'Solo' });
   store.setSetup('solo', { setup: 'buttons' });
   store.setReady('solo', { ready: true });
+  store.calibrationDone('tv');
   clock.t += COUNTDOWN_MS;
   store.finishCountdown(code);
   assert.equal(store.lobby(code).phase, PHASES.VOTE);
@@ -574,6 +583,7 @@ test('an active tennis game rejects mid-game joining', () => {
   const { store, code, clock } = startReadyCheck('tennis');
   store.remove('p1');
   everyoneReady(store);
+  store.calibrationDone('tv');
   clock.t += COUNTDOWN_MS;
   store.finishCountdown(code);
   clock.t += VOTE_MS;
@@ -585,6 +595,7 @@ test('an active tennis game rejects mid-game joining', () => {
 test('the tennis controller leaving returns everyone to the lobby to refill P1', () => {
   const { store, code, clock } = startReadyCheck('tennis');
   everyoneReady(store);
+  store.calibrationDone('tv');
   clock.t += COUNTDOWN_MS;
   store.finishCountdown(code);
   clock.t += VOTE_MS;
@@ -600,8 +611,9 @@ test('one phone can ready, start tennis, and reconnect without extra players', (
   const seat = store.join('solo', { v, code, name: 'Solo' });
   assert.equal(seat.phase, PHASES.READY);
   store.setSetup('solo', { setup: 'buttons' });
-  assert.equal(store.setReady('solo', { ready: true }).countdownStarted, true);
+  assert.equal(store.setReady('solo', { ready: true }).calibrationStarted, true);
   assert.equal(store.join('late', { v, code, name: 'Late' }).error, ERRORS.IN_PROGRESS);
+  store.calibrationDone('tv');
   clock.t += COUNTDOWN_MS;
   store.finishCountdown(code);
   assert.equal(store.vote('solo', { watch: false }).resolved, true);
@@ -619,9 +631,9 @@ test('joining during the ready check reopens readiness before the countdown', ()
   const friend = store.join('friend', { v, code, name: 'Friend' });
   assert.equal(friend.ok, true);
   assert.equal(friend.phase, PHASES.READY);
-  assert.equal(store.setReady('solo', { ready: true }).countdownStarted, undefined);
+  assert.equal(store.setReady('solo', { ready: true }).calibrationStarted, undefined);
   store.setSetup('friend', { setup: 'buttons' });
-  assert.equal(store.setReady('friend', { ready: true }).countdownStarted, true);
+  assert.equal(store.setReady('friend', { ready: true }).calibrationStarted, true);
 });
 
 test('setup gates readiness, cancels a countdown, and pauses a running match until restored', () => {
@@ -634,12 +646,13 @@ test('setup gates readiness, cancels a countdown, and pauses a running match unt
   assert.equal(store.setSetup('p0', { setup: 'fake' }).error, 'bad-setup');
   store.setSetup('p0', { setup: 'motion' }); store.setSetup('p1', { setup: 'buttons' });
   store.setReady('p0', { ready: true }); store.setReady('p1', { ready: true });
-  assert.equal(store.lobby(code).phase, PHASES.COUNTDOWN);
+  assert.equal(store.lobby(code).phase, PHASES.CALIBRATION);
   store.setSetup('p1', { setup: null });
   assert.equal(store.lobby(code).phase, PHASES.READY);
   assert.equal(store.lobby(code).countdown, null);
   store.setSetup('p1', { setup: 'motion' });
   store.setReady('p0', { ready: true }); store.setReady('p1', { ready: true });
+  store.calibrationDone('tv');
   now += 5000; store.finishCountdown(code);
   now += VOTE_MS; store.expireVote(code);
   store.setSetup('p1', { setup: null });

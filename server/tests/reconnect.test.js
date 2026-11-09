@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { PHASES, PROTOCOL_VERSION, RECONNECT_MS, VOTE_SECONDS } from '@wee/shared/protocol.js';
 import { RoomStore } from '@server/src/RoomStore.js';
@@ -97,6 +97,7 @@ test('all missing participants must return before the flow resumes', () => {
 test('countdown freezes on disconnect and continues with its remaining duration', () => {
   const { store, players, clock, code } = setup(2);
   for (let i = 0; i < 2; i++) store.setReady(`p${i}`, { ready: true });
+  store.calibrationDone('host');
   clock.now += 2000;
   store.disconnect('p0'); clock.now += 20_000;
   assert.equal(store.finishCountdown(code), null);
@@ -110,6 +111,7 @@ test('countdown freezes on disconnect and continues with its remaining duration'
 test('reconnecting during the game preserves the current flow', () => {
   const { store, players, clock, code } = setup(2);
   for (let i = 0; i < 2; i++) store.setReady(`p${i}`, { ready: true });
+  store.calibrationDone('host');
   clock.now += 5000; store.finishCountdown(code);
   clock.now += VOTE_SECONDS * 1000; store.expireVote(code);
   store.disconnect('p1');

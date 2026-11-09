@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { io } from 'socket.io-client';
@@ -18,6 +18,7 @@ function readyBowling(count = 4) {
       assert.equal(store.setSetup(`p${index + 1}`, { setup: index % 2 ? 'motion' : 'buttons' }).ok, true);
       assert.equal(store.setReady(`p${index + 1}`, { ready: true }).ok, true);
     }
+    store.calibrationDone('tv');
     clock.now += 5000;
     assert.deepEqual(store.finishCountdown(room.code), { code: room.code });
     return store.lobby(room.code).gameId;
@@ -167,7 +168,7 @@ async function socketFixture(t) {
   const store = new RoomStore({ now: () => clock.now });
   const app = createGameServer({ store, tickMs: 10 });
   const sockets = [];
-  t.after(async () => { for (const socket of sockets) socket.disconnect(); await app.close(); });
+  t.onTestFinished(async () => { for (const socket of sockets) socket.disconnect(); await app.close(); });
   app.http.listen(0, '127.0.0.1');
   await once(app.http, 'listening');
   const url = `http://127.0.0.1:${app.http.address().port}`;
@@ -187,6 +188,7 @@ async function socketFixture(t) {
       assert.equal((await send(phone, EVENTS.PLAYER_SETUP, { setup: 'buttons' })).ok, true);
       assert.equal((await send(phone, EVENTS.PLAYER_READY, { ready: true })).ok, true);
     }
+    await send(host, EVENTS.HOST_CALIBRATION_DONE, {});
     clock.now += 5000; store.finishCountdown(created.code);
     const gameId = store.lobby(created.code).gameId;
     const state = (currentPlayer = 1, phase = 'ready') => send(host, EVENTS.HOST_GAME_STATE, { gameId, phase, currentPlayer, frame: 1 });

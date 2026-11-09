@@ -417,7 +417,7 @@ export class RoomStore {
       player.setup = payload.setup;
       if (room.phase === PHASES.READY) {
         player.ready = false;
-      } else if (BEFORE_PLAY.has(room.phase) || room.phase === PHASES.COUNTDOWN) {
+      } else if (BEFORE_PLAY.has(room.phase) || room.phase === PHASES.CALIBRATION || room.phase === PHASES.COUNTDOWN) {
         room.deadline = null;
         this.#resetReady(room);
       }

@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { io } from 'socket.io-client';
@@ -16,7 +16,7 @@ async function fixture(t, options = {}) {
   app.http.listen(0, '127.0.0.1'); await once(app.http, 'listening');
   const url = `http://127.0.0.1:${app.http.address().port}`;
   const sockets = [];
-  t.after(async () => { for (const socket of sockets) socket.disconnect(); await app.close(); });
+  t.onTestFinished(async () => { for (const socket of sockets) socket.disconnect(); await app.close(); });
   return { app, client: async () => { const socket = await connect(url); sockets.push(socket); return socket; } };
 }
 function nextSnapshot(socket, predicate) {
@@ -80,6 +80,7 @@ test('lobby swings reach only their TV, reject extra phones and stale sessions, 
   await send(second, EVENTS.PLAYER_SETUP, { setup: 'buttons' });
   await send(phone, EVENTS.PLAYER_READY, { ready: true });
   await send(second, EVENTS.PLAYER_READY, { ready: true });
+  await send(host, EVENTS.HOST_CALIBRATION_DONE, {});
   now += 5000; store.finishCountdown(room.code);
   now += VOTE_SECONDS * 1000; store.expireVote(room.code);
   assert.equal(store.lobby(room.code).phase, PHASES.GAME);

@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { io } from 'socket.io-client';
@@ -16,6 +16,7 @@ function fixture(sport = 'tennis') {
   });
   const start = () => {
     for (const socket of ['p1', 'p2']) store.setReady(socket, { ready: true });
+    store.calibrationDone('tv');
     now += 5000; store.finishCountdown(room.code);
     now += VOTE_SECONDS * 1000; store.expireVote(room.code);
     return store.lobby(room.code).gameId;
@@ -126,7 +127,7 @@ for (const sport of ['tennis', 'bowling']) test(`real sockets: ${sport} phone/TV
   const store = new RoomStore({ now: () => now });
   const app = createGameServer({ store, tickMs: 10 });
   const sockets = [];
-  t.after(async () => { for (const socket of sockets) socket.disconnect(); await app.close(); });
+  t.onTestFinished(async () => { for (const socket of sockets) socket.disconnect(); await app.close(); });
   app.http.listen(0, '127.0.0.1'); await once(app.http, 'listening');
   const connect = async () => {
     const socket = io(`http://127.0.0.1:${app.http.address().port}`, { transports: ['websocket'], reconnection: false });
@@ -139,6 +140,7 @@ for (const sport of ['tennis', 'bowling']) test(`real sockets: ${sport} phone/TV
     await send(phone, EVENTS.PLAYER_SETUP, { setup: 'motion' });
   }
   for (const phone of [p1, p2]) await send(phone, EVENTS.PLAYER_READY, { ready: true });
+  await send(tv, EVENTS.HOST_CALIBRATION_DONE, {});
   now += 5000; store.finishCountdown(room.code); now += VOTE_SECONDS * 1000; store.expireVote(room.code);
   const gameId = store.lobby(room.code).gameId;
   assert.equal((await send(p2, EVENTS.PLAYER_PAUSE, { gameId, paused: true })).error, 'not-game-leader');

@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { io } from 'socket.io-client';
@@ -36,7 +36,7 @@ test('phone mute and unmute broadcast to its TV over real sockets and survive TV
   app.http.listen(0, '127.0.0.1');
   await once(app.http, 'listening');
   const clients = [];
-  t.after(async () => { clients.forEach(client => client.disconnect()); await app.close(); });
+  t.onTestFinished(async () => { clients.forEach(client => client.disconnect()); await app.close(); });
   async function connect() {
     const client = io(`http://127.0.0.1:${app.http.address().port}`, { transports: ['websocket'], reconnection: false });
     clients.push(client); await once(client, 'connect'); return client;

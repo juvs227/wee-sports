@@ -1,4 +1,4 @@
-import {test} from 'node:test';
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -14,7 +14,7 @@ async function fixture(t, transport = 'websocket') {
   const store = new RoomStore({now: () => now});
   const app = createGameServer({store, tickMs: 10});
   const clients = [];
-  t.after(async () => { for (const client of clients) client.disconnect(); await app.close(); });
+  t.onTestFinished(async () => { for (const client of clients) client.disconnect(); await app.close(); });
   app.http.listen(0, '127.0.0.1'); await once(app.http, 'listening');
   const connect = async () => {
     const client = io(`http://127.0.0.1:${app.http.address().port}`, {transports: [transport], reconnection: false});
@@ -26,6 +26,7 @@ async function fixture(t, transport = 'websocket') {
   await send(phone, EVENTS.PLAYER_SETUP, {setup: 'buttons'});
   const start = async () => {
     await send(phone, EVENTS.PLAYER_READY, {ready: true});
+    await send(tv, EVENTS.HOST_CALIBRATION_DONE, {});
     now += 5000; store.finishCountdown(room.code);
     now += VOTE_SECONDS * 1000; store.expireVote(room.code);
     return store.lobby(room.code).gameId;
@@ -64,7 +65,7 @@ for (const transport of ['websocket', 'polling']) {
     assert.equal(received.length, 104); assert.equal(new Set(received).size, 104);
     assert.deepEqual(phone.sendBuffer, []);
     const ordered = [...roundTrips].sort((a, b) => a - b);
-    t.diagnostic(`${transport}: 104/104 once; median=${ordered[52].toFixed(2)}ms, p95=${ordered[98].toFixed(2)}ms; third=${roundTrips[2].toFixed(2)}ms; last=${roundTrips.at(-1).toFixed(2)}ms (local relay only)`);
+    console.log(`${transport}: 104/104 once; median=${ordered[52].toFixed(2)}ms, p95=${ordered[98].toFixed(2)}ms; third=${roundTrips[2].toFixed(2)}ms; last=${roundTrips.at(-1).toFixed(2)}ms (local relay only)`);
   });
 }
 
