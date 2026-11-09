@@ -270,6 +270,26 @@ export function createPlayer(
                     (racketGltf) => {
                         const racketScene = racketGltf.scene;
                         racketScene.scale.set(racketScale, racketScale, racketScale);
+                        racketScene.rotation.y = Math.PI / 4;
+
+                        racketScene.traverse((child) => {
+                            if (child.name !== 'RacketFrame' || !(child instanceof THREE.Mesh)) {
+                                return;
+                            }
+
+                            const recolor = (material: THREE.Material): THREE.Material => {
+                                const cloned = material.clone();
+                                if ('color' in cloned) {
+                                    (cloned as THREE.MeshStandardMaterial)
+                                        .color.setHex(color);
+                                }
+                                return cloned;
+                            };
+
+                            child.material = Array.isArray(child.material)
+                                ? child.material.map(recolor)
+                                : recolor(child.material);
+                        });
                         
                         handSocket.add(racketScene);
                         controller.racket = racketScene;
