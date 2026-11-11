@@ -8,23 +8,33 @@ import { sportName } from '../lib/sports.js';
 import { PrototypeFrame } from './PrototypeFrame.jsx';
 import { shouldTogglePause } from '../../../src/network/pauseShortcut.js';
 
+const PLAYER_COLORS = { 1: 'red', 2: 'blue', 3: 'lime', 4: 'orange' };
+
+
 export function TvGame({ lobby, paused, onClose, error, immersive = true, fullscreen = false, onToggleView, onAudio,
-  onReturnToLobby, returning = false, returnDisabled = false, onPauseToggle, pauseDisabled = false }) {
+  onReturnToLobby, returning = false, returnDisabled = false, onPauseToggle, pauseDisabled = false, startPracticeOnReady = false }) {
   const [confirmReturn, setConfirmReturn] = useState(false);
   const [debugOn, setDebugOn] = useState(false);
+  const [debugArrows, setDebugArrows] = useState(true);
+  const [debugLabel, setDebugLabel] = useState(true);
+  const [debugPractice, setDebugPractice] = useState(false);
+  const [aimSensitivity, setAimSensitivity] = useState(0);
   const [swingDebug, setSwingDebug] = useState(null);
   const swingTimer = useRef(null);
+  const commandRef = useRef(null);
+  const handleReady = useCallback(() => {
+    if (startPracticeOnReady) commandRef.current?.('practice-start', { stroke: 'alternate', hand: 'Right' });
+  }, [startPracticeOnReady]);
   const handleSwing = useCallback(event => {
     clearTimeout(swingTimer.current);
-    console.log("hey cutie"); 
     console.log("swing data received");
-    console.log("event net normal", event.netNormal); 
-    console.log("event swing normal", event.swingNormal); 
+    console.log("event net normal", event.netNormal);
+    console.log("event swing normal", event.swingNormal);
     if (event.netNormal && event.swingNormal) {
       console.log('swing debug', { netNormal: event.netNormal, swingNormal: event.swingNormal, label: event.label, player: event.player });
       setSwingDebug({ netNormal: event.netNormal, swingNormal: event.swingNormal, label: event.label, player: event.player });
     }
-    swingTimer.current = setTimeout(() => setSwingLabel(null), 1500);
+    swingTimer.current = setTimeout(() => setSwingDebug(null), 3000);
   }, []);
   useEffect(() => {
     const keydown = event => {
@@ -70,19 +80,43 @@ export function TvGame({ lobby, paused, onClose, error, immersive = true, fullsc
       <PrototypeFrame code={lobby.code} players={lobby.players} paused={paused} sport={lobby.sport} gameId={lobby.gameId} gameState={lobby.gameState}
         onAudio={onAudio} manuallyPaused={lobby.manuallyPaused} onPauseToggle={pauseDisabled ? undefined : onPauseToggle}
         onSwing={handleSwing}
+        commandRef={commandRef}
+        onReady={handleReady}
         pauseMessage={lobby.reconnecting?.length ? `Waiting for ${lobby.reconnecting.map(member => member.name).join(', ')} to reconnect.`
           : lobby.setupPending?.length ? `Waiting for ${lobby.setupPending.join(', ')} to finish controller setup.`
             : lobby.manuallyPaused ? 'Game paused · resume on Player 1\u2019s phone or press P on the TV.' : undefined} />
-      {/* later should be an easier way to register things inside the debug view*/}
       <button type="button" className="tv-debug-toggle" onClick={() => setDebugOn(v => !v)} aria-pressed={debugOn} title="Toggle debug">D</button>
-      {debugOn && swingDebug ? <div style={{ position: 'fixed', right: 16, top: '50%', transform: 'translateY(-50%)', zIndex: 9999, background: 'black', borderRadius: 8, padding: '12px 16px', fontSize: 24, fontWeight: 'bold', color: swingDebug.player === 1 ? 'red' : 'blue' }} aria-hidden="true">P{swingDebug.player} {swingDebug.label}</div> : null}
-      {debugOn && swingDebug ? <svg style={{ position: 'fixed', top: 16, left: 16, zIndex: 9999, background: 'black', borderRadius: 8 }} viewBox="0 0 200 200" width="300" height="300" aria-hidden="true">
+      {debugOn && <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 10000, background: 'black', borderRadius: 8, padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 6, fontSize: 14, color: 'white' }}>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}>
+          <input type="checkbox" checked={debugArrows} onChange={e => setDebugArrows(e.target.checked)} /> arrows
+        </label>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}>
+          <input type="checkbox" checked={debugLabel} onChange={e => setDebugLabel(e.target.checked)} /> label
+        </label>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}>
+          <span style={{ minWidth: 60 }}>aim {Math.round(aimSensitivity * 100)}%</span>
+          <input type="range" min="0" max="1" step="0.05" value={aimSensitivity} style={{ cursor: 'pointer' }} onChange={e => {
+            const v = Number(e.target.value);
+            setAimSensitivity(v);
+            commandRef.current?.('configure', { settings: { aimSensitivity: v } });
+          }} />
+        </label>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}>
+          <input type="checkbox" checked={debugPractice} onChange={e => {
+            const on = e.target.checked;
+            setDebugPractice(on);
+            commandRef.current?.(on ? 'practice-start' : 'practice-stop', on ? { stroke: 'alternate', hand: 'Right' } : {});
+          }} /> practice
+        </label>
+      </div>}
+      {debugOn && debugLabel && swingDebug && <div style={{ position: 'fixed', right: 16, top: '50%', transform: 'translateY(-50%)', zIndex: 9999, background: 'black', borderRadius: 8, padding: '12px 16px', fontSize: 24, fontWeight: 'bold', color: PLAYER_COLORS[swingDebug.player] ?? 'white' }} aria-hidden="true">P{swingDebug.player} {swingDebug.label}</div>}
+      {debugOn && debugArrows && swingDebug && <svg style={{ position: 'fixed', top: 16, left: 16, zIndex: 9999, background: 'black', borderRadius: 8 }} viewBox="0 0 200 200" width="300" height="300" aria-hidden="true">
         <line x1="100" y1="100" x2={100 + swingDebug.netNormal[0] * 80} y2={100 - swingDebug.netNormal[1] * 80} stroke="cyan" strokeWidth="3" />
         <line x1="100" y1="100" x2={100 + swingDebug.swingNormal[0] * 80} y2={100 - swingDebug.swingNormal[1] * 80} stroke="yellow" strokeWidth="3" />
         <text x="4" y="16" fill="cyan" fontSize="14">net</text>
         <text x="4" y="34" fill="yellow" fontSize="14">swing</text>
         <text x="4" y="52" fill="white" fontSize="14">{swingDebug.label}</text>
-      </svg> : null}
+      </svg>}
     </main>
   );
 }

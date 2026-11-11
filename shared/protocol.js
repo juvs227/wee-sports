@@ -178,6 +178,7 @@ const optionValidators = {
   autoMove: value => typeof value === 'boolean',
   timingAssist: value => typeof value === 'boolean',
   splitView: value => typeof value === 'boolean',
+  aimSensitivity: value => typeof value === 'number' && value >= 0 && value <= 1,
 };
 const validPractice = practice => isRecord(practice) && typeof practice.active === 'boolean' &&
   ['alternate', 'forehand', 'backhand'].includes(practice.stroke) && ['Right', 'Left'].includes(practice.hand);

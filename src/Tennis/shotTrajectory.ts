@@ -10,8 +10,8 @@ export interface ShotPlan {
 export interface ShotIntent {
     /** Captured before animation assistance: negative late, positive early. */
     timing?: number;
-    /** Optional deliberate placement, relative to the hitter's view. */
-    aim?: -1 | 0 | 1;
+    /** Optional deliberate placement, relative to the hitter's view. -1 = full left, 1 = full right. */
+    aim?: number;
     serve?: ServiceSide;
     beginner?: boolean;
 }

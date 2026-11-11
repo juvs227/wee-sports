@@ -37,6 +37,7 @@ export class World {
     public onBallHit: (player: 1 | 2) => void = () => { };
     public onGameEvent: (event: TennisGameEvent) => void = () => { };
     public onStrokeResult: (result: StrokeResult) => void = () => { };
+    public onTrajectory: (data: { player: 1 | 2; origin: { x: number; y: number; z: number }; target: { x: number; z: number }; netHeight: number; flightTime: number }) => void = () => { };
     private readonly targetMarkers: THREE.Mesh[] = [];
     private readonly shotTargetMarker: THREE.Mesh;
     private readonly gameLogic: GameLogic;
@@ -146,6 +147,7 @@ export class World {
             onHit: player => this.onBallHit(player),
             onGameEvent: event => this.onGameEvent(event),
             onStrokeResult: result => this.onStrokeResult(result),
+            onTrajectory: data => this.onTrajectory(data),
         });
         window.addEventListener('resize', this.handleResize);
     }

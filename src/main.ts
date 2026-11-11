@@ -68,6 +68,7 @@ async function main(): Promise<void> {
         <p class="game-result-score" id="match-result-score"></p><p class="game-result-detail" id="match-result-detail"></p>
         <p class="game-result-replay" id="match-replay-prompt"></p><button id="play-again" class="primary">Play again</button>
       </section>
+      <div id="practice-bar"><button id="practice-quick-start" type="button">Practice</button><button id="practice-quick-stop" type="button" hidden>End practice</button></div>
       <details id="court-options" class="tennis-local-options"><summary>Play options & practice</summary><p id="connection"></p>
       <div class="tennis-options">
       <label>Match <select id="match-format"><option value="full">Full · best of 3 sets</option><option value="quick">Quick · tie-break to 7</option></select></label>
@@ -127,6 +128,11 @@ async function main(): Promise<void> {
     world.onBallHit = player => {
         if (embedded && activeGameId && !paused) {
             window.parent.postMessage({ type: 'wee:game-hit', player, gameId: activeGameId }, location.origin);
+        }
+    };
+    world.onTrajectory = data => {
+        if (embedded && activeGameId) {
+            window.parent.postMessage({ type: 'wee:ball-trajectory', gameId: activeGameId, ...data }, location.origin);
         }
     };
     const publishOptions = (): void => {
@@ -213,9 +219,11 @@ async function main(): Promise<void> {
             setText('match-replay-prompt', embedded ? 'Play again? Choose on your phone.' : 'Ready for another match?');
         }
         (el('play-again') as HTMLButtonElement).disabled = paused;
-        for (const id of ['new-match', 'practice-start', 'practice-stop']) (el(id) as HTMLButtonElement).disabled = paused;
+        for (const id of ['new-match', 'practice-start', 'practice-stop', 'practice-quick-start', 'practice-quick-stop']) (el(id) as HTMLButtonElement).disabled = paused;
         el('practice-start').hidden = practice.active;
         el('practice-stop').hidden = !practice.active;
+        el('practice-quick-start').hidden = practice.active;
+        el('practice-quick-stop').hidden = !practice.active;
         el('practice-progress').textContent = practice.active ? `${practice.returns} / ${practice.attempts} returned · streak ${practice.streak} · best ${practice.bestStreak}` : '';
         if (embedded && activeGameId && !paused) {
             const state = { type: 'wee:tennis-state', gameId: activeGameId,
@@ -259,6 +267,18 @@ async function main(): Promise<void> {
         updateScore();
     };
     el('practice-stop').onclick = () => { if (!paused) { world.stopPractice(); updateScore(); } };
+    el('practice-quick-start').onclick = () => {
+        if (paused || humanOpponent) return;
+        world.setSplitScreen(false);
+        world.startPractice('alternate', 'Right');
+        updateScore();
+    };
+    el('practice-quick-stop').onclick = () => {
+        if (paused) return;
+        world.stopPractice();
+        world.setSplitScreen(humanOpponent || split.checked);
+        updateScore();
+    };
     el('play-again').onclick = () => {
         if (paused) return;
         playSound('stop');
@@ -299,8 +319,14 @@ async function main(): Promise<void> {
             playSound('start');
         } else if (command.action === 'practice-start') {
             world.startPractice(command.stroke, command.hand);
+            split.checked = false;
+            world.setSplitScreen(false);
+            bot.checked = false;
+            world.botEnabled = false;
         } else if (command.action === 'practice-stop') {
             world.stopPractice();
+            world.setSplitScreen(humanOpponent || split.checked);
+            world.botEnabled = bot.checked;
         }
         const result = {ok: true};
         deliveredCommands.set(command.id, result);

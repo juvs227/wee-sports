@@ -50,6 +50,7 @@ export interface TennisSettings {
     botDifficulty: 'beginner' | 'standard';
     timingAssist: boolean;
     autoMove: boolean;
+    aimSensitivity: number;
 }
 export interface PracticeState {
     active: boolean;
@@ -92,6 +93,7 @@ export interface GameLogicOptions {
     onHit?: (player: 1 | 2) => void;
     onGameEvent?: (event: TennisGameEvent) => void;
     onStrokeResult?: (result: StrokeResult) => void;
+    onTrajectory?: (data: { player: 1 | 2; origin: { x: number; y: number; z: number }; target: { x: number; z: number }; netHeight: number; flightTime: number }) => void;
 }
 
 export class GameLogic {
@@ -105,7 +107,9 @@ export class GameLogic {
     private readonly onGameEvent: (event: TennisGameEvent) => void;
     private readonly scoreSystem = new ScoreSystem();
     private readonly onStrokeResult: (result: StrokeResult) => void;
-    private readonly settings: TennisSettings = {format: 'full', assistance: 'standard', botDifficulty: 'standard', timingAssist: true, autoMove: true};
+    private readonly onTrajectory: (data: { player: 1 | 2; origin: { x: number; y: number; z: number }; target: { x: number; z: number }; netHeight: number; flightTime: number }) => void;
+    private readonly settings: TennisSettings = {format: 'full', assistance: 'standard', botDifficulty: 'standard', timingAssist: true, autoMove: true, aimSensitivity: 0};
+    private swingNormals: Array<{net?: number[]; swing?: number[]}> = [{}, {}];
     private practice: PracticeState = {active: false, stroke: 'alternate', hand: 'Right', attempts: 0, returns: 0, streak: 0, bestStreak: 0};
     private practiceTimer = 0;
     private practiceReturned = false;
@@ -143,6 +147,7 @@ export class GameLogic {
         this.onHit = options.onHit ?? (() => {});
         this.onGameEvent = options.onGameEvent ?? (() => {});
         this.onStrokeResult = options.onStrokeResult ?? (() => {});
+        this.onTrajectory = options.onTrajectory ?? (() => {});
     }
 
     public getSettings(): TennisSettings { return {...this.settings, autoMove: this.autoPositionEnabled}; }
@@ -275,8 +280,11 @@ export class GameLogic {
         player?: 1 | 2;
         power?: number;
         id?: string;
+        netNormal?: number[];
+        swingNormal?: number[];
     }): void {
         const number = event.player ?? 1;
+        if (event.netNormal && event.swingNormal) this.swingNormals[number - 1] = { net: event.netNormal, swing: event.swingNormal };
         const currentPlayer = number === 1 ? this.player1 : this.player2;
         if (currentPlayer.isSwinging && this.strokes[number - 1]) {
             const reason = 'Finish the current stroke';
@@ -472,7 +480,7 @@ export class GameLogic {
         updateBallMotion(this.ball, step, (winner, loser, reason) => {
             if (this.practice.active) {
                 if (!this.practiceReturned) this.practice.streak = 0;
-                this.practiceTimer = 1.4;
+                this.practiceTimer = 0.05;
                 this.feedback(this.practiceReturned ? 'Good return · next ball coming' : `${reason ? pointReasonLabel(reason) : 'Miss'} · try the next ball`);
                 return;
             }
@@ -845,9 +853,16 @@ export class GameLogic {
             return;
         }
         const serving = data.waitingForRacketHit || data.isWaitingForServe;
+        const { net, swing } = this.swingNormals[number - 1];
+        let aim: number | undefined;
+        if (this.settings.aimSensitivity > 0 && net && swing) {
+            const cross = net[0] * swing[1] - net[1] * swing[0];
+            aim = THREE.MathUtils.clamp(cross * this.settings.aimSensitivity * 5, -1, 1);
+        }
         const plan = planCourtShot(this.ball.position, number, player.swingBackhand, data.gravity,
             this.swingPowers[number - 1], {timing: this.swingTimings[number - 1],
-                ...(serving ? {serve: data.serviceSide} : {}), beginner: this.settings.assistance === 'beginner'});
+                ...(serving ? {serve: data.serviceSide} : {}), beginner: this.settings.assistance === 'beginner',
+                ...(aim !== undefined ? {aim} : {})});
         if (!plan) {
             player.hitConsumed = true;
             player.contactActive = false;
@@ -856,6 +871,7 @@ export class GameLogic {
             return;
         }
         hitBall(this.ball, plan.velocity, id, serving);
+        this.onTrajectory({ player: number, origin: { x: this.ball.position.x, y: this.ball.position.y, z: this.ball.position.z }, target: { x: plan.target.x, z: plan.target.z }, netHeight: plan.netHeight, flightTime: plan.flightTime });
         this.hasShotTarget = true;
         this.shotTargetMarker.position.set(plan.target.x, 0.08, plan.target.z);
         this.shotTargetMarker.visible = this.showHitboxes;

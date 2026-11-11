@@ -47,6 +47,8 @@ export default function HostStub() {
   const [immersive, setImmersive] = useState(true);
   const [fullscreen, setFullscreen] = useState(false);
   const requestedFullscreen = useRef(false);
+  const [practiceOnStart, setPracticeOnStart] = useState(false);
+  const practiceOnStartRef = useRef(false);
 
   function leaveGameView() {
     setImmersive(false);
@@ -186,7 +188,9 @@ export default function HostStub() {
     onReturnToLobby={returnToLobby} returning={returning} returnDisabled={reconnecting || pausing}
     onPauseToggle={togglePause} pauseDisabled={reconnecting || pausing || returning || (lobby.gameState?.phase === 'complete' && !lobby.manuallyPaused)}
     immersive={immersive} fullscreen={fullscreen} onToggleView={immersive ? leaveGameView : enterGameView}
-    paused={reconnecting || lobby.paused} error={startError ? errorText(startError) : null} onClose={async () => {
+    paused={reconnecting || lobby.paused} error={startError ? errorText(startError) : null}
+    startPracticeOnReady={practiceOnStartRef.current}
+    onClose={async () => {
       if (await leave()) navigate('/');
       else setStartError('disconnected');
     }} />;
@@ -270,6 +274,13 @@ export default function HostStub() {
       <TvCountdown lobby={lobby} onTick={audio.onCountdown} />
 
       <div className="stub__actions">
+        {lobby.sport === 'tennis' ? <button type="button" className={`btn ${practiceOnStart ? 'btn--primary' : 'btn--ghost'}`} onClick={() => {
+          const next = !practiceOnStart;
+          setPracticeOnStart(next);
+          practiceOnStartRef.current = next;
+        }}>
+          {practiceOnStart ? 'Practice mode on' : 'Practice solo'}
+        </button> : null}
         <button type="button" className="btn btn--ghost" onClick={async () => { if (await leave()) navigate('/'); else setStartError('disconnected'); }}>
           Close lobby
         </button>
