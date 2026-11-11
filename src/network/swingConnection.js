@@ -45,8 +45,8 @@ export function connectSwings({ room, role, onSwing = () => {}, onStatus = () =>
   }
   connect();
   return {
-    sendSwing(label, hand, power = 0.5) {
-      const event = { type: 'swing', id: createInputId(), label, hand, power };
+    sendSwing(label, hand, power = 0.5, netNormal, swingNormal) {
+      const event = { type: 'swing', id: createInputId(), label, hand, power, netNormal, swingNormal };
       if (!isSwing(event) || socket.readyState !== WebSocket.OPEN) return false;
       sentAt.set(event.id, performance.now());
       if (sentAt.size > 40) sentAt.delete(sentAt.keys().next().value);
