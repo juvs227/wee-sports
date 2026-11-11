@@ -124,6 +124,7 @@ export function PrototypeFrame({ code, controller = false, player = 1, players =
     const swing = (event, ack) => {
       const ok = !controller && sport === 'tennis' && ready.current && playing && !paused &&
         connection === 'online' && Boolean(gameId) && event?.gameId === gameId && isSwing(event);
+      console.log('[PrototypeFrame step 4] netNormal:', event?.netNormal, 'swingNormal:', event?.swingNormal);
       if (ok) { post({ type: 'wee:game-swing', event }); onSwing?.(event); }
       if (typeof ack === 'function') ack({ ok });
     };

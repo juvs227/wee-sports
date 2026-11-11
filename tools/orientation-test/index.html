@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Normal tester</title>
+<style>
+  body { margin: 0; background: #111; color: #eee; font-family: monospace;
+         display: flex; flex-direction: column; align-items: center;
+         justify-content: center; height: 100dvh; gap: 16px; }
+  #status { font-size: 14px; opacity: .6; }
+  canvas { border: 1px solid #333; border-radius: 50%; }
+  #vec   { font-size: 13px; opacity: .5; }
+  #euler { font-size: 13px; opacity: .5; }
+  #progress-wrap { width: 320px; display: none; flex-direction: column; gap: 6px; }
+  #progress-label { font-size: 13px; opacity: .6; text-align: center; }
+  progress { width: 100%; height: 6px; appearance: none; border: none; border-radius: 3px; background: #333; }
+  progress::-webkit-progress-bar   { background: #333; border-radius: 3px; }
+  progress::-webkit-progress-value { background: #fff; border-radius: 3px; }
+  button { padding: 14px 32px; font-size: 16px; font-family: monospace;
+           background: #fff; color: #111; border: none; border-radius: 8px; cursor: pointer; }
+  button:disabled { opacity: .3; cursor: default; }
+</style>
+</head>
+<body>
+<div id="status">connecting…</div>
+<canvas id="c" width="320" height="320"></canvas>
+<div id="progress-wrap"><div id="progress-label"></div><progress id="progress" max="1" value="0"></progress></div>
+<div id="vec"></div>
+<div id="euler"></div>
+<label id="force-euler-wrap" style="display:none; font-size:13px; opacity:.6">
+  <input type="checkbox" id="force-euler"> force deviceorientation
+</label>
+<label id="ios-mode-wrap" style="display:none; font-size:13px; opacity:.6">
+  <input type="checkbox" id="ios-mode"> iOS mode (Mahony filter)
+</label>
+<button id="still-btn" style="display:none">Still calibrate</button>
+<button id="cal-btn" style="display:none">Calibrate</button>
+
+<script type="module">
+const role = new URLSearchParams(location.search).get('role') ?? 'screen';
+const status = document.getElementById('status');
+
+// ── WebSocket relay ────────────────────────────────────────────────────────
+let ws, onMsg = () => {};
+function connect() {
+  ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`);
+  ws.onopen    = () => { status.textContent = role === 'phone' ? 'ready' : 'connected — waiting for phone…'; onOpen(); };
+  ws.onclose   = () => { status.textContent = 'disconnected — retrying…'; setTimeout(connect, 1500); };
+  ws.onerror   = () => ws.close();
+  ws.onmessage = e => onMsg(JSON.parse(e.data));
+}
+const send = obj => ws?.readyState === 1 && ws.send(JSON.stringify(obj));
+let onOpen = () => {};
+connect();
+
+// ── PHONE ──────────────────────────────────────────────────────────────────
+if (role === 'phone') {
+  document.getElementById('c').style.display = 'none';
+  document.getElementById('vec').style.display = 'none';
+
+  const { createOrientationCalibration, eulerToNormal } =
+    await import('/src/controller/orientationCalibration.js');
+  const { createGyroBiasCalibration, createIOSOrientationTracker } =
+    await import('/src/controller/iosCalibration.js');
+
+  // Quaternion helpers (eulerToQuat / qrot not exported, so inlined here)
+  function eulerToQuat(a, b, g) {
+    const [A, B, G] = [a, b, g].map(v => v * Math.PI / 180);
+    return [
+      Math.sin(B/2)*Math.cos(G/2)*Math.cos(A/2) - Math.cos(B/2)*Math.sin(G/2)*Math.sin(A/2),
+      Math.cos(B/2)*Math.sin(G/2)*Math.cos(A/2) + Math.sin(B/2)*Math.cos(G/2)*Math.sin(A/2),
+      Math.cos(B/2)*Math.cos(G/2)*Math.sin(A/2) - Math.sin(B/2)*Math.sin(G/2)*Math.cos(A/2),
+      Math.cos(B/2)*Math.cos(G/2)*Math.cos(A/2) + Math.sin(B/2)*Math.sin(G/2)*Math.sin(A/2),
+    ];
+  }
+  function qrot(q, v) {
+    const [qx,qy,qz,qw] = q, [vx,vy,vz] = v;
+    const tx = 2*(qy*vz - qz*vy), ty = 2*(qz*vx - qx*vz), tz = 2*(qx*vy - qy*vx);
+    return [vx + qw*tx + qy*tz - qz*ty, vy + qw*ty + qz*tx - qx*tz, vz + qw*tz + qx*ty - qy*tx];
+  }
+  function qdot(a, b) { return a[0]*b[0] + a[1]*b[1] + a[2]*b[2] + a[3]*b[3]; }
+  function qnorm(q) { const l = Math.hypot(...q); return q.map(v => v/l); }
+
+  const quatBuf = []; // { t, q }
+
+  function pushQuat(q, euler = null) {
+    if (document.getElementById('ios-mode')?.checked) return;
+    const now = performance.now();
+    quatBuf.push({ t: now, q });
+    while (quatBuf.length > 1 && now - quatBuf[0].t > 500) quatBuf.shift();
+
+    // ── average: sign-normalise all samples to first sample's hemisphere ──
+    const q0 = quatBuf[0].q;
+    const sumAll = [0, 0, 0, 0];
+    for (const { q } of quatBuf) {
+      const sign = qdot(q0, q) >= 0 ? 1 : -1;
+      for (let i = 0; i < 4; i++) sumAll[i] += sign * q[i];
+    }
+    const quatNormal = qrot(qnorm(sumAll), [0, 0, 1]);
+
+    // ── majority: split into two branches, pick the larger one ───────────
+    // Use the most recent sample as branch reference
+    const ref = quatBuf[quatBuf.length - 1].q;
+    const sameGroup = [], flipGroup = [];
+    for (const { q } of quatBuf) {
+      (qdot(ref, q) >= 0 ? sameGroup : flipGroup).push(q);
+    }
+    const majority = sameGroup.length >= flipGroup.length ? sameGroup : flipGroup;
+    const sumMaj = [0, 0, 0, 0];
+    const mRef = majority[0];
+    for (const q of majority) {
+      const sign = qdot(mRef, q) >= 0 ? 1 : -1;
+      for (let i = 0; i < 4; i++) sumMaj[i] += sign * q[i];
+    }
+    const majorityNormal = qrot(qnorm(sumMaj), [0, 0, 1]);
+
+    send({ type: 'live',
+      normal: euler ? eulerToNormal(...euler) : quatNormal,
+      quatNormal,
+      majorityNormal,
+      euler,
+    });
+  }
+
+  // Try AbsoluteOrientationSensor first (Android Chrome), unless checkbox overrides
+  const forceEulerWrap = document.getElementById('force-euler-wrap');
+  const forceEulerBox  = document.getElementById('force-euler');
+  let sensor = null;
+
+  async function startSensor() {
+    if (!('AbsoluteOrientationSensor' in window)) return false;
+    try {
+      if (navigator.permissions) {
+        await Promise.all([
+          navigator.permissions.query({ name: 'accelerometer' }),
+          navigator.permissions.query({ name: 'gyroscope' }),
+          navigator.permissions.query({ name: 'magnetometer' }),
+        ]);
+      }
+      sensor = new window.AbsoluteOrientationSensor({ frequency: 60 });
+      sensor.addEventListener('reading', () => pushQuat([...sensor.quaternion]));
+      sensor.addEventListener('error', () => {});
+      sensor.start();
+      status.textContent = 'AbsoluteOrientationSensor ✓';
+      return true;
+    } catch { return false; }
+  }
+
+  function startEuler() {
+    status.textContent = 'using deviceorientation';
+    function onOrientation(e) {
+      if (e.alpha == null) return;
+      pushQuat(eulerToQuat(e.alpha, e.beta, e.gamma), [e.alpha, e.beta, e.gamma]);
+    }
+    window.addEventListener('deviceorientationabsolute', onOrientation, true);
+    window.addEventListener('deviceorientation', onOrientation, true);
+  }
+
+  // Raw euler always streams for white arrow, regardless of mode
+  let lastRawNormal = null;
+  let lastEuler = null;
+  function onOrientationRaw(e) {
+    if (e.alpha == null) return;
+    lastRawNormal = eulerToNormal(e.alpha, e.beta, e.gamma);
+    lastEuler = [e.alpha, e.beta, e.gamma];
+  }
+  window.addEventListener('deviceorientationabsolute', onOrientationRaw, true);
+  window.addEventListener('deviceorientation', onOrientationRaw, true);
+
+  // ── iOS mode (Mahony filter) ─────────────────────────────────────────────
+  const iosModeWrap = document.getElementById('ios-mode-wrap');
+  const iosModeBox  = document.getElementById('ios-mode');
+  const stillBtn    = document.getElementById('still-btn');
+  let iosTracker    = null;
+
+  stillBtn.addEventListener('click', () => {
+    stillBtn.disabled = true;
+    stillBtn.textContent = 'hold still…';
+    iosTracker?.stop();
+    iosTracker = null;
+    const biasCal = createGyroBiasCalibration({
+      durationMs: 1500,
+      onProgress(p, state) {
+        const label = state === 'moving' ? 'keep still…' : `still calibrating ${Math.round(p * 100)}%`;
+        stillBtn.textContent = label;
+        send({ type: 'cal-progress', p, state, label });
+      },
+      onDone(bias) {
+        send({ type: 'cal-progress', p: 1, state: 'done', label: 'still calibrated ✓' });
+        stillBtn.textContent = 'bias ✓ — filter running';
+        iosTracker = createIOSOrientationTracker({
+          bias,
+          onNormal(quatNormal) {
+            send({ type: 'live',
+              normal:     lastRawNormal ?? quatNormal,
+              quatNormal,
+              euler:      lastEuler,
+            });
+          },
+        });
+        iosTracker.start();
+        status.textContent = 'iOS Mahony filter active';
+        stillBtn.disabled = false;
+        stillBtn.textContent = 'Recalibrate still';
+      },
+    });
+    window.addEventListener('devicemotion', e => biasCal.push(e));
+  });
+
+  iosModeBox.addEventListener('change', () => {
+    if (iosModeBox.checked) {
+      sensor?.stop();
+      stillBtn.style.display = 'block';
+      status.textContent = 'iOS mode — tap Still calibrate first';
+    } else {
+      iosTracker?.stop(); iosTracker = null;
+      stillBtn.style.display = 'none';
+      stillBtn.textContent = 'Still calibrate';
+      location.reload();
+    }
+  });
+
+  // ── Normal sensor startup ────────────────────────────────────────────────
+  const hasSensor = await startSensor();
+  if (hasSensor) {
+    forceEulerWrap.style.display = 'block';
+    iosModeWrap.style.display = 'block';
+    forceEulerBox.addEventListener('change', () => {
+      if (forceEulerBox.checked) { sensor?.stop(); startEuler(); }
+      else { location.reload(); }
+    });
+  } else {
+    startEuler();
+    iosModeWrap.style.display = 'block';
+  }
+
+  let cal = null;
+  const btn = document.getElementById('cal-btn');
+
+  function startCal() {
+    if (cal) cal.stop();
+    cal = createOrientationCalibration({
+      onProgress(p, state) {
+        const label = state === 'moving'   ? 'keep still…'
+                    : state === 'settling' ? 'hold still…'
+                    : `calibrating ${Math.round(p * 100)}%`;
+        status.textContent = label;
+        send({ type: 'cal-progress', p, state, label });
+      },
+      onDone(normal) {
+        send({ type: 'calibrated', normal });
+        send({ type: 'cal-progress', p: 1, state: 'done', label: 'calibrated ✓' });
+        status.textContent = 'calibrated ✓';
+        btn.disabled = false;
+      },
+    });
+    btn.disabled = true;
+    cal.start();
+  }
+
+  async function setup() {
+    if (typeof DeviceOrientationEvent?.requestPermission === 'function') {
+      status.textContent = 'tap Calibrate to allow sensors';
+      btn.style.display = 'block';
+      btn.addEventListener('click', async () => {
+        await DeviceOrientationEvent.requestPermission();
+        startCal();
+      }, { once: true });
+    } else {
+      btn.style.display = 'block';
+      btn.addEventListener('click', startCal);
+    }
+  }
+
+  onOpen = setup;
+  if (ws.readyState === 1) setup();
+}
+
+// ── SCREEN ─────────────────────────────────────────────────────────────────
+if (role === 'screen') {
+  console.log("does the server live update")
+
+  const canvas = document.getElementById('c');
+  const ctx    = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height, cx = W/2, cy = H/2, R = W/2 - 20;
+  const progressWrap  = document.getElementById('progress-wrap');
+  const progressBar   = document.getElementById('progress');
+  const progressLabel = document.getElementById('progress-label');
+  document.getElementById('cal-btn').style.display = 'none';
+
+  let netNormal      = null;
+  let liveNormal     = null; // raw euler normal (white)
+  let liveQuat       = null; // 500ms window quat average (yellow)
+  let liveMajority   = null; // 500ms majority branch (cyan)
+
+  const project = n => ({ sx: n[0], sy: -n[1] });
+
+  function drawArrow(angle, len, color, lineW = 3) {
+    const ex = cx + Math.cos(angle) * len, ey = cy + Math.sin(angle) * len;
+    ctx.strokeStyle = color; ctx.lineWidth = lineW;
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(ex, ey); ctx.stroke();
+    const hw = 9, hl = 15;
+    const ax = ex - Math.cos(angle) * hl, ay = ey - Math.sin(angle) * hl;
+    ctx.fillStyle = color; ctx.beginPath();
+    ctx.moveTo(ex, ey);
+    ctx.lineTo(ax + Math.cos(angle + Math.PI/2) * hw, ay + Math.sin(angle + Math.PI/2) * hw);
+    ctx.lineTo(ax - Math.cos(angle + Math.PI/2) * hw, ay - Math.sin(angle + Math.PI/2) * hw);
+    ctx.closePath(); ctx.fill();
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI*2); ctx.stroke();
+    ctx.strokeStyle = '#222'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R); ctx.stroke();
+
+    if (netNormal) {
+      const { sx, sy } = project(netNormal);
+      drawArrow(Math.atan2(sy, sx), R * 0.55, '#555', 2);
+      ctx.fillStyle = '#555'; ctx.font = '11px monospace'; ctx.textAlign = 'center';
+      ctx.fillText('fwd', cx + sx * R * 0.68, cy + sy * R * 0.68 + 4);
+    }
+
+    // Raw euler normal — white, shorter
+    if (liveNormal) {
+      const { sx, sy } = project(liveNormal);
+      drawArrow(Math.atan2(sy, sx), R * 0.7, '#fff', 2);
+    }
+
+    // Quat-averaged normal — yellow
+    if (liveQuat) {
+      const { sx, sy } = project(liveQuat);
+      drawArrow(Math.atan2(sy, sx), R * 0.82, '#ffe44d', 3);
+    }
+
+    // Majority normal — cyan, longest
+    if (liveMajority) {
+      const { sx, sy } = project(liveMajority);
+      drawArrow(Math.atan2(sy, sx), R * 0.95, '#4dfff4', 3);
+    }
+
+    // Legend
+    ctx.font = '11px monospace'; ctx.textAlign = 'left';
+    ctx.fillStyle = '#fff';    ctx.fillText('── raw euler',  cx - R + 8, cy + R - 36);
+    ctx.fillStyle = '#ffe44d'; ctx.fillText('── quat avg',   cx - R + 8, cy + R - 22);
+    ctx.fillStyle = '#4dfff4'; ctx.fillText('── majority',   cx - R + 8, cy + R - 8);
+  }
+
+  draw();
+
+  onMsg = msg => {
+    if (msg.type === 'cal-progress') {
+      progressWrap.style.display = 'flex';
+      progressLabel.textContent  = msg.label;
+      progressBar.value          = msg.p;
+      if (msg.state === 'done') setTimeout(() => { progressWrap.style.display = 'none'; }, 1200);
+    }
+    if (msg.type === 'calibrated') {
+      netNormal = msg.normal;
+      status.textContent = 'calibrated ✓ — move the phone';
+    }
+    if (msg.type === 'live') {
+      liveNormal = msg.normal;
+      if (msg.quatNormal)     liveQuat     = msg.quatNormal;
+      if (msg.majorityNormal) liveMajority = msg.majorityNormal;
+      if (msg.euler) {
+        const [a, b, g] = msg.euler;
+        document.getElementById('euler').textContent =
+          `α ${a.toFixed(1)}  β ${b.toFixed(1)}  γ ${g.toFixed(1)}`;
+      }
+      if (liveQuat) document.getElementById('vec').textContent =
+        `quat [${liveQuat.map(v => v.toFixed(2)).join(', ')}]`;
+      draw();
+    }
+  };
+}
+</script>
+</body>
+</html>
