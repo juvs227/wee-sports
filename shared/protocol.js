@@ -1,3 +1,4 @@
+import {getSport} from './sportRegistry.js';
 /**
  * The room protocol, shared by the server, the TV and the phones.
  *
@@ -7,6 +8,9 @@
 
 /** Bumped when a message shape changes incompatibly. */
 export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_MINOR = 1;
+/** Combined phone/server queue-wait budget, excluding network travel time. */
+export const TENNIS_TRANSPORT_WAIT_MS = 160;
 
 /** A dropped connection keeps its seat for one minute. */
 export const RECONNECT_MS = 60_000;
@@ -20,14 +24,14 @@ export const CODE_ALPHABET = '23456789CDFGHJKLMNPQRTVWXYZ';
 /** Four characters: easy to read off a TV and quick to type on a phone. */
 export const CODE_LENGTH = 4;
 
-/** Largest supported party; tennis has two playing seats. */
-export const MAX_PLAYERS = 4;
+/** Largest supported party; racket sports have two playing seats. */
+export const MAX_PLAYERS = 8;
 export function playerCapacity(sport) {
-  return sport === 'tennis' ? 2 : sport === 'bowling' ? MAX_PLAYERS : 0;
+  return getSport(sport)?.players.max ?? 0;
 }
 export const NAME_MAX = 12;
 
-/** One controller can play the current tennis prototype against the bot. */
+/** One controller can play tennis against the bot. */
 export const READY_AT_PLAYERS = 1;
 /** The 5, 4, 3, 2, 1 that starts by itself once every player is ready. */
 export const COUNTDOWN_SECONDS = 5;
@@ -58,7 +62,7 @@ export function hasTutorial(sport) {
 /**
  * Where a lobby is:
  *
- *   'lobby' -> 'ready' -> (everyone ready) -> 'calibration' -> (TV confirms) -> 'countdown' -> 'vote' -> 'tutorial' | 'game'
+ *   'lobby' -> 'ready' -> (everyone ready) -> 'countdown' -> 'vote' -> 'tutorial' | 'game'
  *   'tutorial' -> (every Yes voter did every move) -> 'game'
  *
  * Nobody touches the TV: phones press Ready, vote, and do the tutorial moves.
@@ -69,7 +73,6 @@ export function hasTutorial(sport) {
 export const PHASES = {
   LOBBY: 'lobby',
   READY: 'ready',
-  CALIBRATION: 'calibration',
   COUNTDOWN: 'countdown',
   VOTE: 'vote',
   TUTORIAL: 'tutorial',
@@ -101,6 +104,16 @@ export const PHASES = {
 export const EVENTS = {
   /** TV -> server: open a lobby. Ack: { ok, ...snapshot }. */
   HOST_CREATE: 'host:create',
+  PLAYER_START: 'player:start',
+  HOST_SWITCH_SPORT: 'host:switch-sport',
+  PLAYER_SWITCH_SPORT: 'player:switch-sport',
+  PLAYER_AIM: 'player:aim',
+  GAME_AIM: 'game:aim',
+  INPUT_STATUS: 'input:status',
+  PLAYER_ACTION_STATUS: 'player:action-status',
+  HOST_CHECKPOINT: 'host:checkpoint',
+  HOST_RECOVERY: 'host:recovery',
+  HOST_RESTORE: 'host:restore',
   SESSION_RESUME: 'session:resume',
   SESSION_AWAY: 'session:away',
   SESSION_REPLACED: 'session:replaced',
@@ -112,6 +125,7 @@ export const EVENTS = {
   PLAYER_JOIN: 'player:join',
   /** TV or P1 -> server: { gameId }. End this match while keeping the lobby and controller setup. */
   HOST_RETURN_TO_LOBBY: 'host:return-to-lobby',
+  HOST_RESOLVE_MATCH: 'host:resolve-match',
   PLAYER_RETURN_TO_LOBBY: 'player:return-to-lobby',
   /** Current TV/P1 -> server: { gameId, paused }. Explicit, shared manual pause. */
   HOST_PAUSE: 'host:pause',
@@ -120,16 +134,10 @@ export const EVENTS = {
   PLAYER_LEAVE: 'player:leave',
   /**
    * Phone -> server: { ready: boolean }. Toggles during the ready check and the
-   * countdown. The last player to ready up starts the countdown; un-readying
-   * during it cancels it. Ack: { ok }.
+   * countdown. Once everyone is ready, the leader confirms PLAYER_START;
+   * un-readying during the countdown cancels it. Ack: { ok }.
    */
   PLAYER_READY: 'player:ready',
-  /** TV -> server: all players have finished orientation calibration. Start the countdown. */
-  HOST_CALIBRATION_DONE: 'host:calibration-done',
-  /** Phone -> server: this player has finished orientation calibration. */
-  PLAYER_CALIBRATION_DONE: 'player:calibration-done',
-  /** Phone -> server -> TV: live calibration progress (0–1). Volatile/throttled. */
-  PLAYER_CALIBRATION_PROGRESS: 'player:calibration-progress',
   /** Phone -> server: { watch: boolean }. One final vote per player. Ack: { ok }. */
   TUTORIAL_VOTE: 'tutorial:vote',
   /**
@@ -167,7 +175,9 @@ export function isSwing(event) {
   return event?.type === 'swing' && typeof event.id === 'string' && event.id.length > 0 &&
     event.id.length <= 100 && ['Forehand', 'Backhand'].includes(event.label) &&
     ['Left', 'Right'].includes(event.hand) &&
-    (event.power === undefined || (Number.isFinite(event.power) && event.power >= 0 && event.power <= 1));
+    (event.transportWaitMs === undefined || Number.isFinite(event.transportWaitMs) && event.transportWaitMs >= 0 && event.transportWaitMs <= TENNIS_TRANSPORT_WAIT_MS) &&
+    (event.power === undefined || (Number.isFinite(event.power) && event.power >= 0 && event.power <= 1)) &&
+    ['aim','depth'].every(key => event[key] === undefined || Number.isFinite(event[key]) && Math.abs(event[key]) <= 1);
 }
 
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -187,7 +197,7 @@ export function isGameCommand(event, sport) {
   if (!isRecord(event) || !isIdentifier(event.id) || !isIdentifier(event.gameId)) return false;
   let fields = ['id', 'gameId', 'action'];
   let valid = false;
-  if (sport === 'bowling') valid = event.action === 'new-match';
+  if (sport === 'bowling') valid = ['new-match', 'practice-start', 'practice-stop'].includes(event.action);
   else if (sport === 'tennis') {
     if (event.action === 'configure') {
       fields.push('settings');
@@ -206,11 +216,37 @@ export function isGameCommand(event, sport) {
 /** The host reports actual applied options; phones do not optimistically own simulation state. */
 export function isGameOptions(snapshot, sport) {
   if (!isRecord(snapshot) || !isIdentifier(snapshot.gameId) || snapshot.sport !== sport) return false;
-  if (sport === 'bowling') return true;
+  if (sport === 'bowling') return snapshot.practice === undefined || typeof snapshot.practice?.active === 'boolean';
+
   return sport === 'tennis' && isRecord(snapshot.settings) &&
     Object.entries(optionValidators).every(([key, validate]) => validate(snapshot.settings[key])) &&
     ['full', 'quick'].includes(snapshot.settings.format) &&
     validPractice(snapshot.practice) && typeof snapshot.humanOpponent === 'boolean';
+}
+
+/** A new TV sends points and completed sets together; older status-only TVs remain valid. */
+function isTennisScore(state) {
+  const fields = ['score', 'sets', 'completedSets', 'targetPoints', 'setsToWin'];
+  if (fields.every(field => state[field] === undefined)) return true;
+  const pair = (value, max) => Array.isArray(value) && value.length === 2 && value.every(n => Number.isSafeInteger(n) && n >= 0 && n <= max);
+  if (state.targetPoints !== 7 || state.setsToWin !== 2 || !pair(state.score, 10000) || !pair(state.sets, 2) ||
+      !Array.isArray(state.completedSets) || state.completedSets.length > 3) return false;
+  const totals = [0, 0];
+  for (const set of state.completedSets) {
+    if (!isRecord(set) || !pair([set.player1, set.player2], 10000) || totals.includes(2)) return false;
+    const high = Math.max(set.player1, set.player2), low = Math.min(set.player1, set.player2);
+    if (!(high === 7 && low <= 5 || high > 7 && high - low === 2)) return false;
+    totals[set.player1 > set.player2 ? 0 : 1]++;
+  }
+  if (totals.some((total, index) => total !== state.sets[index])) return false;
+  const winner = totals.indexOf(2) + 1;
+  if (winner) {
+    const final = state.completedSets.at(-1);
+    if (state.score[0] !== final.player1 || state.score[1] !== final.player2) return false;
+    return state.practice === true ? state.phase !== 'complete' && state.winner === null
+      : state.phase === 'complete' && state.winner === winner;
+  }
+  return state.phase !== 'complete' && (Math.max(...state.score) < 7 || Math.abs(state.score[0] - state.score[1]) < 2);
 }
 
 /** TV-published tennis status; scoring/physics remain on the TV. */
@@ -219,7 +255,7 @@ export function isTennisState(state) {
     (state.practice === undefined || typeof state.practice === 'boolean') &&
     (state.serveAttempt === undefined || [1, 2].includes(state.serveAttempt)) &&
     [1, 2].includes(state.server) && (state.phase === 'complete'
-      ? [1, 2].includes(state.winner) : state.winner === null);
+      ? [1, 2].includes(state.winner) : state.winner === null) && isTennisScore(state);
 }
 
 /** Optional final results keep older bowling TVs compatible; names stay in the lobby roster. */
@@ -227,13 +263,13 @@ export function isBowlingState(state) {
   if (!isRecord(state) || !['ready', 'rolling', 'complete'].includes(state.phase) ||
       !Number.isInteger(state.frame) || state.frame < 1 || state.frame > 10) return false;
   if (state.phase !== 'complete') {
-    return Number.isInteger(state.currentPlayer) && state.currentPlayer >= 1 && state.currentPlayer <= 4 &&
+    return Number.isInteger(state.currentPlayer) && state.currentPlayer >= 1 && state.currentPlayer <= playerCapacity('bowling') &&
       state.winners === undefined && state.winnerScore === undefined;
   }
   if (state.currentPlayer !== null || state.frame !== 10) return false;
   if (state.winners === undefined && state.winnerScore === undefined) return true;
-  return Array.isArray(state.winners) && state.winners.length > 0 && state.winners.length <= 4 &&
-    state.winners.every(player => Number.isInteger(player) && player >= 1 && player <= 4) &&
+  return Array.isArray(state.winners) && state.winners.length > 0 && state.winners.length <= playerCapacity('bowling') &&
+    state.winners.every(player => Number.isInteger(player) && player >= 1 && player <= playerCapacity('bowling')) &&
     new Set(state.winners).size === state.winners.length &&
     Number.isInteger(state.winnerScore) && state.winnerScore >= 0 && state.winnerScore <= 300;
 }
@@ -243,14 +279,16 @@ export function isStrokeResult(event) {
     typeof event.gameId === 'string' && event.gameId.length > 0 && event.gameId.length <= 100 &&
     [1, 2].includes(event.player) && ['hit', 'miss', 'rejected'].includes(event.result) &&
     typeof event.reason === 'string' && event.reason.length <= 160 &&
+    (event.receivedToPreparationMs === undefined || (Number.isFinite(event.receivedToPreparationMs) &&
+      event.receivedToPreparationMs >= 0 && event.receivedToPreparationMs <= 10000)) &&
     (event.receivedToContactMs === undefined || (event.result === 'hit' &&
       Number.isFinite(event.receivedToContactMs) && event.receivedToContactMs >= 0 && event.receivedToContactMs <= 10000));
 }
 
 export function isGameSoundEvent(sport, event) {
-  const events = sport === 'tennis'
+  const events = (sport === 'tennis'
     ? ['hit', 'bounce', 'serve', 'point', 'game', 'set', 'match', 'fault', 'let', 'start', 'stop']
-    : sport === 'bowling' ? ['release', 'roll', 'roll-end', 'pin', 'gutter', 'strike', 'spare', 'result', 'match', 'start', 'stop'] : [];
+    : sport === 'bowling' ? ['release', 'roll', 'roll-end', 'pin', 'gutter', 'strike', 'spare', 'result', 'match', 'start', 'stop'] : []);
   return events.includes(event);
 }
 
@@ -266,11 +304,11 @@ export function isTennisHit(event) {
 }
 
 export function isGameHit(event, sport) {
-  return ['tennis', 'bowling'].includes(sport) &&
+  return OPEN_SPORTS.includes(sport) &&
     (event?.kind === undefined || event.kind === sport) &&
     typeof event?.id === 'string' && event.id.length > 0 && event.id.length <= 100 &&
     typeof event.gameId === 'string' && event.gameId.length > 0 && event.gameId.length <= 100 &&
-    Number.isInteger(event.player) && event.player >= 1 && event.player <= (sport === 'tennis' ? 2 : 4);
+    Number.isInteger(event.player) && event.player >= 1 && event.player <= playerCapacity(sport);
 }
 
 export const ERRORS = {
@@ -327,8 +365,20 @@ export function normalizeCode(value) {
 export function cleanName(value) {
   if (typeof value !== 'string') return '';
   const collapsed = value
+    // eslint-disable-next-line no-control-regex -- Names deliberately strip ASCII control characters.
     .replace(/[\u0000-\u001f\u007f]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
   return [...collapsed].slice(0, NAME_MAX).join('').trim();
+}
+
+/** Latest-state streams use server-issued epochs and SI angular velocity. */
+export function isInputEnvelope(event) {
+  return isRecord(event) && isIdentifier(event.gameId) &&
+    Number.isSafeInteger(event.generation) && event.generation >= 0 &&
+    Number.isSafeInteger(event.hostEpoch) && event.hostEpoch >= 1 &&
+    Number.isSafeInteger(event.seq) && event.seq >= 0;
+}
+export function isAim(event) {
+  return isInputEnvelope(event) && Number.isFinite(event.aim) && Math.abs(event.aim) <= 1 && typeof event.locked === 'boolean';
 }

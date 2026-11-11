@@ -7,6 +7,8 @@ export interface SwingEvent {
     label: SwingLabel;
     hand: SwingHand;
     power?: number;
+    aim?: number;
+    depth?: number;
     player?: 1 | 2;
 }
 
@@ -20,7 +22,7 @@ export interface SwingConnectionOptions {
 }
 
 export interface SwingConnection {
-    sendSwing(label: SwingLabel, hand: SwingHand, power?: number): boolean;
+    sendSwing(label: SwingLabel, hand: SwingHand, power?: number, placement?: {aim?:number;depth?:number}): boolean;
     close(): void;
 }
 

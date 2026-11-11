@@ -57,13 +57,15 @@ test('phone strength reaches the bridge and timing uses one clock, not a remote 
   vi.stubGlobal('performance', { now: () => now });
   const f = embedded('phone');
   f.receive({ type: 'wee:lobby-state', gameId: 'game-a', playing: true, connected: true, paused: false });
-  expect(f.connection.sendSwing('Forehand', 'Right', .25)).toBe(true);
+  expect(f.connection.sendSwing('Forehand', 'Right', .25, {aim:-.4,depth:.3})).toBe(true);
   const event = f.parent.postMessage.mock.lastCall[0].event;
   expect(event.power).toBe(.25);
+  expect(event.aim).toBe(-.4); expect(event.depth).toBe(.3);
   now = 180;
   f.receive({ type: 'wee:swing-ack', gameId: 'game-a', result: { id: event.id, ok: true, receivers: 1 } });
   expect(f.onAck).toHaveBeenCalledWith({ id: event.id, ok: true, receivers: 1, roundTripMs: 80, timingScope: 'game' });
   expect(f.connection.sendSwing('Forehand', 'Right', Infinity)).toBe(false);
+  expect(f.connection.sendSwing('Forehand', 'Right', .5, {aim:1.01})).toBe(false);
   f.connection.close();
 });
 

@@ -81,7 +81,7 @@ export function createOrientationCalibration({ onProgress, onDone }) {
   let stopped    = false;
   let cleanup    = () => {};
 
-  function tick(quat, normal) {
+  function tick(quat, _normal) {
     if (stopped) return;
     const now = performance.now();
 

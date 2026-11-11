@@ -44,8 +44,6 @@ test('system appearance is followed until a player chooses and persists a theme'
   expect(changed).toHaveBeenCalledOnce();
 });
 
-
-// server/src/theme.js
 test('saved choice survives a reload and overrides a different system preference', async () => {
   values.set('wee:theme', 'dark');
   const api = await import('@wee/src/theme.js');

@@ -34,7 +34,13 @@ export function useTvAudio(lobby, reconnecting) {
       if (output.current === sound) output.current = null;
       if (session.current === run) session.current = null;
     };
-  }, [lobby?.code, lobby?.sport]);
+  }, [lobby?.code]);
+
+  // A phone sport switch cannot grant a new TV user gesture. Reuse the
+  // context activated by the original Play click and only change its sounds.
+  useEffect(() => {
+    if (lobby?.sport) void output.current?.setSport(lobby.sport);
+  }, [lobby?.sport]);
 
   useEffect(() => { session.current?.update(snapshot.current); },
     [lobby?.gameId, lobby?.phase, lobby?.paused, reconnecting]);
@@ -66,7 +72,7 @@ export function useTvAudio(lobby, reconnecting) {
     const sound = output.current;
     if (!sound || changing.current || reconnecting) return;
     const current = sound.getStatus();
-    const muted = !current.muted;
+    const muted = current.ready ? !current.muted : false;
     // Browser activation must happen in this click, not after the server ack.
     if (!muted) void sound.unlock({ respectMute: true });
     changing.current = true; setBusy(true); setError('');
@@ -77,7 +83,7 @@ export function useTvAudio(lobby, reconnecting) {
   }, [reconnecting]);
   const hint = status.unavailable && status.muted ? 'Unmute and retry sound on this TV' : undefined;
   const controls = <div className="tv-sound-controls">
-    <SoundToggle muted={status.muted} onClick={toggle} disabled={reconnecting} busy={busy} title={hint} />
+    <SoundToggle muted={status.muted} ready={status.ready} onClick={toggle} disabled={reconnecting} busy={busy} title={hint} />
     {error ? <span className="tv-sound-error" role="status">{error}</span> : null}
   </div>;
   return {activateForPlay, onCountdown, onAudio, controls};

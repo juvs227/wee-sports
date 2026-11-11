@@ -20,3 +20,7 @@ for (const page of ['index', 'game', 'controller', 'bowling']) {
   if (!html.includes('type="module"')) throw new Error(`Missing built entry point: ${page}`);
 }
 console.log('Verified all four built pages');
+
+const font = readFileSync(resolve(buildDir, 'fonts/nunito-latin-variable.woff2'));
+if (font.toString('ascii', 0, 4) !== 'wOF2') throw new Error('Missing local controller font');
+console.log('Verified local controller font');

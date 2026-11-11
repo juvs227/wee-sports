@@ -7,7 +7,7 @@ import { CODE_LENGTH, isRoomCode, normalizeCode } from '@wee/shared/protocol.js'
  * Input is normalized as you type, so lowercase works and characters a code
  * can never contain simply don't appear.
  */
-export function JoinBox() {
+export function JoinBox({title = 'Joining from your phone?', description = 'Scan the QR code on the TV, or type the code here.'}) {
   const navigate = useNavigate();
   const [code, setCode] = useState('');
   const ready = isRoomCode(code);
@@ -15,9 +15,9 @@ export function JoinBox() {
   return (
     <section className="join-card" aria-labelledby="join-title">
       <h2 id="join-title" className="join-card__title">
-        Joining from your phone?
+        {title}
       </h2>
-      <p className="join-card__sub">Scan the QR code on the TV, or type the code here.</p>
+      <p className="join-card__sub">{description}</p>
       <form
         className="join-form"
         onSubmit={(event) => {

@@ -1,5 +1,5 @@
 import { test, expect } from 'vitest';
-import { createSwingDetector, SWING_LIMITS } from '../src/controller/classifySwing.js';
+import { createSwingDetector, SWING_LIMITS } from '../src/controller/accelerationSwing.js';
 
 const sample = (timeMs: number, accelMag: number) => ({ timeMs, accelMag });
 
