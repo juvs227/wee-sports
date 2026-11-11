@@ -31,7 +31,7 @@ export default function RemoteHome() {
         <JoinBox title="TV code" description="Enter the four characters shown on your TV." />
       </details>
     </section>
-    <footer className="remote-footer">
+    <footer className="remote-footer"><Link to="/profile">Profile &amp; history<span aria-hidden="true">›</span></Link>
       <p>No account needed to play.</p></footer>
   </main>;
 }

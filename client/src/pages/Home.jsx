@@ -65,6 +65,7 @@ export default function Home() {
         </a>
         <div className="topbar__actions">
           <a className="topbar__link" href="#how">How it works</a>
+          <a className="topbar__link" href="/profile">Profile &amp; history</a>
           <ThemeToggle />
         </div>
       </header>

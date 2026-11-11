@@ -3,8 +3,10 @@ import {expect, test} from 'vitest';
 
 
 import {RoomStore} from '@server/src/RoomStore.js';
-import {PROTOCOL_VERSION as v, PHASES, VOTE_SECONDS, playerCapacity} from '@wee/shared/protocol.js';
+import {PROTOCOL_VERSION as v, PHASES, VOTE_SECONDS, isBowlingState, playerCapacity} from '@wee/shared/protocol.js';
 import {createControllerCapabilities} from '@wee/shared/controllerCapabilities.js';
+import {ProfileStore} from '@server/profiles/store.js';
+import {validateSportState} from '@server/profiles/roomPersistence.js';
 
 function fixture(sport = 'bowling', count = 8) {
   let now = 1000;
@@ -72,7 +74,22 @@ test('eighth bowler can aim at 60Hz, roll, reconnect into the same seat, and rem
 
 
 
-
+test('turn, winner, profile and checkpoint capacities agree for all eight bowlers', () => {
+  expect(playerCapacity('bowling')).toBe(8);
+  expect(isBowlingState({phase: 'ready', frame: 1, currentPlayer: 8})).toBe(true);
+  expect(isBowlingState({phase: 'ready', frame: 1, currentPlayer: 9})).toBe(false);
+  expect(isBowlingState({phase: 'complete', frame: 10, currentPlayer: null, winners: [1, 2, 3, 4, 5, 6, 7, 8], winnerScore: 0})).toBe(true);
+  const profiles = new ProfileStore();
+  try {
+    const participants = Array.from({length: 8}, (_, i) => ({memberId: `p${i + 1}`, name: `Player ${i + 1}`}));
+    expect(profiles.createMatch({matchId: 'eight-bowlers', sport: 'bowling', hostMemberId: 'tv', participants}).revision).toBe(0);
+    expect(() => profiles.createMatch({matchId: 'nine-bowlers', sport: 'bowling', hostMemberId: 'tv', participants: [...participants, {memberId: 'p9', name: 'Extra'}]})).toThrow('invalid-match');
+    const payload = {version: 1, boundary: 'settled', match: {version: 1, players: participants.map((p, i) => ({player: i + 1, name: p.name})), deliveries: []},
+      pins: Array.from({length: 10}, (_, i) => ({id: i + 1, standing: true, position: [0, .4, -9], quaternion: [0, 0, 0, 1]})), settings: {aim: 0}};
+    expect(validateSportState({sport: 'bowling', players: participants.map((p, slot) => ({...p, slot}))}, payload)).toBeUndefined();
+    expect(profiles.saveCheckpoint({matchId: 'eight-bowlers', hostMemberId: 'tv', hostEpoch: 1, expectedRevision: 0, state: payload}).saved).toBe(true);
+  } finally {profiles.close();}
+});
 
 
 test('eight friends can scan and tap Play one at a time without unreadying earlier phones', () => {
