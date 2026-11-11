@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { EVENTS, isRoll, isSwing, isGameHit, isTennisState, isBowlingState, isStrokeResult, isGameSoundEvent, isGameCommand, isGameOptions } from '@wee/shared/protocol.js';
+import { EVENTS, PHASES, isRoll, isSwing, isGameHit, isTennisState, isBowlingState, isStrokeResult, isGameSoundEvent, isGameCommand, isGameOptions } from '@wee/shared/protocol.js';
 import { request, requestSwing, socket, useConnection } from '../lib/socket.js';
 import { createInputId } from '../../../src/network/inputId.js';
 
 const NO_PLAYERS = [];
 /** Keep the game/controller alive while the outer page owns the lobby session. */
-export function PrototypeFrame({ code, controller = false, player = 1, players = NO_PLAYERS, sport = 'tennis', gameId, gameState, playing = true, paused = false, manuallyPaused = false, showPause = paused, pauseMessage, onAudio, onPauseToggle }) {
+export function PrototypeFrame({ code, controller = false, player = 1, players = NO_PLAYERS, sport = 'tennis', gameId, gameState, playing = true, paused = false, manuallyPaused = false, showPause = paused, pauseMessage, phase = PHASES.LOBBY, onCalibrationProgress, onCalibrationDone, onAudio, onPauseToggle, onSwing }) {
   const frame = useRef(null);
   const ready = useRef(false);
   const pending = useRef(new Map());
@@ -24,7 +24,7 @@ export function PrototypeFrame({ code, controller = false, player = 1, players =
   const src = `/${controller ? 'controller' : sport === 'bowling' ? 'bowling' : 'game'}.html?room=${encodeURIComponent(room)}&lobby=${code}&player=${player}${controller ? '' : `&sport=${sport}`}`;
   function publishState() {
     const post = message => frame.current?.contentWindow?.postMessage(message, window.location.origin);
-    post({ type: 'wee:lobby-state', paused: paused || connection !== 'online', manuallyPaused, connected: connection === 'online', players, playing, sport, gameId });
+    post({ type: 'wee:lobby-state', paused: paused || connection !== 'online', manuallyPaused, connected: connection === 'online', players, playing, sport, gameId, phase });
     if (controller && sport === 'bowling') post({ type: 'wee:bowling-state', ...gameState,
       canRoll: playing && !paused && connection === 'online' && gameState?.phase === 'ready' && gameState.currentPlayer === player });
     if (controller && sport === 'tennis' && isTennisState(gameState)) {
@@ -109,6 +109,11 @@ export function PrototypeFrame({ code, controller = false, player = 1, players =
       } else if (!controller && data?.type === 'wee:roll-result') {
         const delivery = pending.current.get(data.id);
         if (delivery) { clearTimeout(delivery.timer); pending.current.delete(data.id); delivery.ack(data.result); }
+      } else if (controller && data?.type === 'wee:calibration-progress') {
+        onCalibrationProgress?.(data.progress, data.state);
+      } else if (controller && data?.type === 'wee:calibration-done') {
+        void request(EVENTS.PLAYER_CALIBRATION_DONE, {});
+        onCalibrationDone?.();
       } else if (controller && data?.type === 'wee:controller-setup') {
         const result = await request(EVENTS.PLAYER_SETUP, { setup: data.setup });
         post({ type: 'wee:setup-ack', result });
@@ -119,7 +124,7 @@ export function PrototypeFrame({ code, controller = false, player = 1, players =
     const swing = (event, ack) => {
       const ok = !controller && sport === 'tennis' && ready.current && playing && !paused &&
         connection === 'online' && Boolean(gameId) && event?.gameId === gameId && isSwing(event);
-      if (ok) post({ type: 'wee:game-swing', event });
+      if (ok) { post({ type: 'wee:game-swing', event }); onSwing?.(event); }
       if (typeof ack === 'function') ack({ ok });
     };
     const roll = (event, ack = () => {}) => {
@@ -167,7 +172,7 @@ export function PrototypeFrame({ code, controller = false, player = 1, players =
       socket.off(EVENTS.GAME_HIT, hit);
       socket.off(EVENTS.GAME_STROKE_RESULT, strokeResult);
     };
-  }, [paused, manuallyPaused, connection, src, controller, attempt, players, playing, sport, gameId, gameState, player, onAudio, onPauseToggle]);
+  }, [paused, manuallyPaused, connection, src, controller, attempt, players, playing, sport, gameId, gameState, player, phase, onCalibrationProgress, onCalibrationDone, onAudio, onPauseToggle, onSwing]);
   return (
     <div className={`prototype-frame ${controller ? 'prototype-frame--phone' : ''}`}>
       {loading ? <p role="status">{failed ? 'Taking too long to load.' : `Loading ${controller ? 'controller' : sport}…`}

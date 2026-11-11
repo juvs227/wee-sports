@@ -17,6 +17,7 @@
     "prepare": "npm run compile",
     "test:physics": "vitest run test/",
     "test": "vitest run",
+    "test:node": "vitest run server/tests/RoomStore.test.js server/tests/socket.test.js server/tests/reconnect.test.js server/tests/bowling.test.js server/tests/soundControl.test.js server/tests/manualPause.test.js server/tests/gameOptions.test.js server/tests/returnToLobby.test.js server/tests/hitFeedback.test.js server/tests/swingDelivery.test.js",
     "test:watch": "vitest"
   },
   "devDependencies": {

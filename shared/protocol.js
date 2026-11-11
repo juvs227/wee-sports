@@ -58,7 +58,7 @@ export function hasTutorial(sport) {
 /**
  * Where a lobby is:
  *
- *   'lobby' -> 'ready' -> (everyone ready) -> 'countdown' -> 'vote' -> 'tutorial' | 'game'
+ *   'lobby' -> 'ready' -> (everyone ready) -> 'calibration' -> (TV confirms) -> 'countdown' -> 'vote' -> 'tutorial' | 'game'
  *   'tutorial' -> (every Yes voter did every move) -> 'game'
  *
  * Nobody touches the TV: phones press Ready, vote, and do the tutorial moves.
@@ -69,6 +69,7 @@ export function hasTutorial(sport) {
 export const PHASES = {
   LOBBY: 'lobby',
   READY: 'ready',
+  CALIBRATION: 'calibration',
   COUNTDOWN: 'countdown',
   VOTE: 'vote',
   TUTORIAL: 'tutorial',
@@ -123,6 +124,12 @@ export const EVENTS = {
    * during it cancels it. Ack: { ok }.
    */
   PLAYER_READY: 'player:ready',
+  /** TV -> server: all players have finished orientation calibration. Start the countdown. */
+  HOST_CALIBRATION_DONE: 'host:calibration-done',
+  /** Phone -> server: this player has finished orientation calibration. */
+  PLAYER_CALIBRATION_DONE: 'player:calibration-done',
+  /** Phone -> server -> TV: live calibration progress (0–1). Volatile/throttled. */
+  PLAYER_CALIBRATION_PROGRESS: 'player:calibration-progress',
   /** Phone -> server: { watch: boolean }. One final vote per player. Ack: { ok }. */
   TUTORIAL_VOTE: 'tutorial:vote',
   /**

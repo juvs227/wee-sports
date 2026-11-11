@@ -120,7 +120,8 @@ export class RoomStore {
     this.#rooms.set(code, { code, sport, hostId, phase: PHASES.LOBBY, players: new Map(), deadline: null, pausedAt: null, manuallyPaused: false,
       gameId: null, inputGeneration: 0, gameState: null, pendingRoll: null, seenRolls: new Set(),
       seenHits: new Set(), lastHitAt: new Map(), pendingStrokes: new Map(), soundMuted: null,
-      gameOptions: null, seenCommands: new Set(), pendingGameCommand: null, vote: null, tutorial: null });
+      gameOptions: null, seenCommands: new Set(), pendingGameCommand: null, vote: null, tutorial: null,
+      calibrating: new Set() });
     const memberId = this.#addSession(hostId, code, 'host');
     this.#rooms.get(code).hostId = memberId;
     return this.#sessionView(memberId);
@@ -164,7 +165,7 @@ export class RoomStore {
     const member = this.#members.get(playerId);
     if (member?.role !== 'player') return { ok: false, error: ERRORS.NOT_PLAYER };
     const room = this.#rooms.get(member.code);
-    if (room?.phase !== PHASES.READY && room?.phase !== PHASES.COUNTDOWN) {
+    if (room?.phase !== PHASES.READY && room?.phase !== PHASES.CALIBRATION && room?.phase !== PHASES.COUNTDOWN) {
       return { ok: false, error: ERRORS.NO_READY_CHECK };
     }
     if (room.pausedAt !== null) return { ok: false, error: ERRORS.PAUSED };
@@ -176,10 +177,12 @@ export class RoomStore {
     player.ready = ready;
 
     if (room.phase === PHASES.READY && [...room.players.values()].every((seat) => seat.ready)) {
-      room.phase = PHASES.COUNTDOWN;
-      room.gameId = randomUUID();
-      room.deadline = this.#now() + COUNTDOWN_MS;
-      return { ok: true, code: room.code, countdownStarted: true, msLeft: COUNTDOWN_MS };
+      room.phase = PHASES.CALIBRATION;
+      return { ok: true, code: room.code, calibrationStarted: true };
+    }
+    if (room.phase === PHASES.CALIBRATION && !ready) {
+      room.phase = PHASES.READY;
+      return { ok: true, code: room.code, calibrationCancelled: true };
     }
     if (room.phase === PHASES.COUNTDOWN && !ready) {
       // Everyone else stays ready, so readying up again restarts it at once.
@@ -190,6 +193,40 @@ export class RoomStore {
       return { ok: true, code: room.code, countdownCancelled: true };
     }
     return { ok: true, code: room.code };
+  }
+
+  /**
+   * TV -> server: all players finished orientation calibration. Move to countdown.
+   */
+  calibrationDone(socketId) {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    if (member?.role !== 'host') return { ok: false, error: ERRORS.NOT_HOST };
+    const room = this.#rooms.get(member.code);
+    if (room?.phase !== PHASES.CALIBRATION) return { ok: false, error: 'not-calibrating' };
+    room.phase = PHASES.COUNTDOWN;
+    room.gameId = randomUUID();
+    room.deadline = this.#now() + COUNTDOWN_MS;
+    return { ok: true, code: room.code, countdownStarted: true, msLeft: COUNTDOWN_MS };
+  }
+
+  /**
+   * Phone -> server: this player finished orientation calibration.
+   * When all controller players are done, advances to countdown.
+   */
+  playerCalibrationDone(socketId) {
+    const playerId = this.#sockets.get(socketId);
+    const member = this.#members.get(playerId);
+    if (member?.role !== 'player') return { ok: false, error: ERRORS.NOT_PLAYER };
+    const room = this.#rooms.get(member.code);
+    if (room?.phase !== PHASES.CALIBRATION) return { ok: false, error: 'not-calibrating' };
+    room.calibrating.add(playerId);
+    const controllers = [...room.players.entries()].filter(([, p]) => isController(room.sport, p.slot));
+    const allDone = controllers.length > 0 && controllers.every(([id]) => room.calibrating.has(id));
+    if (!allDone) return { ok: true, code: room.code };
+    room.phase = PHASES.COUNTDOWN;
+    room.gameId = randomUUID();
+    room.deadline = this.#now() + COUNTDOWN_MS;
+    return { ok: true, code: room.code, countdownStarted: true, msLeft: COUNTDOWN_MS };
   }
 
   /**
@@ -380,7 +417,7 @@ export class RoomStore {
       player.setup = payload.setup;
       if (room.phase === PHASES.READY) {
         player.ready = false;
-      } else if (BEFORE_PLAY.has(room.phase) || room.phase === PHASES.COUNTDOWN) {
+      } else if (BEFORE_PLAY.has(room.phase) || room.phase === PHASES.CALIBRATION || room.phase === PHASES.COUNTDOWN) {
         room.deadline = null;
         this.#resetReady(room);
       }
@@ -550,11 +587,27 @@ export class RoomStore {
       .filter(member => member.code === code && member.disconnectedAt !== null)
       .map(member => ({ name: member.role === 'host' ? 'TV' : room.players.get(member.id)?.name,
         msLeft: Math.max(0, this.#graceMs - (this.#now() - member.disconnectedAt)) }));
+    const calibratedSlots = [...room.players.entries()]
+      .filter(([id]) => room.calibrating.has(id))
+      .map(([, p]) => p.slot);
     return { code: room.code, sport: room.sport, phase: room.phase, players, countdown,
       vote: this.#voteView(room), tutorial: this.#tutorialView(room),
       paused: room.pausedAt !== null, manuallyPaused: room.manuallyPaused, reconnecting,
       setupPending: players.filter(player => isController(room.sport, player.slot) && !player.setup).map(player => player.name),
-      gameId: room.gameId, gameState: room.gameState, soundMuted: room.soundMuted, gameOptions: room.gameOptions };
+      gameId: room.gameId, gameState: room.gameState, soundMuted: room.soundMuted, gameOptions: room.gameOptions,
+      calibratedSlots };
+  }
+
+  /** Slot + host socket for forwarding volatile player events. Null if not in a room. */
+  memberRoom(socketId) {
+    const id = this.#sockets.get(socketId);
+    const member = this.#members.get(id);
+    if (!member) return null;
+    const room = this.#rooms.get(member.code);
+    if (!room) return null;
+    const player = member.role === 'player' ? room.players.get(id) : null;
+    const hostSocketId = this.#members.get(room.hostId)?.socketId ?? null;
+    return { slot: player?.slot ?? null, hostSocketId };
   }
 
   /** The code this id is hosting, or null. */
@@ -720,6 +773,7 @@ export class RoomStore {
     room.pendingStrokes.clear();
     room.gameOptions = null; room.seenCommands.clear(); room.pendingGameCommand = null;
     room.vote = null; room.tutorial = null;
+    room.calibrating.clear();
     room.phase = room.players.size >= READY_AT_PLAYERS &&
       (room.sport === 'bowling' || [...room.players.values()].some(player => player.slot === 0)) ? PHASES.READY : PHASES.LOBBY;
   }

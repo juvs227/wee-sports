@@ -105,3 +105,39 @@
   .game-session__bar { min-height: 44px; padding-block: 2px; }
   .game-session button, .game-session summary { min-height: 36px; padding-block: 6px; }
 }
+.tv-debug-toggle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 25;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  font-size: .7rem;
+  font-weight: 700;
+  background: rgba(0,0,0,.35);
+  color: rgba(255,255,255,.4);
+  border: 1px solid rgba(255,255,255,.15);
+  border-radius: 4px;
+  cursor: pointer;
+  line-height: 1;
+}
+.tv-debug-toggle[aria-pressed="true"] {
+  background: rgba(200,0,0,.55);
+  color: #fff;
+  border-color: rgba(255,80,80,.5);
+}
+.tv-swing-debug {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  font-size: clamp(2.5rem, 7vw, 5rem);
+  font-weight: 900;
+  color: #e00;
+  text-shadow: 0 2px 12px rgba(0,0,0,.7);
+  pointer-events: none;
+  white-space: nowrap;
+  letter-spacing: .02em;
+}

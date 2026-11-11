@@ -10,7 +10,7 @@
 .controller-page .play-state { text-align: center; padding: 24px 20px 18px; margin-top: 4px; }
 .controller-page .play-state h2 { font-size: clamp(1.7rem, 8vw, 2.25rem); line-height: 1.15; margin: 18px 0 12px; letter-spacing: -.03em; }
 .controller-page .play-state #play-help { max-width: 30ch; margin: 0 auto 16px; }
-.controller-page .play-state #latest { overflow-wrap: anywhere; color: var(--accent-ink); font-size: 1rem; font-weight: 800; margin: 12px 0; }
+.controller-page .play-state #latest { overflow-wrap: anywhere; color: #e00; font-size: 3rem; font-weight: 900; margin: 12px 0; text-align: center; letter-spacing: .02em; }
 .controller-page #play-notice { padding: 12px; border-radius: var(--radius-sm); color: var(--warn-ink); background: var(--warn-soft); }
 .controller-page .controller-toolbar { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; }
 .controller-page .settings-toggle { background: transparent; border-color: transparent; color: var(--text-muted); padding: 8px 4px; font-size: .85rem; }
