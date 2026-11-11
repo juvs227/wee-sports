@@ -1,4 +1,5 @@
 import {checkpoint as validateCheckpoint} from '../profiles/validation.js';
+import {validateSportState} from '../gameState.js';
 /**
  * Every lobby the server knows about, with no networking in it.
  *
@@ -62,7 +63,7 @@ export class RoomStore {
   #graceMs;
   #validateCheckpointState;
 
-  constructor({ makeCode = randomCode, maxPlayers = MAX_PLAYERS, now = Date.now, graceMs = RECONNECT_MS, validateCheckpointState = null } = {}) {
+  constructor({ makeCode = randomCode, maxPlayers = MAX_PLAYERS, now = Date.now, graceMs = RECONNECT_MS, validateCheckpointState = validateSportState } = {}) {
     this.#makeCode = makeCode;
     this.#maxPlayers = maxPlayers;
     this.#now = now;
