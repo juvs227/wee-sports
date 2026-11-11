@@ -27,3 +27,28 @@ jobs:
       - run: npm run test:server
       - run: npm run test:motion
       - run: npm run build
+
+  native-controller:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: apps/controller/package-lock.json
+      - run: npm ci
+        working-directory: apps/controller
+      - run: npm test
+        working-directory: apps/controller
+      - run: npm run export -- --output-dir ${{ runner.temp }}/controller-export --max-workers 2
+        working-directory: apps/controller
+        env:
+          CI: '1'
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: native-export-failure
+          path: ${{ runner.temp }}/controller-export
+          if-no-files-found: ignore

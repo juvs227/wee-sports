@@ -33,6 +33,18 @@ input; old or duplicate actions cannot become a new swing or roll after reconnec
 The browser tennis controller can use a private WebRTC data channel with the
 same server-authorized room boundaries and a Socket.IO fallback.
 
+## Expo controller
+
+```sh
+npm run expo:install
+npm run expo
+```
+
+Scan the TV from the native app. The Expo controller shares motion normalization,
+automatic setup, room lifecycle and gesture logic with the browser controller.
+See [native setup](apps/controller/README.md) for development builds and device
+permissions. Simulator/export checks do not establish real phone sensor latency.
+
 ## Check changes
 
 ```sh
@@ -41,6 +53,8 @@ npm test
 npm run test:server
 npm run test:motion
 npm run build
+npm --prefix apps/controller test
+npm --prefix apps/controller run export -- --output-dir /tmp/wee-controller-export --max-workers 2
 ```
 
 Browser checks use a disposable local server and Playwright. Physical phone motion,
