@@ -12,11 +12,18 @@ export function TvGame({ lobby, paused, onClose, error, immersive = true, fullsc
   onReturnToLobby, returning = false, returnDisabled = false, onPauseToggle, pauseDisabled = false }) {
   const [confirmReturn, setConfirmReturn] = useState(false);
   const [debugOn, setDebugOn] = useState(false);
-  const [swingLabel, setSwingLabel] = useState(null);
+  const [swingDebug, setSwingDebug] = useState(null);
   const swingTimer = useRef(null);
   const handleSwing = useCallback(event => {
     clearTimeout(swingTimer.current);
-    setSwingLabel(`P${event.player} ${event.label}`);
+    console.log("hey cutie"); 
+    console.log("swing data received");
+    console.log("event net normal", event.netNormal); 
+    console.log("event swing normal", event.swingNormal); 
+    if (event.netNormal && event.swingNormal) {
+      console.log('swing debug', { netNormal: event.netNormal, swingNormal: event.swingNormal, label: event.label, player: event.player });
+      setSwingDebug({ netNormal: event.netNormal, swingNormal: event.swingNormal, label: event.label, player: event.player });
+    }
     swingTimer.current = setTimeout(() => setSwingLabel(null), 1500);
   }, []);
   useEffect(() => {
@@ -68,7 +75,14 @@ export function TvGame({ lobby, paused, onClose, error, immersive = true, fullsc
             : lobby.manuallyPaused ? 'Game paused · resume on Player 1\u2019s phone or press P on the TV.' : undefined} />
       {/* later should be an easier way to register things inside the debug view*/}
       <button type="button" className="tv-debug-toggle" onClick={() => setDebugOn(v => !v)} aria-pressed={debugOn} title="Toggle debug">D</button>
-      {debugOn && swingLabel ? <div className="tv-swing-debug" aria-hidden="true">{swingLabel}</div> : null}
+      {debugOn && swingDebug ? <div style={{ position: 'fixed', right: 16, top: '50%', transform: 'translateY(-50%)', zIndex: 9999, background: 'black', borderRadius: 8, padding: '12px 16px', fontSize: 24, fontWeight: 'bold', color: swingDebug.player === 1 ? 'red' : 'blue' }} aria-hidden="true">P{swingDebug.player} {swingDebug.label}</div> : null}
+      {debugOn && swingDebug ? <svg style={{ position: 'fixed', top: 16, left: 16, zIndex: 9999, background: 'black', borderRadius: 8 }} viewBox="0 0 200 200" width="300" height="300" aria-hidden="true">
+        <line x1="100" y1="100" x2={100 + swingDebug.netNormal[0] * 80} y2={100 - swingDebug.netNormal[1] * 80} stroke="cyan" strokeWidth="3" />
+        <line x1="100" y1="100" x2={100 + swingDebug.swingNormal[0] * 80} y2={100 - swingDebug.swingNormal[1] * 80} stroke="yellow" strokeWidth="3" />
+        <text x="4" y="16" fill="cyan" fontSize="14">net</text>
+        <text x="4" y="34" fill="yellow" fontSize="14">swing</text>
+        <text x="4" y="52" fill="white" fontSize="14">{swingDebug.label}</text>
+      </svg> : null}
     </main>
   );
 }
