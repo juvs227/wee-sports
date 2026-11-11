@@ -447,7 +447,9 @@ export class RoomStore {
     if (room.pendingStrokes.size > 128) room.pendingStrokes.delete(room.pendingStrokes.keys().next().value);
     return { ok: true, code: room.code, inputGeneration: room.inputGeneration, hostSocketId: this.#members.get(room.hostId)?.socketId,
       event: { type: 'swing', id: event.id, label: event.label, hand: event.hand,
-        ...(event.power === undefined ? {} : { power: event.power }), player: player.slot + 1, gameId: room.gameId } };
+        ...(event.power === undefined ? {} : { power: event.power }), player: player.slot + 1, gameId: room.gameId,
+        ...(event.netNormal  ? { netNormal:   event.netNormal  } : {}),
+        ...(event.swingNormal ? { swingNormal: event.swingNormal } : {}) } };
   }
 
   /** Correlated diagnostics are private, transient feedback for a real recent input. */

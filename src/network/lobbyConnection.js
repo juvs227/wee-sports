@@ -38,11 +38,12 @@ export function connectLobbySwings({ role, onSwing, onStatus, onAck, onSent = ()
   onStatus('Connecting to homepage lobby…');
   post({ type: 'wee:bridge-ready' });
   return {
-    sendSwing(label, hand, power = 0.5) {
-      const event = { type: 'swing', id: createInputId(), label, hand, power, gameId };
+    sendSwing(label, hand, power = 0.5, netNormal, swingNormal) {
+      const event = { type: 'swing', id: createInputId(), label, hand, power, gameId, netNormal, swingNormal };
       if (role !== 'phone' || !connected || paused || !gameId || !isSwing(event)) return false;
       sentAt.set(event.id, performance.now());
       if (sentAt.size > 40) sentAt.delete(sentAt.keys().next().value);
+      console.log('[lobbyConnection step 3] netNormal:', netNormal, 'swingNormal:', swingNormal);
       post({ type: 'wee:player-swing', event });
       onSent(event);
       return true;
