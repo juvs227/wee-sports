@@ -24,3 +24,13 @@ console.log('Verified all four built pages');
 const font = readFileSync(resolve(buildDir, 'fonts/nunito-latin-variable.woff2'));
 if (font.toString('ascii', 0, 4) !== 'wOF2') throw new Error('Missing local controller font');
 console.log('Verified local controller font');
+
+// Island assets are fetched at runtime, so verify them independently of JS.
+for (const name of ['homepage', 'homepage-ocean', 'landing', 'landing-ocean']) {
+  const bytes = readFileSync(resolve(buildDir, `island/${name}.webp`));
+  if (bytes.length < 20 || bytes.toString('ascii', 0, 4) !== 'RIFF' ||
+      bytes.toString('ascii', 8, 12) !== 'WEBP' || bytes.readUInt32LE(4) + 8 !== bytes.length) {
+    throw new Error(`Missing or invalid island artwork: ${name}`);
+  }
+}
+console.log('Verified all four island images');

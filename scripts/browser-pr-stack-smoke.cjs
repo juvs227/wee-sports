@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const base = process.env.WEE_SMOKE_URL || 'http://127.0.0.1:5190';
 const recovery = process.env.WEE_SMOKE_RECOVERY === '1';
 const profiles = process.env.WEE_SMOKE_PROFILES === '1';
+const island = process.env.WEE_SMOKE_VIEW === 'island';
 (async () => {
   const browser = await chromium.launch({executablePath: process.env.WEE_SMOKE_CHROMIUM || '/usr/bin/chromium',
     headless: true, args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader']});
@@ -22,9 +23,9 @@ const profiles = process.env.WEE_SMOKE_PROFILES === '1';
       await phone.goto(base + '/');
       await phone.getByRole('heading', {name: 'Ready to play?', exact: true}).waitFor();
       assert.equal(await phone.locator('[data-display-role="remote"]').count(), 1);
-      await tv.goto(base + '/');
-      await tv.getByRole('heading', {name: 'Pick a sport', exact: true}).waitFor();
-      assert.equal(await tv.locator('.tile[data-open="true"]').count(), 2);
+      await tv.goto(base + (island ? '/home?view=island' : '/?view=classic'));
+      await tv.getByRole('heading', {name: island ? 'Choose a sport' : 'Pick a sport', exact: true}).waitFor();
+      if (!island) assert.equal(await tv.locator('.tile[data-open="true"]').count(), 2);
       await tv.getByRole('button', {name: `Play: ${sport}`, exact: true}).click();
       const code = await tv.getByTestId('lobby-code').innerText();
       await phone.goto(base + '/join?code=' + code);
@@ -57,10 +58,10 @@ const profiles = process.env.WEE_SMOKE_PROFILES === '1';
         await frame.waitForFunction(() => window.__splitSwings.length === 1, null, {timeout: 10000});
         assert.equal(await frame.evaluate(() => window.__splitSwings[0].label), 'Forehand');
       }
-      console.log(`PASS ${sport}: card home, phone home, guest join, automatic touch setup, start, authenticated input${recovery && sport === 'Bowling' ? ', TV checkpoint recovery' : ''}`);
+      console.log(`PASS ${sport}: ${island ? 'island' : 'card'} home, phone home, guest join, automatic touch setup, start, authenticated input${recovery && sport === 'Bowling' ? ', TV checkpoint recovery' : ''}`);
       await tvContext.close(); await phoneContext.close();
     }
-    for (const path of ['/table-tennis.html', '/table-tennis-controller.html', '/island/homepage.webp']) {
+    for (const path of ['/table-tennis.html', '/table-tennis-controller.html']) {
       const response = await fetch(base + path);
       if (profiles || !path.endsWith('.html')) assert.equal(response.status, 404, `${path} must not be served`);
       else if (response.status === 200) assert.match(await response.text(), /id="root"/, 'older preview servers may return only the generic SPA fallback');
@@ -77,6 +78,6 @@ const profiles = process.env.WEE_SMOKE_PROFILES === '1';
       assert.equal(result.status, 200); assert.deepEqual((await result.json()).history, []);
       console.log('PASS optional native profile registration and authenticated history on disposable storage');
     }
-    assert.deepEqual(errors, []); console.log('PASS no browser exceptions; excluded game entries and artwork are absent');
+    assert.deepEqual(errors, []); console.log('PASS no browser exceptions; Table Tennis entry points are absent');
   } finally {await browser.close();}
 })().catch(error => {console.error(error); process.exitCode = 1;});

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Component, lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { EVENTS, PROTOCOL_VERSION } from '@wee/shared/protocol.js';
 import { BallMark } from '../components/icons.jsx';
 import { HowItWorks } from '../components/HowItWorks.jsx';
@@ -11,15 +11,38 @@ import { request, useConnection } from '../lib/socket.js';
 import { saveToken, lastHostRoom } from '../lib/reconnect.js';
 import { SPORTS } from '../lib/sports.js';
 import {createControllerCapabilities} from '../../../shared/controllerCapabilities.js';
+import {HomeViewSwitch} from '../components/HomeViewSwitch.jsx';
+import {readHomeView, saveHomeView, validHomeView} from '../lib/homeView.js';
 import './Home.css';
 
+const IslandHome = lazy(() => import('./IslandHome.jsx'));
+const IslandLanding = lazy(() => import('./IslandLanding.jsx'));
+
+class IslandBoundary extends Component {
+  state = {failed: false};
+  static getDerivedStateFromError() {return {failed: true};}
+  render() {return this.state.failed ? <main className="home-view-fallback page"><h1>The island couldn’t load</h1><p>Choose Classic above to keep playing, or reload to try again.</p></main> : this.props.children;}
+}
+
+
 /**
- * The desktop sport-card homepage.
+ * Desktop home with one hosting lifecycle and two optional presentations.
  *
  * Picking a sport opens a room. Phones use the separate controller homepage.
  */
 export default function Home() {
   const navigate = useNavigate();
+  const {pathname} = useLocation();
+  const [params, setParams] = useSearchParams();
+  const [preference, setPreference] = useState(readHomeView);
+  const view = validHomeView(params.get('view')) ?? preference;
+  useEffect(() => {saveHomeView(view);}, [view]);
+  function changeView(next) {
+    if (openingRef.current) return;
+    setPreference(next); saveHomeView(next);
+    const query = new URLSearchParams(params); query.set('view', next);
+    setParams(query, {replace: true});
+  }
   const connection = useConnection();
   const [opening, setOpening] = useState(null);
   const openingRef = useRef(false);
@@ -55,21 +78,27 @@ export default function Home() {
   }
 
   return (
-    <div className="home home--polished">
-      <header className="topbar page">
-        <a className="wordmark" href="/">
+    <div className={`home home--polished home--${view}`}>
+      <header className="topbar page home-header">
+        <a className="wordmark" href={`/?view=${view}`}>
           <BallMark className="wordmark__mark" />
           <span>
             <span className="wordmark__wee">Wee</span> Sports
           </span>
         </a>
+        <HomeViewSwitch value={view} onChange={changeView} disabled={Boolean(opening)} />
         <div className="topbar__actions">
-          <a className="topbar__link" href="#how">How it works</a>
-          <a className="topbar__link" href="/profile">Profile &amp; history</a>
+          {view === 'classic' && <a className="topbar__link home-header__help" href="#how">How it works</a>}
+          <a className="topbar__link home-header__profile" href="/profile">Profile &amp; history</a>
           <ThemeToggle />
         </div>
       </header>
 
+      {view === 'island' ? <IslandBoundary>
+        <Suspense fallback={<main className="home-view-fallback page" role="status">Loading the island…</main>}>
+          {pathname === '/home' ? <IslandHome host={host} opening={opening} failure={failure} connection={connection} /> : <IslandLanding />}
+        </Suspense>
+      </IslandBoundary> : <>
       <main className="page">
         <section className="hero" aria-labelledby="hero-title">
           <div className="hero__copy">
@@ -111,8 +140,9 @@ export default function Home() {
 
       <footer className="footer page">
         <span>Wee Sports · a team project</span>
-        <a href="https://github.com/juvs227/wee-sports">Source on GitHub</a>
+        <a href="https://github.com/necromancerrr/wee-sports">Source on GitHub</a>
       </footer>
+      </>}
     </div>
   );
 }
