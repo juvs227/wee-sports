@@ -1,3 +1,4 @@
+import {isNormalVector} from './swingDetails.js';
 import {getSport} from './sportRegistry.js';
 /**
  * The room protocol, shared by the server, the TV and the phones.
@@ -177,7 +178,8 @@ export function isSwing(event) {
     ['Left', 'Right'].includes(event.hand) &&
     (event.transportWaitMs === undefined || Number.isFinite(event.transportWaitMs) && event.transportWaitMs >= 0 && event.transportWaitMs <= TENNIS_TRANSPORT_WAIT_MS) &&
     (event.power === undefined || (Number.isFinite(event.power) && event.power >= 0 && event.power <= 1)) &&
-    ['aim','depth'].every(key => event[key] === undefined || Number.isFinite(event[key]) && Math.abs(event[key]) <= 1);
+    ['aim','depth'].every(key => event[key] === undefined || Number.isFinite(event[key]) && Math.abs(event[key]) <= 1) &&
+    ['netNormal','swingNormal'].every(key => event[key] === undefined || isNormalVector(event[key]));
 }
 
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);

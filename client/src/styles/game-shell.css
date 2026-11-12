@@ -154,3 +154,5 @@
   white-space: nowrap;
   letter-spacing: .02em;
 }
+
+.tv-swing-vectors { display: block; max-width: 100%; margin-top: .5rem; background: #101821; border-radius: .5rem; }

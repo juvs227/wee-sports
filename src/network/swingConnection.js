@@ -1,3 +1,4 @@
+import {copySwingDetails} from '../../shared/swingDetails.js';
 import { connectLobbySwings } from './lobbyConnection.js';
 import { createInputId } from './inputId.js';
 import { isSwing } from '../../shared/protocol.js';
@@ -45,9 +46,9 @@ export function connectSwings({ room, role, onSwing = () => {}, onStatus = () =>
   }
   connect();
   return {
-    sendSwing(label, hand, power = 0.5, placement = {}) {
+    sendSwing(label, hand, power = 0.5, placement = {}, swingNormal) {
       const event = { type: 'swing', id: createInputId(), label, hand, power,
-        ...(placement.aim === undefined ? {} : {aim:placement.aim}), ...(placement.depth === undefined ? {} : {depth:placement.depth}) };
+        ...copySwingDetails(placement, swingNormal) };
       if (!isSwing(event) || socket.readyState !== WebSocket.OPEN) return false;
       sentAt.set(event.id, performance.now());
       if (sentAt.size > 40) sentAt.delete(sentAt.keys().next().value);
