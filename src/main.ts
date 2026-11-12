@@ -336,6 +336,10 @@ async function main(): Promise<void> {
     }
     const receiveState = (event: MessageEvent): void => {
         if (event.source !== window.parent || event.origin !== location.origin) return;
+        if (embedded && event.data?.type === 'wee:debug') {
+            if (typeof event.data.launchArrow === 'boolean') world.setLaunchArrowVisible(event.data.launchArrow);
+            return;
+        }
         if (embedded && event.data?.type === 'wee:game-command') {
             const command = event.data.command;
             if (typeof command?.id !== 'string') return;

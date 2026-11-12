@@ -18,12 +18,13 @@ import {
     NEUTRAL_INPUT,
     type PlayerInput,
 } from '../Controllers/playerInput';
-import { planCourtShot } from './shotTrajectory';
+import { planCourtShot, planShotFromNormal } from './shotTrajectory';
 import { chooseBotStroke, type BotStroke } from './botPlayer';
 import { predictBaselineIntercept, lateralSteering } from './autoPosition';
 import { sweptRacketContact, contactWindowCrossed } from './components/racketContact';
 import { ScoreSystem, type Score, type PointResult, type MatchFormat } from './scoreSystem';
 import { TENNIS_COURT, serviceSign, pointReasonLabel } from './tennisRules';
+
 
 const AUTO_TRACKING_SPEED = 0.75;
 const PHYSICS_STEP = 1 / 120;
@@ -93,7 +94,7 @@ export interface GameLogicOptions {
     onHit?: (player: 1 | 2) => void;
     onGameEvent?: (event: TennisGameEvent) => void;
     onStrokeResult?: (result: StrokeResult) => void;
-    onTrajectory?: (data: { player: 1 | 2; origin: { x: number; y: number; z: number }; target: { x: number; z: number }; netHeight: number; flightTime: number }) => void;
+    onTrajectory?: (data: { player: 1 | 2; origin: { x: number; y: number; z: number }; target: { x: number; z: number }; netHeight: number; flightTime: number; velocity: { x: number; y: number; z: number } }) => void;
 }
 
 export class GameLogic {
@@ -107,8 +108,9 @@ export class GameLogic {
     private readonly onGameEvent: (event: TennisGameEvent) => void;
     private readonly scoreSystem = new ScoreSystem();
     private readonly onStrokeResult: (result: StrokeResult) => void;
-    private readonly onTrajectory: (data: { player: 1 | 2; origin: { x: number; y: number; z: number }; target: { x: number; z: number }; netHeight: number; flightTime: number }) => void;
-    private readonly settings: TennisSettings = {format: 'full', assistance: 'standard', botDifficulty: 'standard', timingAssist: true, autoMove: true, aimSensitivity: 0};
+    private readonly onTrajectory: (data: { player: 1 | 2; origin: { x: number; y: number; z: number }; target: { x: number; z: number }; netHeight: number; flightTime: number; velocity: { x: number; y: number; z: number } }) => void;
+    //
+    private readonly settings: TennisSettings = {format: 'full', assistance: 'standard', botDifficulty: 'standard', timingAssist: true, autoMove: true, aimSensitivity: 1};
     private swingNormals: Array<{net?: number[]; swing?: number[]}> = [{}, {}];
     private practice: PracticeState = {active: false, stroke: 'alternate', hand: 'Right', attempts: 0, returns: 0, streak: 0, bestStreak: 0};
     private practiceTimer = 0;
@@ -167,6 +169,7 @@ export class GameLogic {
         }
         if (typeof settings.autoMove === 'boolean') this.autoPositionEnabled = settings.autoMove;
         this.settings.autoMove = this.autoPositionEnabled;
+        if (typeof settings.aimSensitivity === 'number') this.settings.aimSensitivity = settings.aimSensitivity;
         if (previousFormat !== this.settings.format) this.startRound();
     }
     public getServeState() {
@@ -854,16 +857,19 @@ export class GameLogic {
         }
         const serving = data.waitingForRacketHit || data.isWaitingForServe;
         const { net, swing } = this.swingNormals[number - 1];
-        let aim: number | undefined;
-        if (this.settings.aimSensitivity > 0 && net && swing) {
-            const cross = net[0] * swing[1] - net[1] * swing[0];
-            aim = THREE.MathUtils.clamp(cross * this.settings.aimSensitivity * 5, -1, 1);
-        }
-        const plan = planCourtShot(this.ball.position, number, player.swingBackhand, data.gravity,
-            this.swingPowers[number - 1], {timing: this.swingTimings[number - 1],
-                ...(serving ? {serve: data.serviceSide} : {}), beginner: this.settings.assistance === 'beginner',
-                ...(aim !== undefined ? {aim} : {})});
-        if (!plan) {
+        console.log("Are we serving: ", serving); 
+        console.log("Aim sensitivtity: ", this.settings.aimSensitivity); 
+        console.log("Net normal exists: ", !!net); 
+        console.log("Swing normal exists: ", !!swing);
+        const useNormalAim = !serving && this.settings.aimSensitivity > 0 && !!net && !!swing;
+        const plan = useNormalAim
+            ? planShotFromNormal(swing as [number,number,number], net as [number,number,number],
+                this.ball.position, number, this.swingPowers[number - 1], data.gravity, this.settings.aimSensitivity)
+            : planCourtShot(this.ball.position, number, player.swingBackhand, data.gravity,
+                this.swingPowers[number - 1], {timing: this.swingTimings[number - 1],
+                    ...(serving ? {serve: data.serviceSide} : {}), beginner: this.settings.assistance === 'beginner'});
+        console.log('plan from:', useNormalAim ? 'normalAim' : 'courtShot', plan);
+                    if (!plan) {
             player.hitConsumed = true;
             player.contactActive = false;
             this.feedback(`Player ${number}: Contact was too low or outside the playable court`);
@@ -871,7 +877,7 @@ export class GameLogic {
             return;
         }
         hitBall(this.ball, plan.velocity, id, serving);
-        this.onTrajectory({ player: number, origin: { x: this.ball.position.x, y: this.ball.position.y, z: this.ball.position.z }, target: { x: plan.target.x, z: plan.target.z }, netHeight: plan.netHeight, flightTime: plan.flightTime });
+        this.onTrajectory({ player: number, origin: { x: this.ball.position.x, y: this.ball.position.y, z: this.ball.position.z }, target: { x: plan.target.x, z: plan.target.z }, netHeight: plan.netHeight, flightTime: plan.flightTime, velocity: { x: plan.velocity.x, y: plan.velocity.y, z: plan.velocity.z } });
         this.hasShotTarget = true;
         this.shotTargetMarker.position.set(plan.target.x, 0.08, plan.target.z);
         this.shotTargetMarker.visible = this.showHitboxes;

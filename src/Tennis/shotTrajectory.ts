@@ -44,6 +44,50 @@ function validate(origin: THREE.Vector3, velocity: THREE.Vector3, target: THREE.
     return null;
 }
 
+/**
+ * Pure-physics shot from racket face normal. Changing it from target solver — velocity comes directly
+ * from the normal's deviation relative to the net-calibration direction.
+ * goal of sensitivity is below
+ * idea is to squish all likely vectors to most of them on the court, some out
+ * if face is angled into net, ball nets
+ */
+export function planShotFromNormal(
+    swingNormal: [number, number, number],
+    netNormal: [number, number, number],
+    origin: THREE.Vector3,
+    player: 1 | 2,
+    power: number,
+    gravity: number,
+    sensitivity: number,
+): ShotPlan | null {
+    if (![origin.x, origin.y, origin.z, gravity].every(Number.isFinite) || gravity <= 0) return null;
+    // Project swingNormal onto the plane perpendicular to netNormal.
+    // The perpendicular component encodes lateral (X) and vertical (Y) racket face deviation.
+    const dot = swingNormal[0]*netNormal[0] + swingNormal[1]*netNormal[1] + swingNormal[2]*netNormal[2];
+    const perpX = swingNormal[0] - dot * netNormal[0];
+    const perpY = swingNormal[1] - dot * netNormal[1];
+    const fwd = player === 1 ? -1 : 1;
+    const speed = THREE.MathUtils.lerp(0.10, 0.17, THREE.MathUtils.clamp(power, 0, 1));
+    const velocity = new THREE.Vector3(
+        perpX * sensitivity,
+        perpY * sensitivity,
+        fwd * speed,
+    );
+    // Simulate forward to populate ShotPlan fields (used by trajectory overlay, not for validation).
+    const pos = origin.clone();
+    const vel = velocity.clone();
+    let netHeight = 0;
+    let flightTime = 0;
+    let crossedNet = false;
+    for (let step = 1; step <= 600; step++) {
+        vel.y -= gravity * 0.5;
+        pos.addScaledVector(vel, 0.5);
+        if (!crossedNet && pos.z * fwd <= 0) { crossedNet = true; netHeight = pos.y; }
+        if (pos.y <= RADIUS) { flightTime = step / 240; break; }
+    }
+    return { velocity, target: pos.clone(), flightTime, netHeight };
+}
+
 /** Aim first, then solve in the existing 60-Hz units. No random shot placement. */
 export function planCourtShot(origin: THREE.Vector3, player: 1 | 2, backhand: boolean,
     gravity = 0.006, power = 0.5, intent: ShotIntent = {}): ShotPlan | null {

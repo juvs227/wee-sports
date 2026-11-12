@@ -37,9 +37,10 @@ export class World {
     public onBallHit: (player: 1 | 2) => void = () => { };
     public onGameEvent: (event: TennisGameEvent) => void = () => { };
     public onStrokeResult: (result: StrokeResult) => void = () => { };
-    public onTrajectory: (data: { player: 1 | 2; origin: { x: number; y: number; z: number }; target: { x: number; z: number }; netHeight: number; flightTime: number }) => void = () => { };
+    public onTrajectory: (data: { player: 1 | 2; origin: { x: number; y: number; z: number }; target: { x: number; z: number }; netHeight: number; flightTime: number; velocity: { x: number; y: number; z: number } }) => void = () => { };
     private readonly targetMarkers: THREE.Mesh[] = [];
     private readonly shotTargetMarker: THREE.Mesh;
+    private readonly launchArrow: THREE.ArrowHelper;
     private readonly gameLogic: GameLogic;
     private readonly worldCamera: WorldCamera;
     private readonly parkClub = createParkClub();
@@ -136,6 +137,9 @@ export class World {
         this.shotTargetMarker.rotation.x = -Math.PI / 2;
         this.shotTargetMarker.visible = false;
         this.scene.add(this.shotTargetMarker);
+        this.launchArrow = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 0), 2, 0x00ff00);
+        this.launchArrow.visible = false;
+        this.scene.add(this.launchArrow);
         this.gameLogic = new GameLogic({
             scene: this.scene,
             player1: this.player1,
@@ -147,7 +151,14 @@ export class World {
             onHit: player => this.onBallHit(player),
             onGameEvent: event => this.onGameEvent(event),
             onStrokeResult: result => this.onStrokeResult(result),
-            onTrajectory: data => this.onTrajectory(data),
+            onTrajectory: data => {
+                const { x, y, z } = data.velocity;
+                const dir = new THREE.Vector3(x, y, z).normalize();
+                this.launchArrow.setDirection(dir);
+                this.launchArrow.position.set(data.origin.x, data.origin.y, data.origin.z);
+                this.launchArrow.visible = true;
+                this.onTrajectory(data);
+            },
         });
         window.addEventListener('resize', this.handleResize);
     }
@@ -156,6 +167,8 @@ export class World {
         this.worldCamera.resize(window.innerWidth, window.innerHeight);
         this.renderer.setSize(window.innerWidth, window.innerHeight);
     };
+
+    public setLaunchArrowVisible(visible: boolean): void { this.launchArrow.visible = visible; }
 
     public setSplitScreen(enabled: boolean): void {
         this.worldCamera.setSplitScreen(enabled, window.innerWidth, window.innerHeight);

@@ -5,7 +5,7 @@ import { createInputId } from '../../../src/network/inputId.js';
 
 const NO_PLAYERS = [];
 /** Keep the game/controller alive while the outer page owns the lobby session. */
-export function PrototypeFrame({ code, controller = false, player = 1, players = NO_PLAYERS, sport = 'tennis', gameId, gameState, playing = true, paused = false, manuallyPaused = false, showPause = paused, pauseMessage, phase = PHASES.LOBBY, onCalibrationProgress, onCalibrationDone, onAudio, onPauseToggle, onSwing, onTrajectory, commandRef, onReady }) {
+export function PrototypeFrame({ code, controller = false, player = 1, players = NO_PLAYERS, sport = 'tennis', gameId, gameState, playing = true, paused = false, manuallyPaused = false, showPause = paused, pauseMessage, phase = PHASES.LOBBY, onCalibrationProgress, onCalibrationDone, onAudio, onPauseToggle, onSwing, onTrajectory, commandRef, debugRef, onReady }) {
   const frame = useRef(null);
   const ready = useRef(false);
   const pending = useRef(new Map());
@@ -120,7 +120,7 @@ export function PrototypeFrame({ code, controller = false, player = 1, players =
       } else if (controller && data?.type === 'wee:controller-height' && Number.isFinite(data.height)) {
         setHeight(Math.max(400, Math.min(2200, data.height)));
       } else if (!controller && data?.type === 'wee:ball-trajectory' && data.gameId === gameId) {
-        onTrajectory?.({ player: data.player, origin: data.origin, target: data.target, netHeight: data.netHeight, flightTime: data.flightTime });
+        onTrajectory?.({ player: data.player, origin: data.origin, target: data.target, netHeight: data.netHeight, flightTime: data.flightTime, velocity: data.velocity });
       }
     };
     const swing = (event, ack) => {
@@ -168,6 +168,7 @@ export function PrototypeFrame({ code, controller = false, player = 1, players =
     if (!controller) { socket.on(EVENTS.GAME_SWING, swing); socket.on(EVENTS.GAME_ROLL, roll); socket.on(EVENTS.GAME_COMMAND, command); }
     else { socket.on(EVENTS.GAME_HIT, hit); socket.on(EVENTS.GAME_STROKE_RESULT, strokeResult); }
     if (commandRef) commandRef.current = (action, extra = {}) => command({ id: createInputId(), gameId, action, ...extra });
+    if (debugRef) debugRef.current = (data) => post({ type: 'wee:debug', ...data });
     publishState();
     return () => {
       window.removeEventListener('message', receive);
@@ -176,8 +177,9 @@ export function PrototypeFrame({ code, controller = false, player = 1, players =
       socket.off(EVENTS.GAME_HIT, hit);
       socket.off(EVENTS.GAME_STROKE_RESULT, strokeResult);
       if (commandRef) commandRef.current = null;
+      if (debugRef) debugRef.current = null;
     };
-  }, [paused, manuallyPaused, connection, src, controller, attempt, players, playing, sport, gameId, gameState, player, phase, onCalibrationProgress, onCalibrationDone, onAudio, onPauseToggle, onSwing, onTrajectory, commandRef, onReady]);
+  }, [paused, manuallyPaused, connection, src, controller, attempt, players, playing, sport, gameId, gameState, player, phase, onCalibrationProgress, onCalibrationDone, onAudio, onPauseToggle, onSwing, onTrajectory, commandRef, debugRef, onReady]);
   return (
     <div className={`prototype-frame ${controller ? 'prototype-frame--phone' : ''}`}>
       {loading ? <p role="status">{failed ? 'Taking too long to load.' : `Loading ${controller ? 'controller' : sport}…`}

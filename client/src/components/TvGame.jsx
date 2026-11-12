@@ -18,10 +18,12 @@ export function TvGame({ lobby, paused, onClose, error, immersive = true, fullsc
   const [debugArrows, setDebugArrows] = useState(true);
   const [debugLabel, setDebugLabel] = useState(true);
   const [debugPractice, setDebugPractice] = useState(false);
-  const [aimSensitivity, setAimSensitivity] = useState(0);
+  const [debugLaunch, setDebugLaunch] = useState(true);
+  const [aimSensitivity, setAimSensitivity] = useState(1);
   const [swingDebug, setSwingDebug] = useState(null);
   const swingTimer = useRef(null);
   const commandRef = useRef(null);
+  const debugRef = useRef(null);
   const handleReady = useCallback(() => {
     if (startPracticeOnReady) commandRef.current?.('practice-start', { stroke: 'alternate', hand: 'Right' });
   }, [startPracticeOnReady]);
@@ -81,6 +83,7 @@ export function TvGame({ lobby, paused, onClose, error, immersive = true, fullsc
         onAudio={onAudio} manuallyPaused={lobby.manuallyPaused} onPauseToggle={pauseDisabled ? undefined : onPauseToggle}
         onSwing={handleSwing}
         commandRef={commandRef}
+        debugRef={debugRef}
         onReady={handleReady}
         pauseMessage={lobby.reconnecting?.length ? `Waiting for ${lobby.reconnecting.map(member => member.name).join(', ')} to reconnect.`
           : lobby.setupPending?.length ? `Waiting for ${lobby.setupPending.join(', ')} to finish controller setup.`
@@ -95,11 +98,19 @@ export function TvGame({ lobby, paused, onClose, error, immersive = true, fullsc
         </label>
         <label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}>
           <span style={{ minWidth: 60 }}>aim {Math.round(aimSensitivity * 100)}%</span>
-          <input type="range" min="0" max="1" step="0.05" value={aimSensitivity} style={{ cursor: 'pointer' }} onChange={e => {
+          <input type="range" min="0" max="100" step="0.1" value={aimSensitivity} style={{ cursor: 'pointer' }} onChange={e => {
             const v = Number(e.target.value);
+            console.log("oh baby aim sensitivity to: ", v); 
             setAimSensitivity(v);
             commandRef.current?.('configure', { settings: { aimSensitivity: v } });
           }} />
+        </label>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}>
+          <input type="checkbox" checked={debugLaunch} onChange={e => {
+            const on = e.target.checked;
+            setDebugLaunch(on);
+            debugRef.current?.({ launchArrow: on });
+          }} /> launch arrow
         </label>
         <label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}>
           <input type="checkbox" checked={debugPractice} onChange={e => {
