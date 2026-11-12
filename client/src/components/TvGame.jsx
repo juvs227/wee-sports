@@ -1,3 +1,4 @@
+import {isNormalVector} from '../../../shared/swingDetails.js';
 /**
  * The TV during the game. The lobby session and game stay mounted when
  * changing view or reconnecting. The tutorial vote and the tutorial, if anyone
@@ -12,17 +13,19 @@ export function TvGame({ lobby, paused, onClose, error, immersive = true, fullsc
   onReturnToLobby, returning = false, returnDisabled = false, onPauseToggle, pauseDisabled = false }) {
   const [confirmReturn, setConfirmReturn] = useState(false);
   const [debugOn, setDebugOn] = useState(false);
-  const [swingLabel, setSwingLabel] = useState(null);
+  const [swingDebug, setSwingDebug] = useState(null);
   const swingTimer = useRef(null);
   const handleSwing = useCallback(event => {
     clearTimeout(swingTimer.current);
-    setSwingLabel(`P${event.player} ${event.label}`);
-    swingTimer.current = setTimeout(() => setSwingLabel(null), 1500);
+    setSwingDebug({label: `P${event.player} ${event.label}`,
+      vectors: isNormalVector(event.netNormal) && isNormalVector(event.swingNormal)
+        ? {reference: [...event.netNormal], screen: [...event.swingNormal]} : null});
+    swingTimer.current = setTimeout(() => setSwingDebug(null), 1500);
   }, []);
   useEffect(() => () => clearTimeout(swingTimer.current), []);
   useEffect(() => {
     clearTimeout(swingTimer.current);
-    setSwingLabel(null);
+    setSwingDebug(null);
   }, [lobby.gameId, paused]);
   useEffect(() => {
     const keydown = event => {
@@ -80,7 +83,15 @@ export function TvGame({ lobby, paused, onClose, error, immersive = true, fullsc
             : lobby.manuallyPaused ? 'Game paused · resume on Player 1’s phone or press P on the TV.' : undefined} />
       {/* later should be an easier way to register things inside the debug view*/}
       <button type="button" className="tv-debug-toggle" onClick={() => setDebugOn(v => !v)} aria-pressed={debugOn} title="Toggle swing diagnostics" aria-label="Toggle swing diagnostics">D</button>
-      {debugOn && swingLabel ? <div className="tv-swing-debug" aria-hidden="true">{swingLabel}</div> : null}
+      {debugOn && swingDebug ? <div className="tv-swing-debug" aria-hidden="true">
+        {swingDebug.label}
+        {swingDebug.vectors ? <svg className="tv-swing-vectors" viewBox="0 0 200 180" width="200" height="180">
+          <line x1="100" y1="100" x2={100 + swingDebug.vectors.reference[0] * 72} y2={100 - swingDebug.vectors.reference[1] * 72} stroke="cyan" strokeWidth="3" />
+          <line x1="100" y1="100" x2={100 + swingDebug.vectors.screen[0] * 72} y2={100 - swingDebug.vectors.screen[1] * 72} stroke="yellow" strokeWidth="3" />
+          <text x="8" y="18" fill="cyan" fontSize="13">Reference</text>
+          <text x="8" y="36" fill="yellow" fontSize="13">Screen</text>
+        </svg> : null}
+      </div> : null}
     </main>
   );
 }

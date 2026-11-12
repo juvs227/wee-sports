@@ -30,7 +30,7 @@ class PC {
   close() {this.connectionState = 'closed';}
 }
 const scope = {gameId:'game-one',generation:2,hostEpoch:1};
-const swing = (id = 'stroke-one') => ({...scope,type:'swing',id,label:'Forehand',hand:'Right',power:.6,aim:.5,depth:0});
+const swing = (id = 'stroke-one') => ({...scope,type:'swing',id,label:'Forehand',hand:'Right',power:.6,aim:.5,depth:0,netNormal:[0,0,1],swingNormal:[1,0,0]});
 const result = id => ({gameId:scope.gameId,id,player:1,result:'hit',reason:'Good contact',receivedToContactMs:30});
 const flush = async () => {for(let index=0;index<12;index++) await Promise.resolve();};
 let cleanup = [];

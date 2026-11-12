@@ -31,6 +31,7 @@ beforeEach(() => {
   vi.stubGlobal('DeviceMotionEvent', motionAPI);
   vi.stubGlobal('window', { parent, sessionStorage, isSecureContext: true, DeviceMotionEvent: motionAPI,
     addEventListener(type, fn) { if (!listeners.has(type)) listeners.set(type, new Set()); listeners.get(type).add(fn); },
+    removeEventListener(type, fn) {listeners.get(type)?.delete(fn);},
   });
   vi.stubGlobal('document', { hidden: false,
     getElementById(id) {
