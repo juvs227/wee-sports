@@ -1,3 +1,4 @@
+import {copySwingDetails} from '../../../shared/swingDetails.js';
 import {isSwing, isStrokeResult} from '../../../shared/protocol.js';
 
 const LEASE_MS = 3000, REGISTER_MS = 1000, CONNECT_MS = 6500;
@@ -11,8 +12,7 @@ const finite = value => Number.isFinite(value) && value >= 0;
 const envelope = value => ({gameId:value.gameId,generation:value.generation,hostEpoch:value.hostEpoch,
   ...(value.player === undefined ? {} : {player:value.player})});
 const cleanSwing = value => ({...envelope(value),type:'swing',id:value.id,label:value.label,hand:value.hand,
-  ...(value.power === undefined ? {} : {power:value.power}),...(value.aim === undefined ? {} : {aim:value.aim}),
-  ...(value.depth === undefined ? {} : {depth:value.depth})});
+  ...(value.power === undefined ? {} : {power:value.power}),...copySwingDetails(value)});
 
 
 /** Optional same-network input. The server grants room-scoped peer identities;

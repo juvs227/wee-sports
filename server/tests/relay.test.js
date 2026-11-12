@@ -76,7 +76,7 @@ test('phone events reach only games in the same room; invalid events are rejecte
     const other = await connect('room-two', 'game');
     const otherMessages = [];
     other.on('message', data => otherMessages.push(data));
-    const expected = { type: 'swing', id: 'test-1', label: 'Backhand', hand: 'Left' };
+    const expected = { type: 'swing', id: 'test-1', label: 'Backhand', hand: 'Left', netNormal: [0, 0, 1], swingNormal: [1, 0, 0] };
     const received = next(game);
     const ack = next(phone);
     phone.send(JSON.stringify(expected));

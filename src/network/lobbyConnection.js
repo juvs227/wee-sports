@@ -1,3 +1,4 @@
+import {copySwingDetails} from '../../shared/swingDetails.js';
 import { isSwing } from '../../shared/protocol.js';
 import { createInputId } from './inputId.js';
 
@@ -38,9 +39,9 @@ export function connectLobbySwings({ role, onSwing, onStatus, onAck, onSent = ()
   onStatus('Connecting to homepage lobby…');
   post({ type: 'wee:bridge-ready' });
   return {
-    sendSwing(label, hand, power = 0.5, placement = {}) {
+    sendSwing(label, hand, power = 0.5, placement = {}, swingNormal) {
       const event = { type: 'swing', id: createInputId(), label, hand, power, gameId,
-        ...(placement.aim === undefined ? {} : {aim:placement.aim}), ...(placement.depth === undefined ? {} : {depth:placement.depth}) };
+        ...copySwingDetails(placement, swingNormal) };
       if (role !== 'phone' || !connected || paused || !gameId || !isSwing(event)) return false;
       sentAt.set(event.id, performance.now());
       if (sentAt.size > 40) sentAt.delete(sentAt.keys().next().value);

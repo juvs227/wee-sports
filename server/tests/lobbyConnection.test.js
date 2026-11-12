@@ -90,3 +90,15 @@ test('old game inputs and acknowledgements cannot enter the next lobby game', ()
   expect(phone.connection.sendSwing('Forehand', 'Right')).toBe(false);
   phone.connection.close();
 });
+
+
+test('PR 14 orientation arguments and current placement survive the embedded bridge', () => {
+  const f = embedded('phone');
+  f.receive({type: 'wee:lobby-state', gameId: 'game-a', playing: true, connected: true, paused: false});
+  expect(f.connection.sendSwing('Forehand', 'Right', .5, [0, 0, 1], [1, 0, 0])).toBe(true);
+  expect(f.parent.postMessage.mock.lastCall[0].event).toMatchObject({netNormal: [0, 0, 1], swingNormal: [1, 0, 0]});
+  expect(f.connection.sendSwing('Forehand', 'Right', .5, {aim: .2, depth: .3, netNormal: [0, 1, 0], swingNormal: [0, 0, 1]})).toBe(true);
+  expect(f.parent.postMessage.mock.lastCall[0].event).toMatchObject({aim: .2, depth: .3, netNormal: [0, 1, 0], swingNormal: [0, 0, 1]});
+  expect(f.connection.sendSwing('Forehand', 'Right', .5, [9, 0, 0], [0, 0, 1])).toBe(false);
+  f.connection.close();
+});

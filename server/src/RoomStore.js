@@ -1,3 +1,4 @@
+import {copySwingDetails} from '../../shared/swingDetails.js';
 import {checkpoint as validateCheckpoint} from '../profiles/validation.js';
 /**
  * Every lobby the server knows about, with no networking in it.
@@ -600,7 +601,7 @@ export class RoomStore {
     return { ok: true, code: room.code, hostEpoch: room.hostEpoch, inputGeneration: room.inputGeneration, hostSocketId: this.#members.get(room.hostId)?.socketId,
       event: { type: 'swing', id: event.id, label: event.label, hand: event.hand,
         ...(event.power === undefined ? {} : { power: event.power }),
-        ...(event.aim === undefined ? {} : {aim:event.aim}), ...(event.depth === undefined ? {} : {depth:event.depth}),
+        ...copySwingDetails(event),
         player: player.slot + 1, gameId: room.gameId,
         ...(!member.capabilities?.legacy ? {generation:room.inputGeneration,hostEpoch:room.hostEpoch} : {}) } };
   }
