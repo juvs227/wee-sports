@@ -1,3 +1,4 @@
+import {createSwingOrientation} from './swingOrientation.js';
 import {focusControllerSection} from './focusSection.js';
 import { createSwingStream } from './swingStream.js';
 import { createSimpleSwingStream, createBowlingDeliveryGate } from './motionGestures.js';
@@ -30,6 +31,7 @@ const setView = (id, property, value) => {
 const embedded = window.parent !== window;
 const query = new URLSearchParams(location.search);
 const motionDiagnostics = browserDiagnostics('phone.tennis');
+const swingOrientation = createSwingOrientation();
 let bowling = query.get('sport') === 'bowling';
 const room = query.get('room');
 if (!/^[a-zA-Z0-9-]{6,40}$/.test(room ?? '')) throw new Error('Open the controller link from the game to join its room.');
@@ -345,7 +347,8 @@ function send(label, power = 0.5, recognitionMs, placement) {
   if (bowling || lobbyPaused || !gameActive || !connected || settingsOpen || rehearsal || document.hidden || tennisState?.phase === 'complete') return;
   strokeNoticeUntil = 0;
   nextRecognitionMs = recognitionMs;
-  const sent = connection.sendSwing(label, element('hand').value, power, placement);
+  const orientation = buttonMode ? null : swingOrientation.details();
+  const sent = connection.sendSwing(label, element('hand').value, power, orientation ? {...placement, ...orientation} : placement);
   nextRecognitionMs = undefined;
   if (sent) phoneFeedback.swing(label);
   element('delivery').textContent = sent ? 'Sending stroke…' : 'Disconnected: the stroke was not sent.';
@@ -405,6 +408,7 @@ function analyze() {
 }
 function stop(message = 'Motion paused. Tap Resume motion when you are ready.', user = false) {
   if (user) { motionWanted = false; userPaused = true; }
+  swingOrientation.stop();
   const wasRecording = recording;
   recording = false;
   stream = null; // Never flush an unfinished gesture when stopping or disconnecting.
@@ -423,6 +427,7 @@ function startMotion() {
   tennisAim = createTennisAim({sensitivity:motionSensitivity});
   started = performance.now();
   recording = true;
+  if (!bowling) void swingOrientation.start({bias});
   element('latest').textContent = '';
   playNotice = '';
   element('motion').textContent = bowling ? 'Swing forward to bowl. Turn your wrist to curve.' : 'Motion is live. Swing to play; use Stop motion to pause your detector.';

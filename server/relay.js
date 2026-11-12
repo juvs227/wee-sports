@@ -1,3 +1,4 @@
+import {copySwingDetails} from '../shared/swingDetails.js';
 import { WebSocket, WebSocketServer } from 'ws';
 import {EVENTS, isSwing} from '../shared/protocol.js';
 import {isAllowedOrigin} from './origins.js';
@@ -39,7 +40,7 @@ export function attachRelay(server, {origins = []} = {}) {
         }
         const message = JSON.stringify({ type: 'swing', id: event.id, label: event.label, hand: event.hand,
           ...(event.power === undefined ? {} : { power: event.power }),
-          ...(event.aim === undefined ? {} : {aim:event.aim}), ...(event.depth === undefined ? {} : {depth:event.depth}) });
+          ...copySwingDetails(event) });
         let receivers = 0;
         for (const peer of relay.clients) {
           if (peer.role === 'game' && peer.room === client.room && peer.readyState === WebSocket.OPEN && peer.bufferedAmount < 8192) {

@@ -562,10 +562,14 @@ test('the TV or P1 can return to the lobby from the vote or the tutorial', () =>
 
 test('game input waits until the tutorial is over', () => {
   const { store, code } = openTutorial([true, false]);
-  const stroke = { type: 'swing', id: 'one', gameId: store.lobby(code).gameId, label: 'Forehand', hand: 'Right' };
+  const stroke = { type: 'swing', id: 'one', gameId: store.lobby(code).gameId, label: 'Forehand', hand: 'Right', netNormal: [0, 0, 1], swingNormal: [1, 0, 0] };
   assert.equal(store.swingTarget('p0', stroke).error, 'not-playing');
   for (let step = 0; step < MOVES.length; step += 1) store.tutorialMove('p0', { step });
-  assert.equal(store.swingTarget('p0', stroke).ok, true);
+  const result = store.swingTarget('p0', stroke);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.event.netNormal, stroke.netNormal);
+  assert.deepEqual(result.event.swingNormal, stroke.swingNormal);
+  assert.notEqual(result.event.netNormal, stroke.netNormal);
 });
 
 test('the host leaving during the tutorial closes the room', () => {

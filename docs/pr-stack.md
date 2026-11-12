@@ -23,8 +23,9 @@ PR 2 supports live room recovery; PR 5 adds durable bowling storage and saved so
 game continuation. Tennis profile history is not implemented in this source.
 
 This order avoids four copies of shared changes. It does not guarantee no future
-conflicts: upstream PR 14 overlaps sensor/controller work and needs a fresh review
-if it lands. Do not merge all four branches independently into the old team main.
+conflicts: upstream PR 14 at `04fc805` is integrated into PR 1 and inherited by
+the stack. Its eight shared-file conflicts are resolved. A changed or squash-merged
+PR 14 still needs a fresh comparison. Do not merge all four branches independently into the old team main.
 
 Validation uses compile/lint, unit and server tests, recorded motion replay,
 production builds and browser flows. PRs 4 and 5 also require native unit tests,

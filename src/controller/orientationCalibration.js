@@ -2,12 +2,15 @@
  * Orientation calibration ported from swing-faster/orientation-phone.html.
  * Captures the screen's net-facing direction as a quaternion reference.
  *
- * Uses AbsoluteOrientationSensor (Android Chrome) when available, falls back
- * to deviceorientationabsolute, then deviceorientation.
- *
  * State machine: waiting_still → calibrating → done
  * Stillness is measured as quaternion angular distance to avoid Euler wrapping.
+ *
+ * Sensor setup is delegated to the source objects in androidCalibration.js and
+ * iosCalibration.js — this file contains only the calibration logic.
  */
+
+import { createAndroidOrientationSource } from './androidCalibration.js';
+import { createIOSOrientationSource }     from './iosCalibration.js';
 
 // ── Math helpers ──────────────────────────────────────────────────────────────
 
@@ -47,17 +50,60 @@ export function eulerToNormal(alpha, beta, gamma) {
   ];
 }
 
-/** Approximate quaternion from W3C Euler angles (ZXY convention). */
-function eulerToQuat(alpha, beta, gamma) {
-  const a = alpha * Math.PI / 180;
-  const b = beta  * Math.PI / 180;
-  const g = gamma * Math.PI / 180;
-  return [
-    Math.sin(b/2)*Math.cos(g/2)*Math.cos(a/2) - Math.cos(b/2)*Math.sin(g/2)*Math.sin(a/2),
-    Math.cos(b/2)*Math.sin(g/2)*Math.cos(a/2) + Math.sin(b/2)*Math.cos(g/2)*Math.sin(a/2),
-    Math.cos(b/2)*Math.cos(g/2)*Math.sin(a/2) - Math.sin(b/2)*Math.sin(g/2)*Math.cos(a/2),
-    Math.cos(b/2)*Math.cos(g/2)*Math.cos(a/2) + Math.sin(b/2)*Math.sin(g/2)*Math.sin(a/2),
-  ];
+
+// ── Source factory ────────────────────────────────────────────────────────────
+
+/**
+ * Returns the appropriate orientation source for the current platform.
+ * Android: uses AbsoluteOrientationSensor.
+ * iOS / fallback: uses Mahony filter over devicemotion + deviceorientationabsolute.
+ *
+ * @param {object} [opts]
+ * @param {{ alpha: number, beta: number, gamma: number }} [opts.bias]
+ * @returns source object with { onReading, start(), stop(), getNormal(), getQuaternion() }
+ */
+export function createOrientationSource({bias, target = globalThis.window, permissions = globalThis.navigator?.permissions,
+  clock = () => performance.now()} = {}) {
+  let active = false, attempt = 0, current = null, quaternion = null, normal = null;
+  const listeners = new Set();
+  const source = {
+    onReading: null,
+    onReset: null,
+    async start() {
+      source.stop(); active = true;
+      const generation = attempt;
+      const bind = candidate => {
+        current = candidate;
+        candidate.onReading = (q, n) => {
+          if (!active || generation !== attempt || current !== candidate) return;
+          quaternion = [...q]; normal = [...n];
+          source.onReading?.([...q], [...n]);
+          for (const listener of listeners) listener([...q], [...n]);
+        };
+        return candidate;
+      };
+      const fallback = () => {
+        if (!active || generation !== attempt) return;
+        current?.stop(); quaternion = null; normal = null;
+        source.onReset?.();
+        const candidate = bind(createIOSOrientationSource(bias, {target, clock}));
+        candidate.start();
+      };
+      if (typeof target?.AbsoluteOrientationSensor !== 'function') {fallback(); return;}
+      const native = bind(createAndroidOrientationSource({target, permissions}));
+      native.onError = fallback;
+      try {await native.start();} catch {if (active && generation === attempt && current === native) fallback();}
+    },
+    stop() {
+      active = false; attempt++;
+      current?.stop(); current = null; quaternion = null; normal = null;
+      source.onReset?.();
+    },
+    subscribe(listener) {listeners.add(listener); return () => listeners.delete(listener);},
+    getNormal: () => normal && [...normal],
+    getQuaternion: () => quaternion && [...quaternion],
+  };
+  return source;
 }
 
 // ── Calibration session ───────────────────────────────────────────────────────
@@ -68,18 +114,21 @@ const STILL_THRESH_DEG  = 1.5;  // °/frame threshold for "still"
 
 /**
  * @param {object} opts
+ * @param {object} opts.source  orientation source from createOrientationSource (or custom)
  * @param {(progress: number, state: 'settling'|'moving'|'calibrating') => void} opts.onProgress
  * @param {(normal: number[], quat: number[]) => void} opts.onDone
  * @returns {{ start: () => Promise<void>, stop: () => void }}
  */
-export function createOrientationCalibration({ onProgress, onDone }) {
-  let calState  = 'waiting_still';
+export function createOrientationCalibration({ source, onProgress, onDone }) {
+  const owned = !source;
+  source ??= createOrientationSource();
+  let calState   = 'waiting_still';
   let stillSince = null;
   let calStart   = null;
   let calSamples = [];
   let lastQuat   = null;
   let stopped    = false;
-  let cleanup    = () => {};
+  let detach = () => {};
 
   function tick(quat, _normal) {
     if (stopped) return;
@@ -130,58 +179,30 @@ export function createOrientationCalibration({ onProgress, onDone }) {
         const refNormal = qrot(refQuat, [0, 0, 1]);
         calState = 'done';
         stopped  = true;
-        cleanup();
+        detach();
+        if (owned) source.stop(); // A borrowed source keeps its live observers.
         onDone(refNormal, refQuat);
       }
     }
   }
 
-  async function start() {
-    if (stopped) return;
-
-    // ── AbsoluteOrientationSensor (Android Chrome — quaternion natively) ───
-    if ('AbsoluteOrientationSensor' in window) {
-      try {
-        if (navigator.permissions) {
-          await Promise.all([
-            navigator.permissions.query({ name: 'accelerometer' }),
-            navigator.permissions.query({ name: 'gyroscope' }),
-            navigator.permissions.query({ name: 'magnetometer' }),
-          ]);
-        }
-        const sensor = new window.AbsoluteOrientationSensor({ frequency: 30 });
-        sensor.addEventListener('reading', () => {
-          const q = [...sensor.quaternion];
-          tick(q, qrot(q, [0, 0, 1]));
-        });
-        sensor.addEventListener('error', () => {
-          // Sensor failed after start — don't throw, just let the fallback below handle it
-          // (we can't switch mid-session, but at least we don't crash)
-        });
-        sensor.start();
-        cleanup = () => sensor.stop();
-        return;
-      } catch {
-        // Fall through to Euler fallback.
-      }
-    }
-
-    // ── Euler fallback (iOS + older Android) ─────────────────────────────
-    function handler(e) {
-      if (e.alpha == null) return;
-      tick(eulerToQuat(e.alpha, e.beta, e.gamma), eulerToNormal(e.alpha, e.beta, e.gamma));
-    }
-    // deviceorientationabsolute gives compass-referenced angles; prefer it.
-    window.addEventListener('deviceorientationabsolute', handler, true);
-    window.addEventListener('deviceorientation',         handler, true);
-    cleanup = () => {
-      window.removeEventListener('deviceorientationabsolute', handler, true);
-      window.removeEventListener('deviceorientation',         handler, true);
-    };
-  }
-
   return {
-    start,
-    stop() { stopped = true; cleanup(); },
+    start() {
+      if (stopped) return;
+      detach();
+      if (source.subscribe) detach = source.subscribe(tick);
+      else {
+        const previous = source.onReading;
+        const reading = (quaternion, normal) => {previous?.(quaternion, normal); tick(quaternion, normal);};
+        source.onReading = reading;
+        detach = () => {if (source.onReading === reading) source.onReading = previous;};
+      }
+      if (owned) return source.start();
+    },
+    stop() {
+      stopped = true;
+      detach();
+      if (owned) source.stop();
+    },
   };
 }
