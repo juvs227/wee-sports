@@ -127,5 +127,13 @@ short, synthetic results are not a supported production player limit. See the
 [full recorded report](../server/benchmarks/local-capacity.json), including the server
 revision, all stages, workload, and machine details.
 
+For `npm run dev`, a fresh phone build and temporary HTTPS tunnel are prepared
+concurrently. The combined server starts only after both succeed; the QR stays
+hidden until the public health endpoint responds. The lobby checks readiness
+every second while waiting, then every ten seconds once ready. The launcher also
+retries a failed public health check after one second instead of its healthy
+fifteen-second monitoring interval. Cloudflare provisioning and internet delays
+can still affect startup time. This changes session startup, not game input.
+
 See [controller ownership and state transitions](controller-design.md) for the
 input contract, recovery rules and proposal availability.
