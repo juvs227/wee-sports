@@ -130,17 +130,11 @@ test('identical intent is repeatable while early and late intent produce control
     }
 });
 
-test('quick match uses a seven-point tie-break, win by two, and freezes at completion', () => {
+test('legacy quick requests normalize to best-of-three seven-point sets', () => {
     const score = new ScoreSystem('quick');
-    for (let i = 0; i < 6; i++) {
-        score.awardPoint('player1', 'player2'); score.awardPoint('player2', 'player1');
-    }
-    expect(score.getScore()).toMatchObject({format: 'quick', player1: 6, player2: 6, matchWinner: null, serviceSide: 'deuce'});
+    expect(score.getScore()).toMatchObject({format: 'full', targetPoints: 7, setsToWin: 2, player1: 0, player2: 0});
     score.awardPoint('player1', 'player2');
-    expect(score.getScore()).toMatchObject({player1: 7, player2: 6, matchWinner: null, serviceSide: 'ad'});
-    expect(score.awardPoint('player1', 'player2')?.kind).toBe('match');
-    expect(score.getScore()).toMatchObject({player1: 8, player2: 6, matchWinner: 'player1'});
-    expect(score.awardPoint('player2', 'player1')).toBeNull();
-    score.reset();
-    expect(score.getScore()).toMatchObject({format: 'quick', tieBreak: true, player1: 0, player2: 0, server: 'player1'});
+    expect(score.getScore()).toMatchObject({player1: 1, player2: 0, matchWinner: null});
+    score.reset('quick');
+    expect(score.getScore()).toMatchObject({format: 'full', targetPoints: 7, setsToWin: 2, player1: 0, player2: 0, server: 'player1'});
 });

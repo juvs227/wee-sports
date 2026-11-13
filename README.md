@@ -26,7 +26,8 @@ public tunnel. `npm run play` builds and serves production assets.
 3. Player one starts the game. Setup completes automatically after fresh sensor
    readings; settings, pause, sound and changing sports are in the controller tools.
 
-Tennis supports one player against a bot or two players. This foundation branch preserves the team's current tennis rules; PR 2 adds the scoring upgrade. Bowling supports one to
+Tennis supports one player against a bot or two players. Its upgraded rules use
+best of three sets, seven points per set, winning by two. Bowling supports one to
 eight players and uses ten-frame scoring. Shared room membership authenticates
 input; old or duplicate actions cannot become a new swing or roll after reconnect.
 The browser tennis controller can use a private WebRTC data channel with the

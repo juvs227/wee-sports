@@ -101,6 +101,94 @@ test('phone events reach only games in the same room; invalid events are rejecte
   }
 });
 
+test('standalone relay enforces browser origins while preserving same-origin and native guests', async () => {
+  const server = createServer();
+  const relay = attachRelay(server, {origins:['https://controller.example']});
+  const clients = [];
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const endpoint = `${origin.replace('http:', 'ws:')}/swings?room=test-origin&role=phone`;
+  try {
+    for (const Origin of [origin, 'https://controller.example', undefined]) {
+      const socket = new WebSocket(endpoint, Origin ? {headers:{Origin}} : {});
+      clients.push(socket); await once(socket, 'open');
+      assert.equal(socket.readyState, WebSocket.OPEN);
+    }
+    for (const Origin of ['https://untrusted.example', 'null']) {
+      const socket = new WebSocket(endpoint, {headers:{Origin}});
+      clients.push(socket); await once(socket, 'error');
+      assert.notEqual(socket.readyState, WebSocket.OPEN);
+    }
+  } finally {
+    clients.forEach(client => client.terminate());
+    for (const client of relay.clients) client.terminate();
+    await new Promise(resolve => relay.close(resolve));
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('a blocked standalone game receives no queued swing when transport recovers', async () => {
+  const server = createServer();
+  const relay = attachRelay(server);
+  const clients = [];
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const base = `ws://127.0.0.1:${server.address().port}/swings?room=slow-game`;
+  try {
+    for (const role of ['game', 'phone']) {
+      const client = new WebSocket(`${base}&role=${role}`);
+      clients.push(client); await once(client, 'open');
+    }
+    const [game, phone] = clients;
+    const gamePeer = [...relay.clients].find(client => client.role === 'game');
+    Object.defineProperty(gamePeer, 'bufferedAmount', {configurable:true, value:8192});
+    const received = [];
+    game.on('message', message => received.push(JSON.parse(message).id));
+    const swing = id => JSON.stringify({id, type:'swing', label:'Forehand', hand:'Right'});
+    const dropped = once(phone, 'message'); phone.send(swing('blocked'));
+    assert.equal(JSON.parse((await dropped)[0]).receivers, 0);
+    delete gamePeer.bufferedAmount;
+    const delivered = once(game, 'message'); phone.send(swing('fresh'));
+    await delivered;
+    assert.deepEqual(received, ['fresh']);
+  } finally {
+    clients.forEach(client => client.terminate());
+    for (const client of relay.clients) client.terminate();
+    await new Promise(resolve => relay.close(resolve));
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('oversized standalone input is closed before relay and releases its client entry', async () => {
+  const server = createServer();
+  const relay = attachRelay(server);
+  const clients = [];
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const base = `ws://127.0.0.1:${server.address().port}/swings?room=size-check`;
+  try {
+    for (const role of ['game', 'phone']) {
+      const client = new WebSocket(`${base}&role=${role}`);
+      clients.push(client); await once(client, 'open');
+    }
+    const [game, phone] = clients;
+    const received = [];
+    game.on('message', message => received.push(message));
+    const peer = [...relay.clients].find(client => client.role === 'phone');
+    // The server emits the expected max-payload error before closing this peer.
+    const closedPeer = new Promise(resolve => peer.once('close', resolve));
+    const closedPhone = once(phone, 'close');
+    phone.send(JSON.stringify({id:'oversized', type:'swing', label:'Forehand', hand:'Right', padding:'x'.repeat(4096)}));
+    assert.equal((await closedPhone)[0], 1009);
+    await closedPeer;
+    assert.deepEqual(received, []);
+    assert.equal(relay.clients.size, 1);
+  } finally {
+    clients.forEach(client => client.terminate());
+    for (const client of relay.clients) client.terminate();
+    await new Promise(resolve => relay.close(resolve));
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
 test('combined server serves both pages and controller module', async () => {
   const process = spawn(globalThis.process.execPath, ['server/main.js'], {
     env: { ...globalThis.process.env, PORT: '0' }, stdio: ['ignore', 'pipe', 'pipe'],

@@ -18,6 +18,8 @@ import type { Score } from './scoreSystem';
 import type { PlayerInput } from '../Controllers/playerInput';
 import { WorldCamera } from './camera';
 import {TENNIS_COURT} from './tennisRules';
+import {createFrameQuality} from '../rendering/frameQuality';
+import {browserDiagnostics} from '../../shared/diagnostics.js';
 export type {TennisSettings, PracticeState, StrokeResult} from './gameLogic';
 
 const COURT_MIN_X = -4.115;
@@ -44,6 +46,10 @@ export class World {
     private readonly parkClub = createParkClub();
     private clock = new THREE.Clock();
     private animationFrameId: number | null = null;
+    private readonly frameQuality = createFrameQuality({maxPixelRatio: Math.min(window.devicePixelRatio || 1, 2)});
+    private renderedFrames = 0;
+    private previousFrame: number | null = null;
+    private readonly renderDiagnostics = browserDiagnostics('render.tennis');
 
     public get autoPositionEnabled(): boolean {
         return this.gameLogic.autoPositionEnabled;
@@ -64,20 +70,23 @@ export class World {
     public getScore(): Score {
         return this.gameLogic.getScore();
     }
+    public checkpoint() { return this.gameLogic.checkpoint(); }
+    public restoreCheckpoint(value: Parameters<GameLogic['restoreCheckpoint']>[0]): boolean { return this.gameLogic.restoreCheckpoint(value); }
 
     constructor(container: HTMLElement) {
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0xc4d9d3);
-        this.scene.fog = new THREE.Fog(0xc4d9d3, 45, 110);
+        this.scene.background = new THREE.Color(0xd6e5e7);
+        this.scene.fog = new THREE.Fog(0xd6e5e7, 45, 110);
 
         this.worldCamera = new WorldCamera();
         this.camera = this.worldCamera.primary;
 
-        this.renderer = new THREE.WebGLRenderer({ antialias: true });
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+        this.handleResize();
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFShadowMap;
+        this.renderer.shadowMap.autoUpdate = false;
+        this.renderer.info.autoReset = false;
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
         this.renderer.toneMappingExposure = 1;
 
@@ -151,8 +160,13 @@ export class World {
     }
 
     private handleResize = (): void => {
-        this.worldCamera.resize(window.innerWidth, window.innerHeight);
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        const width = window.innerWidth, height = window.innerHeight;
+        this.worldCamera.resize(width, height);
+        // Resize logical dimensions and DPR together: changing DPR first could
+        // briefly reallocate the previous 4K viewport at the new larger ratio.
+        this.renderer.setDrawingBufferSize(width, height, this.frameQuality.resize(width, height).pixelRatio);
+        this.renderer.domElement.style.width = `${width}px`;
+        this.renderer.domElement.style.height = `${height}px`;
     };
 
     public setSplitScreen(enabled: boolean): void {
@@ -173,6 +187,8 @@ export class World {
         hand: 'Left' | 'Right';
         player?: 1 | 2;
         power?: number;
+        aim?: number;
+        depth?: number;
         id?: string;
     }): void {
         this.gameLogic.swing(event);
@@ -182,6 +198,10 @@ export class World {
     public configure(settings: Partial<TennisSettings>): void { this.gameLogic.configure(settings); }
     public getServeState() { return this.gameLogic.getServeState(); }
     public getPracticeState(): PracticeState { return this.gameLogic.getPracticeState(); }
+    public getRenderDiagnostics() {
+        return {...this.frameQuality.diagnostics(), views: this.isSplitScreen ? 2 : 1,
+            drawCalls: this.renderer.info.render.calls, triangles: this.renderer.info.render.triangles};
+    }
     public startPractice(stroke: PracticeState['stroke'] = 'alternate', hand: 'Right' | 'Left' = 'Right'): void { this.gameLogic.startPractice(stroke, hand); }
     public stopPractice(): void { this.gameLogic.stopPractice(); }
 
@@ -211,14 +231,33 @@ export class World {
 
         const animate = (): void => {
             this.animationFrameId = requestAnimationFrame(animate);
-
+            const frameAt = performance.now();
+            if (!document.hidden && this.previousFrame !== null && frameAt > this.previousFrame && frameAt - this.previousFrame <= 1000) this.renderDiagnostics.observe('frameGapMs',frameAt-this.previousFrame);
+            this.previousFrame = document.hidden ? null : frameAt;
             const delta = Math.min(this.clock.getDelta(), 0.05);
 
             this.gameLogic.update(delta);
 
             this.controls.update();
+            this.renderer.info.reset();
+            this.renderer.shadowMap.needsUpdate = this.renderedFrames++ % this.frameQuality.settings.shadowEvery === 0;
             this.worldCamera.render(this.renderer, this.scene,
                 window.innerWidth, window.innerHeight);
+            const workMs = performance.now()-frameAt, previousLevel = this.frameQuality.settings.level;
+            if (!document.hidden) this.renderDiagnostics.observe('frameWorkMs',workMs);
+            const quality = this.frameQuality.sample(frameAt, workMs, !document.hidden);
+            if (quality) this.renderDiagnostics.count(quality.level > previousLevel ? 'qualityReduced' : 'qualityRecovered');
+            if (quality && this.renderer.getPixelRatio() !== quality.pixelRatio) this.renderer.setPixelRatio(quality.pixelRatio);
+            if (quality && this.renderer.shadowMap.enabled !== quality.shadows) {
+                this.renderer.shadowMap.enabled = quality.shadows;
+                this.renderer.shadowMap.needsUpdate = quality.shadows;
+                // Three caches shadow shader variants on each material.
+                // Refresh them when the emergency shadow budget changes.
+                this.scene.traverse(object => {
+                    const material = (object as THREE.Mesh).material;
+                    if (material) for (const value of Array.isArray(material) ? material : [material]) value.needsUpdate = true;
+                });
+            }
         };
 
         animate();
@@ -226,6 +265,8 @@ export class World {
 
     public stop(): void {
         this.gameLogic.clearPendingInputs();
+        this.frameQuality.sample(0, 0, false);
+        this.previousFrame = null;
         if (this.animationFrameId !== null) {
             cancelAnimationFrame(this.animationFrameId);
             this.animationFrameId = null;

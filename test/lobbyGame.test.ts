@@ -5,7 +5,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { createPlayer } from '../src/Tennis/components/player';
 import { createBall, type BallUserData } from '../src/Tennis/components/ball';
 import { GameLogic, type TennisGameEvent, type StrokeResult } from '../src/Tennis/gameLogic';
-import { chooseBotStroke, type BotStroke } from '../src/Tennis/botPlayer';
+import { chooseBotStroke, chooseBotPlacement, type BotStroke } from '../src/Tennis/botPlayer';
 import { ScoreSystem } from '../src/Tennis/scoreSystem';
 import { predictBaselineIntercept } from '../src/Tennis/autoPosition';
 import { TENNIS_COURT } from '../src/Tennis/tennisRules';
@@ -34,12 +34,13 @@ async function court() {
     const feedback: string[] = [];
     const events: TennisGameEvent[] = [];
     const strokes: StrokeResult[] = [];
+    const shotTargetMarker = new THREE.Mesh();
     const game = new GameLogic({ scene, player1, player2, ball,
-        targetMarkers: [new THREE.Mesh(), new THREE.Mesh()], shotTargetMarker: new THREE.Mesh(),
+        targetMarkers: [new THREE.Mesh(), new THREE.Mesh()], shotTargetMarker,
         onSwingFeedback: () => message => feedback.push(message),
         onGameEvent: event => events.push(event), onStrokeResult: result => strokes.push(result) });
     game.botEnabled = false;
-    return { game, ball, player1, player2, feedback, events, strokes };
+    return { game, ball, player1, player2, feedback, events, strokes, shotTargetMarker };
 }
 
 for (const hand of ['Right', 'Left'] as const) for (const label of ['Forehand', 'Backhand'] as const) {
@@ -75,6 +76,20 @@ test('phone strength changes an actual serve only after racket contact', async (
         speeds.push(Math.abs((ball.userData as BallUserData).velocity.z));
     }
     expect(speeds[1]).toBeGreaterThan(speeds[0]);
+});
+
+test('a confirmed phone serve reaches real racket contact within two physics steps', async () => {
+    for (const hand of ['Right', 'Left'] as const) for (const label of ['Forehand', 'Backhand'] as const) {
+        const {game, ball, strokes} = await court();
+        game.swing({id: 'quick-serve', hand, label, player: 1});
+        expect((ball.userData as BallUserData).waitingForRacketHit).toBe(true);
+        expect(strokes).toEqual([]); // Advancing the animation cannot award a hit.
+        for (let step = 0; step < 2; step++) game.update(1 / 120);
+        expect(strokes.filter(stroke => stroke.id === 'quick-serve')).toEqual([
+            expect.objectContaining({result: 'hit', reason: 'Serve contact'}),
+        ]);
+        expect((ball.userData as BallUserData).waitingForRacketHit).toBe(false);
+    }
 });
 
 test.each(['Right', 'Left'] as const)('P2 %s-hand phone returns a real serve with the bot disabled, scores, and starts the next point', async hand => {
@@ -115,19 +130,19 @@ test.each(['Right', 'Left'] as const)('P2 %s-hand phone returns a real serve wit
     }
     expect(sent).toBe(true);
     expect(feedback.some(message => message.startsWith('Player 2: Hit!')), feedback.join('; ')).toBe(true);
-    expect(game.getScore().player2).toBe(15);
+    expect(game.getScore().player2).toBe(1);
     expect((ball.userData as BallUserData).isWaitingForServe).toBe(true);
-    expect((ball.userData as BallUserData).servingPlayer).toBe('player1');
-    expect(ball.position.z).toBe(TENNIS_COURT.serveDepth);
+    expect((ball.userData as BallUserData).servingPlayer).toBe('player2');
+    expect(ball.position.z).toBe(-TENNIS_COURT.serveDepth);
 });
 
-test('team scoring handles deuce, advantage reversal, and a completed game', () => {
+test('team scoring uses points directly and 7–6 needs another point', () => {
     const score = new ScoreSystem();
-    for (let i = 0; i < 3; i++) { score.awardPoint('player1', 'player2'); score.awardPoint('player2', 'player1'); }
-    score.awardPoint('player1', 'player2'); expect(score.getScore().player1).toBe('Adv');
-    score.awardPoint('player2', 'player1'); expect(score.getScore().player1).toBe(40);
-    score.awardPoint('player2', 'player1'); score.awardPoint('player2', 'player1');
-    expect(score.getScore()).toMatchObject({ player1: 0, player2: 0, roundsPlayer1: 0, roundsPlayer2: 1, server: 'player2' });
+    for (let i = 0; i < 6; i++) {score.awardPoint('player1', 'player2'); score.awardPoint('player2', 'player1');}
+    score.awardPoint('player1', 'player2');
+    expect(score.getScore()).toMatchObject({player1: 7, player2: 6, setsPlayer1: 0});
+    score.awardPoint('player1', 'player2');
+    expect(score.getScore()).toMatchObject({player1: 0, player2: 0, setsPlayer1: 1, completedSets: [{player1: 8, player2: 6}]});
 });
 
 test('serve, bounce and point events occur once and polling does not replay them', async () => {
@@ -157,16 +172,20 @@ test('ball reset uses the game server and match completion stops play until a re
         data.lastHitBy = 'player1';
         game.update(1 / 120);
     };
-    for (let i = 0; i < 3; i++) {
+    for (const server of ['player2', 'player2', 'player1', 'player1', 'player2', 'player2']) {
         forceSecondBounce();
-        expect(data.servingPlayer).toBe('player1');
-        expect(ball.position.z).toBe(TENNIS_COURT.serveDepth);
+        expect(data.servingPlayer).toBe(server);
+        expect(ball.position.z).toBe(server === 'player1' ? TENNIS_COURT.serveDepth : -TENNIS_COURT.serveDepth);
     }
     forceSecondBounce();
-    expect(data.servingPlayer).toBe('player2');
-    expect(ball.position.z).toBe(-TENNIS_COURT.serveDepth);
-    expect(events.filter(event => event.kind === 'game')).toEqual([{ kind: 'game', player: 1, reason: 'second-bounce' }]);
-    for (let i = 4; i < 48; i++) forceSecondBounce();
+    expect(events.filter(event => event.kind === 'set')).toEqual([{kind: 'set', player: 1, reason: 'second-bounce'}]);
+    expect(data.serveDelayRemaining).toBe(3.2);
+    // Set celebration is simulation time: polling/paused time cannot consume it.
+    for (let i = 0; i < 10; i++) {game.getScore(); game.update(0);}
+    expect(data.serveDelayRemaining).toBe(3.2);
+    game.swing({label: 'Forehand', hand: 'Right', player: 2});
+    expect(data.isWaitingForServe).toBe(true);
+    for (let i = 0; i < 7; i++) forceSecondBounce();
     expect(game.getScore().matchWinner).toBe('player1');
     expect(events.filter(event => event.kind === 'match')).toEqual([{ kind: 'match', player: 1, reason: 'second-bounce' }]);
     const final = game.getScore();
@@ -189,7 +208,8 @@ test('ball reset uses the game server and match completion stops play until a re
 // Choose when a human input arrives, not which stroke will succeed. The public
 // swing method must handle both stroke choices with the shipped animations.
 function swingNearArrival(state: Awaited<ReturnType<typeof court>>, number: 1 | 2,
-    hand: 'Left' | 'Right', label: 'Forehand' | 'Backhand', lead: number, fps = 120) {
+    hand: 'Left' | 'Right', label: 'Forehand' | 'Backhand', lead: number, fps = 120,
+    placement: {aim?: number; depth?: number; id?: string} = {}, beforeInput = () => {}) {
     const { game, ball } = state;
     const player = number === 1 ? state.player1 : state.player2;
     const animation = (label === 'Backhand') !== (hand === 'Left') ? 'SwingLeft' : 'SwingRight';
@@ -207,7 +227,8 @@ function swingNearArrival(state: Awaited<ReturnType<typeof court>>, number: 1 | 
         }
         if (delay !== Infinity) delay -= 1 / fps;
         if (delay <= 0) {
-            game.swing({ label, hand, player: number });
+            beforeInput();
+            game.swing({ label, hand, player: number, ...placement });
             return;
         }
         game.update(1 / fps);
@@ -215,9 +236,38 @@ function swingNearArrival(state: Awaited<ReturnType<typeof court>>, number: 1 | 
     throw new Error(`The live ball did not approach Player ${number}`);
 }
 
+for (const number of [1, 2] as const) {
+    test(`P${number} can return short, normal and deep angled rallies with either stroke and hand`, async () => {
+        for (const aim of [-1, 0, 1]) for (const depth of [-1, 0, 1]) {
+            for (const hand of ['Right', 'Left'] as const) for (const label of ['Forehand', 'Backhand'] as const) {
+                const state = await court();
+                const opponent = number === 1 ? 2 : 1;
+                // Begin with a legal held serve from the receiving player's side,
+                // then generate the varied incoming shot through the public API.
+                (state.ball.userData as BallUserData).servingPlayer = number === 1 ? 'player1' : 'player2';
+                state.game.swing({label: 'Forehand', hand: 'Right', player: number});
+                swingNearArrival(state, opponent, 'Right', 'Forehand', .3, 120, {id: 'opponent', aim, depth});
+                for (let step = 0; step < 70; step++) state.game.update(1 / 120);
+                expect(state.strokes.find(stroke => stroke.id === 'opponent')?.result).toBe('hit');
+                swingNearArrival(state, number, hand, label, .08, 120, {id: 'return'});
+                const player = number === 1 ? state.player1 : state.player2;
+                const feet = player.group.position.clone();
+                expect(Math.abs(player.swingHeightOffset)).toBeLessThanOrEqual(.7);
+                state.game.update(1 / 120);
+                expect(player.group.position.distanceTo(feet)).toBeLessThanOrEqual(player.movementSpeed / 120 + 1e-8);
+                for (let step = 0; step < 100; step++) state.game.update(1 / 120);
+                expect(state.strokes.filter(stroke => stroke.id === 'return'),
+                    `P${number} ${hand} ${label}, aim=${aim}, depth=${depth}`).toEqual([
+                    expect.objectContaining({result: 'hit'}),
+                ]);
+            }
+        }
+    }, 15000);
+}
+
 for (const number of [1, 2] as const) for (const hand of ['Right', 'Left'] as const) {
     for (const label of ['Forehand', 'Backhand'] as const) {
-        test(`P${number} ${hand} ${label} tolerates inputs arriving 80–550 ms early with real model contact`, async () => {
+        test(`P${number} ${hand} ${label} contacts at 80–450 ms early but misses a 550 ms early swing`, async () => {
             for (const lead of [.08, .16, .3, .45, .55]) {
                 const state = await court();
                 state.game.swing({ label: 'Forehand', hand: 'Right', player: 1 });
@@ -230,13 +280,244 @@ for (const number of [1, 2] as const) for (const hand of ['Right', 'Left'] as co
                 swingNearArrival(state, number, hand, label, lead);
                 for (let step = 0; step < 90; step++) state.game.update(1 / 120);
                 expect(state.feedback.some(message => message.startsWith(`Player ${number}: Hit!`)),
-                    `lead=${lead}: ${state.feedback.join('; ')}`).toBe(true);
+                    `lead=${lead}: ${state.feedback.join('; ')}`).toBe(lead <= .45);
             }
         });
     }
 }
 
-test('a late stroke misses, and pausing discards a prepared stroke', async () => {
+test('early acceptance immediately prepares a non-contact pose and still needs real contact', async () => {
+    const state = await court();
+    state.game.swing({label: 'Forehand', hand: 'Right', player: 1});
+    swingNearArrival(state, 2, 'Right', 'Forehand', .3, 120, {id: 'prepared-return'});
+    expect(state.player2.isPreparing).toBe(true);
+    expect(state.player2.isSwinging).toBe(false);
+    expect(state.player2.contactActive).toBe(false);
+    expect(state.player2.actions[state.player2.currentAnimation!].time).toBeGreaterThan(0);
+    expect(state.strokes.some(result => result.id === 'prepared-return')).toBe(false);
+    expect((state.ball.userData as BallUserData).lastHitBy).toBe('player1');
+    for (let step = 0; step < 90; step++) state.game.update(1 / 120);
+    const result = state.strokes.find(result => result.id === 'prepared-return')!;
+    expect(result.result).toBe('hit');
+    expect(result.receivedToPreparationMs).toBeGreaterThanOrEqual(0);
+    expect(result.receivedToContactMs!).toBeGreaterThanOrEqual(result.receivedToPreparationMs!);
+    expect(state.player2.isPreparing).toBe(false);
+});
+
+test('timing assistance chooses an earlier reachable backhand instead of a wider later contact window', async () => {
+    const state = await court();
+    state.game.swing({label: 'Forehand', hand: 'Right', player: 1});
+    swingNearArrival(state, 2, 'Left', 'Backhand', .3, 120, {id: 'responsive-backhand'});
+    expect(state.player2.isPreparing).toBe(true);
+    expect(state.strokes.some(stroke => stroke.id === 'responsive-backhand')).toBe(false);
+    for (let step = 0; step < 30; step++) state.game.update(1 / 120);
+    expect(state.strokes.find(stroke => stroke.id === 'responsive-backhand')).toMatchObject({result: 'hit'});
+    expect((state.ball.userData as BallUserData).lastHitBy).toBe('player2');
+});
+
+test('40–120 ms delivery delays use the arriving ball state without adding another full wind-up', async () => {
+    for (const fps of [30, 60, 144]) for (const delay of [.04, .08, .12]) {
+        for (const label of ['Forehand', 'Backhand'] as const) {
+            const state = await court();
+            state.game.swing({label: 'Forehand', hand: 'Right', player: 1});
+            // The player responds 160 ms before the baseline arrival. Delivery
+            // consumes part of that lead while the live simulation continues.
+            swingNearArrival(state, 2, 'Right', label, .16 - delay, fps, {id: 'delayed-input'});
+            let elapsed = 0;
+            const deadline = .16 - delay + 1 / fps;
+            while (elapsed < deadline && !state.strokes.some(stroke => stroke.id === 'delayed-input')) {
+                state.game.update(1 / fps); elapsed += 1 / fps;
+            }
+            expect(state.strokes.find(stroke => stroke.id === 'delayed-input'),
+                `${fps} FPS ${label}, ${delay * 1000} ms delivery delay`).toMatchObject({result: 'hit'});
+            expect(state.strokes.filter(stroke => stroke.id === 'delayed-input')).toHaveLength(1);
+        }
+    }
+});
+
+test.each([30, 60, 144])('visually timed phone returns tolerate 40–160 ms late delivery at %i FPS', async fps => {
+    for (const number of [1, 2] as const) for (const hand of ['Right', 'Left'] as const) {
+        for (const label of ['Forehand', 'Backhand'] as const) for (const late of [0, .04, .08, .12, .16]) {
+            const state = await court();
+            state.game.swing({label: 'Forehand', hand: 'Right', player: 1});
+            if (number === 1) {
+                swingNearArrival(state, 2, 'Right', 'Forehand', .3);
+                for (let step = 0; step < 70; step++) state.game.update(1 / 120);
+            }
+            swingNearArrival(state, number, hand, label, -late, fps, {id: 'late-phone'});
+            for (let frame = 0; frame < fps / 2 && !state.strokes.some(stroke => stroke.id === 'late-phone'); frame++) state.game.update(1 / fps);
+            expect(state.strokes.filter(stroke => stroke.id === 'late-phone'),
+                `P${number} ${hand} ${label} ${late * 1000}ms late at ${fps}FPS`).toEqual([
+                expect.objectContaining({result: 'hit', reason: 'Racket contact'}),
+            ]);
+            expect(state.events.filter(event => event.kind === 'hit' && event.swingId === 'late-phone')).toHaveLength(1);
+            expect((state.ball.userData as BallUserData).lastHitBy).toBe(number === 1 ? 'player1' : 'player2');
+            expect((state.ball.userData as BallUserData).velocity.z * (number === 1 ? -1 : 1)).toBeGreaterThan(0);
+            expect(state.game.getScore()).toMatchObject({player1: 0, player2: 0});
+        }
+    }
+}, 30000);
+
+test('a compensated return retains locked placement, lands legally and consumes the stroke once', async () => {
+    const state = await court();
+    state.game.swing({label: 'Forehand', hand: 'Right', player: 1});
+    swingNearArrival(state, 2, 'Right', 'Forehand', -.12, 120, {id: 'late-placed', aim: .7, depth: -.6});
+    expect(state.strokes.find(stroke => stroke.id === 'late-placed')).toMatchObject({result: 'hit'});
+    const target = state.shotTargetMarker.position.clone();
+    state.game.swing({label: 'Backhand', hand: 'Right', player: 2, id: 'duplicate', aim: -.8, depth: 1});
+    expect(state.strokes.find(stroke => stroke.id === 'duplicate')).toMatchObject({result: 'rejected'});
+    expect(state.shotTargetMarker.position).toEqual(target);
+    expect(target.x).toBeCloseTo(-.7 * 2.1);
+    expect(target.z).toBeCloseTo(8.5 - .6 * 3);
+    const data = state.ball.userData as BallUserData;
+    for (let step = 0; step < 240 && data.bounceCount === 0; step++) state.game.update(1 / 120);
+    expect(data).toMatchObject({lastHitBy: 'player2', bounceCount: 1, firstBounceInBounds: true});
+    expect(state.ball.position.x).toBeCloseTo(target.x, 1);
+    expect(state.ball.position.z).toBeCloseTo(target.z, 1);
+    expect(state.events.filter(event => event.kind === 'hit' && event.player === 2)).toHaveLength(1);
+});
+
+test.each(['expired', 'disabled', 'paused', 'stalled', 'new-round'] as const)('recent contact cannot cross the %s boundary', async boundary => {
+    const state = await court();
+    state.game.swing({label: 'Forehand', hand: 'Right', player: 1});
+    if (boundary === 'disabled') state.game.configure({timingAssist: false});
+    swingNearArrival(state, 2, 'Right', 'Forehand', boundary === 'expired' ? -.4 : -.12, 120, {id: 'stale-phone'}, () => {
+        if (boundary === 'paused') state.game.clearPendingInputs();
+        if (boundary === 'new-round') state.game.startRound();
+        if (boundary === 'stalled') vi.spyOn(performance, 'now').mockReturnValue(performance.now() + 1000);
+    });
+    for (let step = 0; step < 120; step++) state.game.update(1 / 120);
+    expect(state.strokes.find(stroke => stroke.id === 'stale-phone')?.result).not.toBe('hit');
+    expect(state.events.some(event => event.kind === 'hit' && event.swingId === 'stale-phone')).toBe(false);
+});
+
+test.each([false, true])('late assistance cannot invent a historical reach after moving the player: %s', async moveAfter => {
+    const state = await court();
+    state.game.configure({autoMove: false});
+    state.player2.group.position.x = 4;
+    state.game.swing({label: 'Forehand', hand: 'Right', player: 1});
+    swingNearArrival(state, 2, 'Right', 'Forehand', -.12, 120, {id: 'out-of-reach'}, () => {
+        if (moveAfter) state.player2.group.position.x = state.ball.position.x;
+    });
+    for (let step = 0; step < 120; step++) state.game.update(1 / 120);
+    expect(state.strokes.find(stroke => stroke.id === 'out-of-reach')?.result).not.toBe('hit');
+    expect(state.events.some(event => event.kind === 'hit' && event.player === 2)).toBe(false);
+});
+
+test('a late return after a decided point cannot revive the rally, change the score or serve', async () => {
+    const state = await court();
+    state.game.swing({label: 'Forehand', hand: 'Right', player: 1});
+    for (let step = 0; step < 1200 && state.game.getScore().player1 === 0; step++) state.game.update(1 / 120);
+    const score = state.game.getScore(), position = state.ball.position.clone();
+    state.game.swing({label: 'Forehand', hand: 'Right', player: 2, id: 'after-point'});
+    expect(state.strokes.find(stroke => stroke.id === 'after-point')).toMatchObject({result: 'rejected'});
+    expect(state.game.getScore()).toEqual(score);
+    expect(state.ball.position).toEqual(position);
+    expect((state.ball.userData as BallUserData).isWaitingForServe).toBe(true);
+    expect(state.events.filter(event => event.kind === 'point')).toHaveLength(1);
+    expect(state.events.filter(event => event.kind === 'serve')).toHaveLength(1);
+});
+
+test.each([false, true])('recent contact validates whether that historical flight was a serve: %s', async serve => {
+    const state = await court(), player = state.player2;
+    state.game.configure({autoMove: false});
+    player.group.position.z = -4.5;
+    player.playAnimation('SwingRight');
+    const action = player.actions.SwingRight;
+    action.stopFading(); action.setEffectiveWeight(1);
+    action.time = action.getClip().duration * .35;
+    player.update(0);
+    const target = player.hitbox!.bounds.getCenter(new THREE.Vector3()).applyMatrix4(player.hitbox!.pose());
+    player.group.position.x += -1.65 - target.x;
+    target.x = -1.65;
+    player.stopAnimation(); player.update(0);
+    state.ball.position.copy(target).add(new THREE.Vector3(0, .05, .05));
+    const data = state.ball.userData as BallUserData;
+    data.isWaitingForServe = false; data.waitingForRacketHit = false;
+    data.lastHitBy = 'player1'; data.servingPlayer = 'player1';
+    data.isServeFlight = serve; data.serveReturnPending = serve;
+    data.velocity.set(0, -.06, -.14);
+    for (let step = 0; step < 100 && data.bounceCount === 0 && !data.isWaitingForServe; step++) state.game.update(1 / 120);
+    expect(data).toMatchObject({bounceCount: 1, firstBounceInBounds: true, isWaitingForServe: false});
+    // The current states now have the same legal first bounce. Only the
+    // earlier ordinary rally volley was legal at the racket's actual position.
+    for (let step = 0; step < 2; step++) state.game.update(1 / 120);
+    state.game.swing({label: 'Forehand', hand: 'Right', player: 2, id: 'history-legality'});
+    for (let step = 0; step < 40 && !state.strokes.some(stroke => stroke.id === 'history-legality'); step++) state.game.update(1 / 120);
+    expect(state.strokes.find(stroke => stroke.id === 'history-legality')?.result === 'hit').toBe(!serve);
+});
+
+test('shorter standard assistance rejects a very early stroke while beginner retains more help', async () => {
+    for (const assistance of ['standard', 'beginner'] as const) {
+        const state = await court();
+        state.game.configure({assistance});
+        state.game.swing({label: 'Forehand', hand: 'Right', player: 1});
+        swingNearArrival(state, 2, 'Right', 'Forehand', .55);
+        for (let step = 0; step < 120; step++) state.game.update(1 / 120);
+        expect(state.feedback.some(message => message.startsWith('Player 2: Hit!'))).toBe(assistance === 'beginner');
+    }
+});
+
+test('a queued stroke expires after a wall-clock stall without releasing a stale hit', async () => {
+    const state = await court();
+    state.game.swing({label: 'Forehand', hand: 'Right', player: 1});
+    swingNearArrival(state, 2, 'Right', 'Forehand', .3, 120, {id: 'stalled-return'});
+    expect(state.player2.isPreparing).toBe(true);
+    const stalledAt = performance.now() + 1000;
+    vi.spyOn(performance, 'now').mockReturnValue(stalledAt);
+    for (let step = 0; step < 120; step++) state.game.update(1 / 120);
+    expect(state.strokes.find(result => result.id === 'stalled-return')).toMatchObject({result: 'miss'});
+    expect(state.feedback.some(message => message.startsWith('Player 2: Hit!'))).toBe(false);
+    expect(state.player2.isPreparing).toBe(false);
+});
+
+test('a waiting stroke captures explicit lateral and depth placement before contact', async () => {
+    const state = await court();
+    state.game.swing({label: 'Forehand', hand: 'Right', player: 1});
+    const placement = {aim: .7, depth: -.6, id: 'placed-return'};
+    swingNearArrival(state, 2, 'Right', 'Backhand', .3, 120, placement);
+    expect(state.player2.isPreparing).toBe(true);
+    placement.aim = -.9; placement.depth = 1;
+    for (let step = 0; step < 90; step++) state.game.update(1 / 120);
+    expect(state.strokes.find(result => result.id === 'placed-return')).toMatchObject({result: 'hit'});
+    expect(state.shotTargetMarker.position.x).toBeCloseTo(-.7 * 2.1);
+    expect(state.shotTargetMarker.position.z).toBeCloseTo(8.5 - .6 * 3);
+});
+
+test('an active phone stroke keeps its target and trace when a different placement arrives before contact', async () => {
+    const state = await court();
+    state.game.swing({label: 'Forehand', hand: 'Right', player: 1});
+    swingNearArrival(state, 2, 'Right', 'Forehand', .08, 120, {aim: .7, depth: -.6, id: 'first-return'});
+    expect(state.player2.isSwinging).toBe(true);
+    expect(state.player2.hitConsumed).toBe(false);
+    state.game.swing({label: 'Backhand', hand: 'Right', player: 2, aim: -.9, depth: 1, id: 'second-return'});
+    expect(state.strokes.find(result => result.id === 'second-return')).toMatchObject({result: 'rejected', reason: 'Finish the current stroke'});
+    expect(state.strokes.some(result => result.id === 'first-return')).toBe(false);
+    for (let step = 0; step < 90; step++) state.game.update(1 / 120);
+    expect(state.strokes.filter(result => result.id === 'first-return')).toHaveLength(1);
+    expect(state.strokes.find(result => result.id === 'first-return')).toMatchObject({result: 'hit'});
+    expect(state.shotTargetMarker.position.x).toBeCloseTo(-.7 * 2.1);
+    expect(state.shotTargetMarker.position.z).toBeCloseTo(8.5 - .6 * 3);
+});
+
+test('an active bot stroke without a phone trace also rejects placement changes before contact', async () => {
+    const state = await court();
+    state.game.botEnabled = true;
+    state.game.swing({label: 'Forehand', hand: 'Right', player: 1});
+    for (let step = 0; step < 480 && !state.player2.isSwinging; step++) state.game.update(1 / 120);
+    expect(state.player2.isSwinging).toBe(true);
+    expect(state.player2.hitConsumed).toBe(false);
+    const original = chooseBotPlacement(state.player1.group.position.x, 0, 'standard');
+    state.game.swing({label: 'Backhand', hand: 'Right', player: 2, aim: -original.aim, depth: -1, id: 'interrupt-bot'});
+    expect(state.strokes.find(result => result.id === 'interrupt-bot')).toMatchObject({result: 'rejected', reason: 'Finish the current stroke'});
+    for (let step = 0; step < 90; step++) state.game.update(1 / 120);
+    expect(state.feedback.some(message => message.startsWith('Player 2: Hit!'))).toBe(true);
+    expect(state.shotTargetMarker.position.x).toBeCloseTo(-original.aim * 2.1);
+    expect(state.shotTargetMarker.position.z).toBeCloseTo(8.5 + original.depth * .7);
+    expect(state.strokes.filter(result => result.id === 'interrupt-bot')).toHaveLength(1);
+});
+
+test('untracked late input keeps strict contact timing, and pausing discards a prepared stroke', async () => {
     const late = await court();
     late.game.swing({ label: 'Forehand', hand: 'Right', player: 1 });
     swingNearArrival(late, 2, 'Right', 'Forehand', -.08);
@@ -249,7 +530,7 @@ test('a late stroke misses, and pausing discards a prepared stroke', async () =>
     paused.game.clearPendingInputs();
     for (let step = 0; step < 240; step++) paused.game.update(1 / 120);
     expect(paused.feedback.some(message => message.startsWith('Player 2: Hit!'))).toBe(false);
-    expect(paused.game.getScore().player1).toBe(15);
+    expect(paused.game.getScore().player1).toBe(1);
 });
 
 test('24 consecutive human returns keep normal contact, then a missed ball scores only once', async () => {
@@ -267,7 +548,7 @@ test('24 consecutive human returns keep normal contact, then a missed ball score
         expect(state.game.getScore().player2).toBe(0);
     }
     for (let step = 0; step < 600; step++) state.game.update(1 / 120);
-    expect(state.game.getScore().player1).toBe(15);
+    expect(state.game.getScore().player1).toBe(1);
     expect(state.game.getScore().player2).toBe(0);
 });
 
@@ -329,6 +610,7 @@ test('stroke diagnostics correlate accepted, rejected and paused inputs without 
     for (let i = 0; i < 120; i++) game.update(1 / 120);
     expect(strokes.find(result => result.id === 'serve-a')).toMatchObject({result: 'hit', reason: 'Serve contact'});
     expect(strokes.find(result => result.id === 'serve-a')!.receivedToContactMs).toBeGreaterThanOrEqual(0);
+    expect(strokes.find(result => result.id === 'serve-a')!.receivedToPreparationMs).toBeGreaterThanOrEqual(0);
     expect(strokes.filter(result => result.id === 'serve-a')).toHaveLength(1);
     game.swing({id: 'cancelled', label: 'Forehand', hand: 'Right', player: 2});
     game.clearPendingInputs();
@@ -356,14 +638,39 @@ test('practice feeds repeat without scoring, records real contact, and restores 
     expect(game.getScore()).toMatchObject({player1: 0, player2: 0, server: 'player1'});
 });
 
-test('difficulty, timing assistance and movement are independent; changing the format starts its new match', async () => {
+test('optional practice unlocks a visible placement target after three legal returns', async () => {
+    const state = await court();
+    state.game.startPractice('forehand');
+    const score = state.game.getScore();
+    for (let returned = 1; returned <= 3; returned++) {
+        swingNearArrival(state, 1, 'Right', 'Forehand', .12);
+        for (let step = 0; step < 240 && state.game.getPracticeState().cleanReturns < returned; step++) {
+            state.game.update(1 / 120);
+        }
+        expect(state.game.getPracticeState().cleanReturns).toBe(returned);
+        expect(Boolean(state.game.getPracticeState().target)).toBe(returned === 3);
+    }
+    state.game.update(1 / 120);
+    expect(state.shotTargetMarker.visible).toBe(true);
+    expect(state.shotTargetMarker.scale.x).toBe(4);
+    expect(state.game.getScore()).toEqual(score);
+    const target = state.game.getPracticeState().target!;
+    target.x = 99;
+    expect(state.game.getPracticeState().target!.x).not.toBe(99);
+    state.game.stopPractice();
+    state.game.update(1 / 120);
+    expect(state.shotTargetMarker.visible).toBe(false);
+    expect(state.shotTargetMarker.scale.x).toBe(1);
+});
+
+test('difficulty, timing assistance and movement are independent; legacy formats preserve the current match', async () => {
     const {game, ball} = await court();
     game.configure({assistance: 'beginner', botDifficulty: 'standard', autoMove: false, timingAssist: true});
     expect(game.getSettings()).toMatchObject({assistance: 'beginner', botDifficulty: 'standard', autoMove: false, timingAssist: true});
     game.configure({botDifficulty: 'beginner'});
     expect(game.getSettings()).toMatchObject({autoMove: false, timingAssist: true, botDifficulty: 'beginner'});
     game.configure({format: 'quick'});
-    expect(game.getScore()).toMatchObject({format: 'quick', tieBreak: true});
+    expect(game.getScore()).toMatchObject({format: 'full', targetPoints: 7, setsToWin: 2});
     const data = ball.userData as BallUserData;
     ball.position.set(0, .11, -3);
     hitForPoint();
@@ -400,7 +707,7 @@ test.each([false, true])('serve returned before bounce: net touch=%s resolves po
         expect(events.filter(event => event.kind === 'let')).toHaveLength(1);
         expect(data.serveAttempt).toBe(2);
     } else {
-        expect(game.getScore()).toMatchObject({player1: 15, player2: 0,
+        expect(game.getScore()).toMatchObject({player1: 1, player2: 0,
             lastPoint: {player: 1, reason: 'serve-volley'}});
         expect(events.filter(event => event.kind === 'point')).toHaveLength(1);
     }
@@ -408,7 +715,7 @@ test.each([false, true])('serve returned before bounce: net touch=%s resolves po
 });
 
 
-test('returning from practice preserves 15–30, the format, service side and second-serve attempt', async () => {
+test('returning from practice preserves 1–2, the format, service side and second-serve attempt', async () => {
     const {game, ball} = await court();
     const data = ball.userData as BallUserData;
     for (const winner of ['player1', 'player2', 'player2'] as const) {
@@ -418,7 +725,7 @@ test('returning from practice preserves 15–30, the format, service side and se
         data.firstBounceInBounds = true; data.lastHitBy = winner;
         game.update(1 / 120);
     }
-    expect(game.getScore()).toMatchObject({player1: 15, player2: 30, serviceSide: 'ad'});
+    expect(game.getScore()).toMatchObject({player1: 1, player2: 2, serviceSide: 'ad'});
     data.serveAttempt = 2; data.serveStatus = 'first-fault';
     const before = game.getScore();
     game.startPractice();
@@ -468,7 +775,7 @@ test('a completed service swing missing its held ball consumes an attempt, but r
     expect(strokes.find(result => result.id === 'miss-first')).toMatchObject({result: 'miss', reason: 'Service swing missed the ball'});
     expect(events.filter(event => event.kind === 'fault')).toHaveLength(1);
     miss('miss-second');
-    expect(game.getScore()).toMatchObject({player2: 15, lastPoint: {reason: 'double-fault'}});
+    expect(game.getScore()).toMatchObject({player2: 1, lastPoint: {reason: 'double-fault'}});
     expect(events.filter(event => event.kind === 'point')).toHaveLength(1);
 });
 

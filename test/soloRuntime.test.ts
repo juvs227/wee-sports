@@ -34,13 +34,14 @@ test('solo phone serve and bot contact report actual hits without updating stati
     // Only one phone sends input. The opponent is the normal solo bot.
     game.swing({ label: 'Forehand', hand: 'Right', player: 1 });
     expect(hits).toEqual([]); // Starting a swing is not contact.
-    for (let frame = 0; frame < 480; frame++) game.update(1 / 60);
+    for (let frame = 0; frame < 480 && !game.getScore().lastPoint; frame++) game.update(1 / 60);
     expect(feedback.some(message => message.startsWith('Player 1: Hit!'))).toBe(true);
     expect(feedback.some(message => message.startsWith('Player 2: Hit!'))).toBe(true);
     expect(updateScenery.mock.calls.length).toBe(0);
     expect(hits.slice(0, 2)).toEqual([1, 2]);
     expect(hits).toEqual([1, 2]);
-    expect(game.getScore().server).toBe('player1'); // Service does not change after a point.
+    expect(game.getScore().server).toBe('player2'); // The first point passes service to P2 for two points.
+    game.botEnabled = false;
     game.clearPendingInputs();
     for (let frame = 0; frame < 120; frame++) game.update(1 / 60);
     expect(hits).toEqual([1, 2]);
