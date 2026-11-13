@@ -1,9 +1,9 @@
-# Proposed PR branches
+# Four proposed PR branches and a separate UI experiment
 
 These are stacked changes based on team main `78d04a0`. No PR has been opened.
 Review each branch against its predecessor to see only that proposal's changes.
 Open PR 1 against team main first. After it lands, update PR 2 onto the resulting
-team main, then repeat for PR 4, PR 5 and PR 6. A squash merge requires rebasing the
+team main, then repeat for PR 4 and PR 5. A squash merge requires rebasing the
 remaining stack. These fork-only branches cannot be selected as base branches
 for a PR in the team repository until the team creates matching branches.
 
@@ -13,11 +13,11 @@ for a PR in the team repository until the team creates matching branches.
 | 2 | `pr/2-gameplay-and-scoring` | PR 1 | Tennis/bowling gameplay, scoring, aim, feedback, TV rendering, stable live-room checkpoints |
 | 4 | `pr/4-expo-controller` | PR 2 | Expo native controller, camera join, motion/touch input, local preferences, session recovery, native CI |
 | 5 | `pr/5-profiles-and-production` | PR 4 | Optional web/native profiles, preferences, bowling history and durable saved games, backup/recovery and production hardening |
-| 6 | `pr/6-classic-island-home` | PR 5 | Optional Classic / Island homepage switch, remembered preference, island landing/map and accessible fallback |
 
 Expo and browser/native phone UI are included. Table Tennis is excluded from
 every branch. PRs 1, 2, 4 and 5 keep the card homepage and exclude the island.
-PR 6 adds the island as an optional view, with Classic as the default.
+The Classic/Island work previously labeled PR 6 remains a test-only experiment;
+it is not part of the four proposals being prepared for main.
 Profile persistence is optional; the earlier branches run without a profile DB.
 
 PR 1 deliberately rejects game checkpoints until PR 2 adds rule-aware validation.
@@ -35,7 +35,8 @@ an Android/iOS Expo export and the native-to-server integration tests. Physical
 phone motion remains a device test.
 
 
-PR 6 is hosted only in `necromancerrr/wee-sports`. Its homepage switch uses native
+The homepage experiment is preserved in the separate fork branch and the Juv
+integration test branch. Its homepage switch uses native
 radio controls, preserves focus while loading, and remembers the choice locally.
 Explicit `?view=classic` and `?view=island` links override the stored preference.
 Island mode includes `/` (welcome) and `/home` (sports map); Classic works at both.
@@ -54,19 +55,19 @@ its default exercises Classic. Both accept `WEE_SMOKE_URL` and
 `WEE_SMOKE_PROFILES=1`. They require Playwright on the Node module path.
 
 
-Validation recorded for this update: PRs 1, 2, 4 and 5 passed GitHub CI at
-`7a67823`, `4dece36`, `ec2c053` and `ab98186`, respectively (native checks and both
-Expo platform exports included on PRs 4 and 5). PR 6 passed compile/lint, 870
-Vitest cases, 74 server cases, five recorded motion fixtures and the production
-build. Browser checks passed in both homepage modes, including phone play,
-bowling recovery, optional profile registration, keyboard focus, narrow layouts,
-blocked storage and failed island image/module recovery.
+The published functional repair heads are `fc97950` (PR 1), `76d1f38` (PR 2),
+`aa6a20b` (PR 4), and `d02bf16` (PR 5). Each preserves its original branch history
+and passed compile/lint, its full unit/server suites, recorded-motion replay and
+production build. PRs 4 and 5 also passed their native tests; the combined repair
+passed both Expo platform exports. Final PR5's application code is identical to
+the accepted `test/prs-1-2-4-5` build at `62d228e`.
 
 
 ## Combined team test branch
 
-`integration/all-proposals-test` combines all five proposals on current team main
-in `juvs227/wee-sports` for testing before PRs or a main merge. It adds a proper
-Classic welcome screen, with Play leading to the existing card chooser. The
-individual proposal branches remain unchanged by this test-branch addition.
+`integration/all-proposals-test` combines the four functional proposals and the
+test-only homepage experiment on team main in `juvs227/wee-sports`. Its existing
+Classic welcome screen leads to the card chooser. The controller repair update
+preserves both published homepage modes and does not add their UI to the four
+functional branches. Both repositories' main branches remain unchanged.
 See [integration-testing.md](integration-testing.md) for running and accepting it.
