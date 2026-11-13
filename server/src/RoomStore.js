@@ -1,3 +1,5 @@
+import {copySwingDetails} from '../../shared/swingDetails.js';
+import {checkpoint as validateCheckpoint} from '../profiles/validation.js';
 /**
  * Every lobby the server knows about, with no networking in it.
  *
@@ -15,37 +17,10 @@
  * and calls finishCountdown() and expireVote().
  */
 
+import {negotiateControllerCapabilities, supportsSport} from '../../shared/controllerCapabilities.js';
 import { randomBytes, randomUUID } from 'node:crypto';
 
-import {
-  CODE_ALPHABET,
-  CODE_LENGTH,
-  COUNTDOWN_SECONDS,
-  ERRORS,
-  MAX_PLAYERS,
-  NAME_MAX,
-  OPEN_SPORTS,
-  PHASES,
-  PICKS,
-  PROTOCOL_VERSION,
-  READY_AT_PLAYERS,
-  RECONNECT_MS,
-  TUTORIAL_MOVES,
-  VOTE_SECONDS,
-  cleanName,
-  hasTutorial,
-  isRoomCode,
-  isSwing,
-  isRoll,
-  isGameHit,
-  isTennisState,
-  isBowlingState,
-  isStrokeResult,
-  isController,
-  isGameCommand,
-  isGameOptions,
-  playerCapacity,
-} from '../../shared/protocol.js';
+import {CODE_ALPHABET, CODE_LENGTH, COUNTDOWN_SECONDS, ERRORS, MAX_PLAYERS, NAME_MAX, OPEN_SPORTS, PHASES, PICKS, PROTOCOL_VERSION, READY_AT_PLAYERS, RECONNECT_MS, TUTORIAL_MOVES, VOTE_SECONDS, cleanName, hasTutorial, isRoomCode, isSwing, isRoll, isGameHit, isTennisState, isBowlingState, isAim, isStrokeResult, isController, isGameCommand, isGameOptions, playerCapacity} from '../../shared/protocol.js';
 
 const MAX_CODE_ATTEMPTS = 50;
 const COUNTDOWN_MS = COUNTDOWN_SECONDS * 1000;
@@ -86,12 +61,14 @@ export class RoomStore {
   #maxPlayers;
   #now;
   #graceMs;
+  #validateCheckpointState;
 
-  constructor({ makeCode = randomCode, maxPlayers = MAX_PLAYERS, now = Date.now, graceMs = RECONNECT_MS } = {}) {
+  constructor({ makeCode = randomCode, maxPlayers = MAX_PLAYERS, now = Date.now, graceMs = RECONNECT_MS, validateCheckpointState = null } = {}) {
     this.#makeCode = makeCode;
     this.#maxPlayers = maxPlayers;
     this.#now = now;
     this.#graceMs = graceMs;
+    this.#validateCheckpointState = validateCheckpointState;
   }
 
   get roomCount() {
@@ -103,6 +80,9 @@ export class RoomStore {
     const { v, sport } = payload ?? {};
     if (v !== PROTOCOL_VERSION) return { ok: false, error: ERRORS.BAD_VERSION };
     if (!OPEN_SPORTS.includes(sport)) return { ok: false, error: ERRORS.BAD_SPORT };
+    const negotiation = negotiateControllerCapabilities(payload.capabilities);
+    if (!negotiation.ok) return negotiation;
+    if (!supportsSport(negotiation.capabilities, sport)) return {ok: false, error: 'unsupported-sport'};
     const existing = this.#sockets.get(hostId);
     if (existing) return this.#members.get(existing).role === 'host'
       ? this.#sessionView(existing) : { ok: false, error: ERRORS.ALREADY_IN_ROOM };
@@ -118,16 +98,16 @@ export class RoomStore {
     if (!code) return { ok: false, error: ERRORS.SERVER_BUSY };
 
     this.#rooms.set(code, { code, sport, hostId, phase: PHASES.LOBBY, players: new Map(), deadline: null, pausedAt: null, manuallyPaused: false,
-      gameId: null, inputGeneration: 0, gameState: null, pendingRoll: null, seenRolls: new Set(),
+      gameId: null, matchRound: 0, inputGeneration: 0, hostEpoch: 1, profileBindings: new Map(), streams: new Map(), actionResults: new Map(), checkpoint: null, gameState: null, pendingRoll: null, seenRolls: new Set(),
       seenHits: new Set(), lastHitAt: new Map(), pendingStrokes: new Map(), soundMuted: null,
-      gameOptions: null, seenCommands: new Set(), pendingGameCommand: null, vote: null, tutorial: null,
-      calibrating: new Set() });
+      gameOptions: null, seenCommands: new Set(), pendingGameCommand: null, vote: null, tutorial: null });
     const memberId = this.#addSession(hostId, code, 'host');
+    this.#members.get(memberId).capabilities = negotiation.capabilities;
     this.#rooms.get(code).hostId = memberId;
     return this.#sessionView(memberId);
   }
 
-  join(playerId, payload = {}) {
+  join(playerId, payload = {}, authenticatedProfileId = null) {
     const { v, code, name } = payload ?? {};
     if (v !== PROTOCOL_VERSION) return { ok: false, error: ERRORS.BAD_VERSION };
     const room = isRoomCode(code) ? this.#rooms.get(code) : undefined;
@@ -140,52 +120,53 @@ export class RoomStore {
         : { ok: false, error: ERRORS.ALREADY_IN_ROOM };
     }
 
-    const cleaned = cleanName(name);
+    if (room.recoverySource && authenticatedProfileId !== room.recoverySource.profileId) return {ok:false,error:'recovery-owner-required'};
+    const cleaned = cleanName(room.recoverySource?.name ?? name);
     if (!cleaned) return { ok: false, error: ERRORS.BAD_NAME };
 
     const slot = this.#freeSlot(room);
     if (slot === null) return { ok: false, error: ERRORS.ROOM_FULL };
-    // More friends can join until the host starts the countdown.
+    // More friends can join until the leader confirms the start.
     if (!BEFORE_PLAY.has(room.phase)) return { ok: false, error: ERRORS.IN_PROGRESS };
 
+    const negotiation = negotiateControllerCapabilities(payload.capabilities);
+    if (!negotiation.ok) return negotiation;
+    if (!supportsSport(negotiation.capabilities, room.sport)) return {ok: false, error: 'unsupported-sport'};
     const unique = this.#uniqueName(room, cleaned);
     const memberId = this.#addSession(playerId, code, 'player');
+    this.#members.get(memberId).capabilities = negotiation.capabilities;
     room.players.set(memberId, { slot, name: unique, ready: false, setup: null });
-    this.#resetReady(room);
+    room.savedMatch = null; // A different roster must start its own match.
+    // Existing phones have already confirmed Play; a new guest only readies their own seat.
+    if (room.phase !== PHASES.READY) this.#resetReady(room);
     return this.#sessionView(memberId);
   }
 
   /**
-   * Ready or not ready, during the ready check and the countdown. When the
-   * last player readies up the countdown starts by itself; anyone un-readying
-   * during it cancels it. The result says which happened.
+   * Ready or not ready, during the ready check and the countdown. The leader
+   * starts once everyone is ready; anyone un-readying during the countdown
+   * cancels it. The result says whether the countdown was cancelled.
    */
   setReady(playerId, payload) {
     playerId = this.#sockets.get(playerId);
     const member = this.#members.get(playerId);
     if (member?.role !== 'player') return { ok: false, error: ERRORS.NOT_PLAYER };
     const room = this.#rooms.get(member.code);
-    if (room?.phase !== PHASES.READY && room?.phase !== PHASES.CALIBRATION && room?.phase !== PHASES.COUNTDOWN) {
+    if (room?.phase !== PHASES.READY && room?.phase !== PHASES.COUNTDOWN) {
       return { ok: false, error: ERRORS.NO_READY_CHECK };
     }
     if (room.pausedAt !== null) return { ok: false, error: ERRORS.PAUSED };
     const ready = payload?.ready;
     if (typeof ready !== 'boolean') return { ok: false, error: ERRORS.BAD_READY };
+    if (payload.skipTutorial !== undefined && typeof payload.skipTutorial !== 'boolean') return {ok:false,error:ERRORS.BAD_READY};
 
     const player = room.players.get(playerId);
     if (ready && isController(room.sport, player.slot) && !player.setup) return { ok: false, error: 'setup-required' };
     player.ready = ready;
+    if (ready) player.skipTutorial = payload.skipTutorial === true;
 
-    if (room.phase === PHASES.READY && [...room.players.values()].every((seat) => seat.ready)) {
-      room.phase = PHASES.CALIBRATION;
-      return { ok: true, code: room.code, calibrationStarted: true };
-    }
-    if (room.phase === PHASES.CALIBRATION && !ready) {
-      room.phase = PHASES.READY;
-      return { ok: true, code: room.code, calibrationCancelled: true };
-    }
     if (room.phase === PHASES.COUNTDOWN && !ready) {
-      // Everyone else stays ready, so readying up again restarts it at once.
+      // Everyone else stays ready; the leader confirms a fresh start.
       room.phase = PHASES.READY;
       room.deadline = null;
       room.gameId = null;
@@ -195,36 +176,38 @@ export class RoomStore {
     return { ok: true, code: room.code };
   }
 
-  /**
-   * TV -> server: all players finished orientation calibration. Move to countdown.
-   */
-  calibrationDone(socketId) {
+  /** The current leader starts the joined roster; larger parties need no TV configuration. */
+  startGame(socketId) {
     const member = this.#members.get(this.#sockets.get(socketId));
-    if (member?.role !== 'host') return { ok: false, error: ERRORS.NOT_HOST };
-    const room = this.#rooms.get(member.code);
-    if (room?.phase !== PHASES.CALIBRATION) return { ok: false, error: 'not-calibrating' };
-    room.phase = PHASES.COUNTDOWN;
-    room.gameId = randomUUID();
-    room.deadline = this.#now() + COUNTDOWN_MS;
-    return { ok: true, code: room.code, countdownStarted: true, msLeft: COUNTDOWN_MS };
+    const room = member && this.#rooms.get(member.code);
+    if (member?.role !== 'player' || room?.players.get(member.id)?.slot !== this.#leaderSlot(room)) return {ok: false, error: 'not-game-leader'};
+    if (room.phase === PHASES.COUNTDOWN) return {ok: true, code: room.code};
+    if (room.phase !== PHASES.READY) return {ok: false, error: ERRORS.NO_READY_CHECK};
+    if (room.pausedAt !== null) return {ok: false, error: ERRORS.PAUSED};
+    if (!this.#canStart(room)) return {ok: false, error: 'players-not-ready'};
+    return this.#startWhenReady(room);
   }
 
-  /**
-   * Phone -> server: this player finished orientation calibration.
-   * When all controller players are done, advances to countdown.
-   */
-  playerCalibrationDone(socketId) {
-    const playerId = this.#sockets.get(socketId);
-    const member = this.#members.get(playerId);
-    if (member?.role !== 'player') return { ok: false, error: ERRORS.NOT_PLAYER };
-    const room = this.#rooms.get(member.code);
-    if (room?.phase !== PHASES.CALIBRATION) return { ok: false, error: 'not-calibrating' };
-    room.calibrating.add(playerId);
-    const controllers = [...room.players.entries()].filter(([, p]) => isController(room.sport, p.slot));
-    const allDone = controllers.length > 0 && controllers.every(([id]) => room.calibrating.has(id));
-    if (!allDone) return { ok: true, code: room.code };
+  #leaderSlot(room) {
+    return room?.players.size ? Math.min(...[...room.players.values()].map(player => player.slot)) : null;
+  }
+
+  #canStart(room, resolving = false) {
+    return (resolving || !room.savedMatch) && room.phase === PHASES.READY && room.pausedAt === null && room.players.size > 0 &&
+      [...room.players.values()].every(player => player.ready && (!isController(room.sport, player.slot) || player.setup));
+  }
+
+  #startWhenReady(room) {
+    if (!this.#canStart(room)) return {ok: true, code: room.code};
     room.phase = PHASES.COUNTDOWN;
     room.gameId = randomUUID();
+    room.profileBindings = new Map([...room.players.keys()].map(id => [id, this.#members.get(id)?.profileId ?? null]));
+    room.inputGeneration++;
+    room.streams.clear();
+    if (room.recoverySource?.payload) {
+      const payload = room.recoverySource.payload;
+      room.checkpoint = {payload, encoded:JSON.stringify(payload), revision:1, saved:false};
+    }
     room.deadline = this.#now() + COUNTDOWN_MS;
     return { ok: true, code: room.code, countdownStarted: true, msLeft: COUNTDOWN_MS };
   }
@@ -289,6 +272,139 @@ export class RoomStore {
   }
 
   /** Room membership, never a client-supplied code, scopes the shared sound control. */
+  createRecovery(socketId, payload, source) {
+    const current = this.sessionContext(socketId);
+    if (current) {
+      const room = this.#rooms.get(current.code);
+      return current.role === 'host' && room.recoverySource?.matchId === payload.matchId
+        ? this.#sessionView(current.memberId) : {ok:false,error:ERRORS.ALREADY_IN_ROOM};
+    }
+    const result = this.createRoom(socketId, {v:PROTOCOL_VERSION,sport:source.sport,capabilities:payload.capabilities});
+    if (!result.ok) return result;
+    const room = this.#rooms.get(result.code);
+    room.recoverySource = {matchId:payload.matchId,profileId:source.participantProfileId,name:source.participantName,payload:source.state};
+    this.bindProfile(socketId, source.participantProfileId);
+    return {...result,recovering:true};
+  }
+
+  bindProfile(socketId, profileId) {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    if (member) member.profileId = typeof profileId === 'string' ? profileId : null;
+  }
+
+  /** Private server integration view; never broadcast account/member identities. */
+  sessionContext(socketId) {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    const room = member && this.#rooms.get(member.code);
+    if (!room) return null;
+    return {memberId: member.id, role: member.role, code: room.code, profileId: member.profileId ?? null,
+      room: {sport: room.sport, gameId: room.gameId, matchRound: room.matchRound,
+        recoverySource: room.recoverySource ? {matchId:room.recoverySource.matchId,claimId:room.hostId} : null, hostEpoch: room.hostEpoch, inputGeneration: room.inputGeneration,
+        hostMemberId: room.hostId, players: [...room.players.entries()].map(([id, seat]) => ({memberId: id,
+          profileId: room.profileBindings.has(id) ? room.profileBindings.get(id) : this.#members.get(id)?.profileId ?? null, name: seat.name, slot: seat.slot}))}};
+  }
+
+  /** Small authoritative view for transient racket-input leases. Never build
+   * the public lobby/reconnection snapshot in this per-peer heartbeat path. */
+  directInputContext(socketId) {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    const room = member && this.#rooms.get(member.code);
+    if (!room || !['tennis'].includes(room.sport) || room.phase !== PHASES.GAME ||
+        room.pausedAt !== null || !room.gameId || room.gameState?.phase === 'complete') return null;
+    const seat = member.role === 'player' && room.players.get(member.id);
+    if (member.role === 'host' ? room.hostId !== member.id :
+      member.role !== 'player' || !seat || seat.slot > 1 || !seat.setup) return null;
+    return {memberId:member.id,role:member.role,code:room.code,sport:room.sport,
+      gameId:room.gameId,generation:room.inputGeneration,hostEpoch:room.hostEpoch,
+      ...(seat ? {player:seat.slot + 1} : {})};
+  }
+
+  saveCheckpoint(socketId, event) {
+    const context = this.sessionContext(socketId);
+    const room = context && this.#rooms.get(context.code);
+    if (context?.role !== 'host') return {ok: false, error: ERRORS.NOT_HOST};
+    if (room.phase !== PHASES.GAME || event?.gameId !== room.gameId || event.hostEpoch !== room.hostEpoch ||
+        event.generation !== room.inputGeneration) return {ok: false, error: 'wrong-generation'};
+    if (room.sport !== event.sport || event.rulesVersion !== 1 || event.checkpointVersion !== 1) return {ok: false, error: 'unsupported-checkpoint'};
+    if (room.pendingRoll || room.gameState?.phase === 'rolling' || room.gameState?.phase === 'rally') return {ok: false, error: 'unstable-checkpoint'};
+    if (!this.#validateCheckpointState) return {ok: false, error: 'unsupported-checkpoint'};
+    let encoded;
+    try {this.#validateCheckpointState(context.room, event.payload); encoded = validateCheckpoint(room.sport, event.payload);} catch {return {ok: false, error: 'invalid-checkpoint'};}
+    if (room.checkpoint?.encoded === encoded) return {ok: true, code: room.code, checkpoint: room.checkpoint, duplicate: true};
+    if (event.expectedRevision !== (room.checkpoint?.revision ?? 0)) return {ok: false, error: 'revision-conflict', revision: room.checkpoint?.revision ?? 0};
+    room.checkpoint = {payload: JSON.parse(encoded), encoded, revision: (room.checkpoint?.revision ?? 0) + 1, saved: false};
+    return {ok: true, code: room.code, checkpoint: room.checkpoint};
+  }
+
+  checkpointStatus(code, revision, status) {
+    const checkpoint = this.#rooms.get(code)?.checkpoint;
+    if (checkpoint?.revision === revision) Object.assign(checkpoint, {saved: status.saved === true, saveError: status.error ?? null});
+  }
+
+  recovery(socketId, payload) {
+    const context = this.sessionContext(socketId);
+    const room = context && this.#rooms.get(context.code);
+    if (context?.role !== 'host') return {ok: false, error: ERRORS.NOT_HOST};
+    if (payload?.gameId !== room.gameId || payload.hostEpoch !== room.hostEpoch) return {ok: false, error: 'not-playing'};
+    return {ok: true, checkpoint: room.checkpoint ? {payload: room.checkpoint.payload, revision: room.checkpoint.revision, saved: room.checkpoint.saved} : null};
+  }
+
+  /** Same room and member tokens, fresh game/input state. Only the TV/P1 can switch. */
+  switchSport(socketId, payload, role = 'host') {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    const room = member && this.#rooms.get(member.code);
+    if (!room || member.role !== role || (role === 'player' && room.players.get(member.id)?.slot !== 0)) return {ok: false, error: 'not-game-leader'};
+    if (!OPEN_SPORTS.includes(payload?.sport)) return {ok: false, error: ERRORS.BAD_SPORT};
+    if (payload.gameId !== room.gameId) return {ok: false, error: 'not-playing'};
+    if (!BEFORE_PLAY.has(room.phase) && room.gameState?.phase !== 'complete') return {ok: false, error: 'return-to-lobby-first'};
+    if (room.savedMatch) return {ok: false, error: 'resolve-saved-match'};
+    if ([...room.players.values()].some(player => player.slot >= playerCapacity(payload.sport))) return {ok: false, error: 'too-many-players'};
+    if ([...this.#members.values()].some(peer => peer.code === room.code && !supportsSport(peer.capabilities, payload.sport))) return {ok: false, error: 'unsupported-sport'};
+    if (room.sport === payload.sport) return {ok: true, code: room.code};
+    room.recoverySource = null;
+    room.sport = payload.sport;
+    // Motion grips are sport-specific. Touch setup remains valid across sports.
+    for (const player of room.players.values()) if (player.setup === 'motion') player.setup = null;
+    room.deadline = null;
+    this.#resetReady(room); this.#updatePause(room);
+    return {ok: true, code: room.code};
+  }
+
+  /** Authenticated latest-state relay: never chooses a target from client identity. */
+  continuousTarget(socketId, event, kind) {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    const room = member && this.#rooms.get(member.code);
+    const player = room?.players.get(member.id);
+    if (member?.role !== 'player' || !player || !player.setup ||
+        (kind !== 'aim' || room.sport !== 'bowling')) return {ok: false, error: 'not-controller'};
+    if (!isAim(event)) return {ok: false, error: 'bad-input'};
+    if (room.phase !== PHASES.GAME || event.gameId !== room.gameId || room.gameState?.phase === 'complete') return {ok: false, error: 'not-playing'};
+    if (room.pausedAt !== null) return {ok: false, error: 'paused'};
+    if (event.generation !== room.inputGeneration || event.hostEpoch !== room.hostEpoch) return {ok: false, error: 'wrong-generation'};
+    if (kind === 'aim' && (room.gameState?.phase !== 'ready' || room.gameState.currentPlayer !== player.slot + 1)) return {ok: false, error: 'not-your-turn'};
+    const key = member.id + ':' + kind + ':' + room.inputGeneration;
+    const last = room.streams.get(key);
+    if (last && event.seq <= last.seq) return {ok: false, error: 'stale-sequence'};
+    const now = this.#now();
+    if (last && now - last.at < 12) {
+      last.seq = event.seq; return {ok: false, error: 'rate-limited'};
+    }
+    const stream = {seq: event.seq, at: now};
+    room.streams.set(key, stream);
+    if (room.streams.size > 32) room.streams.delete(room.streams.keys().next().value);
+    const clean = {gameId: room.gameId, generation: room.inputGeneration, hostEpoch: room.hostEpoch, seq: event.seq, player: player.slot + 1};
+    Object.assign(clean, {aim: event.aim, locked: event.locked});
+    return {ok: true, code: room.code, hostSocketId: this.#members.get(room.hostId)?.socketId, event: clean};
+  }
+
+  actionStatus(socketId, payload) {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    const room = member && this.#rooms.get(member.code);
+    const action = room?.actionResults.get(payload?.id);
+    if (member?.role !== 'player' || !action || action.memberId !== member.id || action.gameId !== payload.gameId) return {ok: false, error: 'unknown-action'};
+    return {ok: true, id: payload.id, status: action.status, result: action.result};
+  }
+
   setSound(socketId, payload) {
     const member = this.#members.get(this.#sockets.get(socketId));
     const room = member && this.#rooms.get(member.code);
@@ -323,17 +439,18 @@ export class RoomStore {
           ('botDifficulty' in event.settings || 'splitView' in event.settings))) {
       return { ok: false, error: 'solo-only' };
     }
+
     // Retain IDs for this whole lobby match, including timed-out requests: a
     // delayed retry must never reset a match twice. Bound memory without eviction.
     if (room.seenCommands.size >= 1024) return { ok: false, error: 'game-command-limit' };
     room.seenCommands.add(event.id);
-    if (event.action === 'new-match') { room.inputGeneration++; room.pendingStrokes.clear(); }
+    if (event.action === 'new-match' || room.sport !== 'tennis' && ['practice-start','practice-stop'].includes(event.action)) { room.inputGeneration++; room.matchRound++; room.checkpoint = null; room.pendingStrokes.clear(); room.profileBindings = new Map([...room.players.keys()].map(id => [id,this.#members.get(id)?.profileId ?? null])); }
     room.pendingGameCommand = event.id;
     const command = { id: event.id, gameId: room.gameId, action: event.action };
     if (event.settings) command.settings = { ...event.settings };
     if (event.format) command.format = event.format;
     if (event.stroke) { command.stroke = event.stroke; command.hand = event.hand; }
-    return { ok: true, code: room.code, hostSocketId: this.#members.get(room.hostId)?.socketId, event: command };
+    return { ok: true, code: room.code, hostEpoch: room.hostEpoch, inputGeneration: room.inputGeneration, hostSocketId: this.#members.get(room.hostId)?.socketId, event: command };
   }
 
   finishGameCommand(code, id, gameId) {
@@ -348,6 +465,8 @@ export class RoomStore {
     if (room.phase !== PHASES.GAME || payload?.gameId !== room.gameId) return { ok: false, error: 'not-playing' };
     if (!isGameOptions(payload, room.sport)) return { ok: false, error: 'bad-game-options' };
     const snapshot = { gameId: room.gameId, sport: room.sport };
+
+    if (room.sport === 'bowling' && payload.practice) snapshot.practice = {active: payload.practice.active};
     if (room.sport === 'tennis') {
       snapshot.settings = Object.fromEntries(['assistance', 'botDifficulty', 'autoMove', 'timingAssist', 'splitView', 'format']
         .map(key => [key, payload.settings[key]]));
@@ -375,10 +494,41 @@ export class RoomStore {
       return { ok: false, error: 'not-playing' };
     }
     room.deadline = null;
-    this.#resetReady(room);
+    this.#parkMatch(room);
     // Keep genuine reconnect pauses, but a missing setup no longer pauses a lobby.
     this.#updatePause(room);
     return { ok: true, code: room.code };
+  }
+
+  /** Keep the last completed point/roll, never replay an in-flight action. */
+  #parkMatch(room) {
+    const saved = room.savedMatch || (room.phase === PHASES.GAME && room.gameState?.phase !== 'complete' && room.checkpoint && room.players.size
+      ? {gameId: room.gameId, matchRound: room.matchRound, checkpoint: room.checkpoint,
+        profileBindings: new Map(room.profileBindings), roster: [...room.players.keys()], sport: room.sport}
+      : null);
+    room.deadline = null;
+    this.#resetReady(room);
+    room.savedMatch = saved;
+  }
+
+  resolveMatch(socketId, payload) {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    const room = member && this.#rooms.get(member.code);
+    if (member?.role !== 'host' || room?.hostId !== member.id) return {ok:false,error:ERRORS.NOT_HOST};
+    const saved = room.savedMatch;
+    if (!saved || room.phase !== PHASES.READY || payload?.gameId !== saved.gameId) return {ok:false,error:'no-saved-match'};
+    if (!['continue', 'new'].includes(payload.choice)) return {ok:false,error:'bad-match-choice'};
+    if (payload.choice === 'new') {
+      this.#resetReady(room); this.#updatePause(room);
+      return {ok:true,code:room.code};
+    }
+    if (!this.#canStart(room, true)) return {ok:false,error:'players-not-ready'};
+    if (saved.sport !== room.sport || saved.roster.length !== room.players.size || saved.roster.some(id => !room.players.has(id))) return {ok:false,error:'no-saved-match'};
+    room.gameId = saved.gameId; room.matchRound = saved.matchRound;
+    room.profileBindings = new Map(saved.profileBindings); room.checkpoint = saved.checkpoint;
+    room.inputGeneration++; room.streams.clear(); room.hostEpoch++;
+    room.phase = PHASES.COUNTDOWN; room.deadline = this.#now() + COUNTDOWN_MS;
+    return {ok:true,code:room.code};
   }
 
   /** Shared pause never bypasses reconnect or controller setup requirements. */
@@ -417,9 +567,9 @@ export class RoomStore {
       player.setup = payload.setup;
       if (room.phase === PHASES.READY) {
         player.ready = false;
-      } else if (BEFORE_PLAY.has(room.phase) || room.phase === PHASES.CALIBRATION || room.phase === PHASES.COUNTDOWN) {
+      } else if (BEFORE_PLAY.has(room.phase) || room.phase === PHASES.COUNTDOWN) {
         room.deadline = null;
-        this.#resetReady(room);
+        this.#parkMatch(room);
       }
       this.#updatePause(room);
     }
@@ -434,7 +584,10 @@ export class RoomStore {
     if (member?.role !== 'player' || !player || room.sport !== 'tennis' || player.slot > 1) {
       return { ok: false, error: 'not-controller' };
     }
+    if (!member.capabilities?.legacy && (event?.gameId !== room.gameId || event?.generation !== room.inputGeneration || event?.hostEpoch !== room.hostEpoch)) return {ok:false,error:'wrong-generation'};
     if (!isSwing(event)) return { ok: false, error: 'bad-swing' };
+    if ((event.generation !== undefined || event.hostEpoch !== undefined) &&
+        (event.generation !== room.inputGeneration || event.hostEpoch !== room.hostEpoch)) return {ok:false,error:'wrong-generation'};
     if (room.pausedAt !== null) return { ok: false, error: ERRORS.PAUSED };
     if (room.phase !== PHASES.GAME || event.gameId !== room.gameId || room.gameState?.phase === 'complete') {
       return { ok: false, error: 'not-playing' };
@@ -445,9 +598,12 @@ export class RoomStore {
     }
     if (!room.pendingStrokes.has(event.id)) room.pendingStrokes.set(event.id, { player: player.slot + 1, at: now });
     if (room.pendingStrokes.size > 128) room.pendingStrokes.delete(room.pendingStrokes.keys().next().value);
-    return { ok: true, code: room.code, inputGeneration: room.inputGeneration, hostSocketId: this.#members.get(room.hostId)?.socketId,
+    return { ok: true, code: room.code, hostEpoch: room.hostEpoch, inputGeneration: room.inputGeneration, hostSocketId: this.#members.get(room.hostId)?.socketId,
       event: { type: 'swing', id: event.id, label: event.label, hand: event.hand,
-        ...(event.power === undefined ? {} : { power: event.power }), player: player.slot + 1, gameId: room.gameId } };
+        ...(event.power === undefined ? {} : { power: event.power }),
+        ...copySwingDetails(event),
+        player: player.slot + 1, gameId: room.gameId,
+        ...(!member.capabilities?.legacy ? {generation:room.inputGeneration,hostEpoch:room.hostEpoch} : {}) } };
   }
 
   /** Correlated diagnostics are private, transient feedback for a real recent input. */
@@ -470,6 +626,7 @@ export class RoomStore {
     if (!target?.socketId) return { ok: false, error: 'disconnected' };
     return { ok: true, phoneSocketId: target.socketId, event: {
       id: event.id, gameId: room.gameId, player: event.player, result: event.result, reason: event.reason,
+      ...(event.receivedToPreparationMs === undefined ? {} : { receivedToPreparationMs: event.receivedToPreparationMs }),
       ...(event.receivedToContactMs === undefined ? {} : { receivedToContactMs: event.receivedToContactMs }),
     } };
   }
@@ -508,11 +665,14 @@ export class RoomStore {
     if (room.phase !== PHASES.GAME || payload?.gameId !== room.gameId) {
       return { ok: false, error: 'not-playing' };
     }
+
     if (room.sport === 'tennis') {
       if (!isTennisState(payload)) return { ok: false, error: 'bad-game-state' };
       room.gameState = { phase: payload.phase, server: payload.server, winner: payload.winner,
         ...(payload.practice === undefined ? {} : { practice: payload.practice }),
-        ...(payload.serveAttempt === undefined ? {} : { serveAttempt: payload.serveAttempt }) };
+        ...(payload.serveAttempt === undefined ? {} : { serveAttempt: payload.serveAttempt }),
+        ...(payload.score === undefined ? {} : {score: [...payload.score], sets: [...payload.sets],
+          completedSets: payload.completedSets.map(set => ({player1: set.player1, player2: set.player2})), targetPoints: 7, setsToWin: 2}) };
       return { ok: true, code: room.code };
     }
     if (room.sport !== 'bowling') return { ok: false, error: 'not-playing' };
@@ -531,9 +691,15 @@ export class RoomStore {
     const room = member && this.#rooms.get(member.code);
     const player = room?.players.get(member.id);
     if (!player || room.sport !== 'bowling') return { ok: false, error: 'not-controller' };
+    if (!member.capabilities?.legacy && (event?.gameId !== room.gameId || event?.generation !== room.inputGeneration || event?.hostEpoch !== room.hostEpoch)) return {ok:false,error:'wrong-generation'};
     if (!isRoll(event)) return { ok: false, error: 'bad-roll' };
     if (room.pausedAt !== null) return { ok: false, error: ERRORS.PAUSED };
     if (room.phase !== PHASES.GAME) return { ok: false, error: 'not-playing' };
+    // Older controllers may omit the game ID, but an explicitly stale game must
+    // never be stamped with the current match and accepted as a new release.
+    if (event.gameId !== undefined && event.gameId !== room.gameId) return {ok:false,error:'not-playing'};
+    if ((event.generation !== undefined || event.hostEpoch !== undefined) &&
+        (event.generation !== room.inputGeneration || event.hostEpoch !== room.hostEpoch)) return {ok: false, error: 'wrong-generation'};
     if (room.seenRolls.has(event.id)) return { ok: false, error: 'duplicate-roll' };
     // A reset and a release must never cross in flight. The game command owns
     // the lane until its acknowledgement (or timeout) releases this lock.
@@ -543,15 +709,22 @@ export class RoomStore {
     if (room.gameState.currentPlayer !== player.slot + 1) return { ok: false, error: 'not-your-turn' };
     room.pendingRoll = event.id;
     room.seenRolls.add(event.id);
+    room.actionResults.set(event.id, {memberId: member.id, gameId: room.gameId, status: 'pending'});
+    if (room.actionResults.size > 256) room.actionResults.delete(room.actionResults.keys().next().value);
     if (room.seenRolls.size > 256) room.seenRolls.delete(room.seenRolls.values().next().value);
-    return { ok: true, code: room.code, hostSocketId: this.#members.get(room.hostId)?.socketId,
+    return { ok: true, code: room.code, hostEpoch: room.hostEpoch, inputGeneration: room.inputGeneration, hostSocketId: this.#members.get(room.hostId)?.socketId,
       event: { type: 'roll', id: event.id, power: event.power, spin: event.spin, aim: event.aim,
-        player: player.slot + 1, gameId: room.gameId } };
+        player: player.slot + 1, gameId: room.gameId,
+        ...(!member.capabilities?.legacy ? {generation:room.inputGeneration,hostEpoch:room.hostEpoch} : {}) } };
   }
 
-  finishRollDelivery(code, id, gameId) {
+  finishRollDelivery(code, id, gameId, result) {
     const room = this.#rooms.get(code);
-    if (room && room.gameId === gameId && room.pendingRoll === id) room.pendingRoll = null;
+    if (room && room.gameId === gameId && room.pendingRoll === id) {
+      room.pendingRoll = null;
+      const action = room.actionResults.get(id);
+      if (action) Object.assign(action, {status: result?.ok ? 'accepted' : result?.error === 'outcome-unknown' ? 'unknown' : 'rejected', result: result ?? {ok:false,error:'disconnected'}});
+    }
   }
 
   /**
@@ -563,7 +736,9 @@ export class RoomStore {
     const room = this.#rooms.get(code);
     if (room?.phase !== PHASES.COUNTDOWN || room.pausedAt !== null || this.#now() < room.deadline) return null;
     this.#clearReady(room);
-    if (!hasTutorial(room.sport)) {
+    room.savedMatch = null;
+    if (!hasTutorial(room.sport) || [...room.players.values()].every(player => player.skipTutorial)) {
+      if (room.recoverySource) room.recoverySource.payload = null;
       room.phase = PHASES.GAME;
       room.deadline = null;
       return { code };
@@ -585,29 +760,23 @@ export class RoomStore {
       room.phase === PHASES.COUNTDOWN ? { msLeft: Math.max(0, room.deadline - (room.pausedAt ?? this.#now())) } : null;
     const reconnecting = [...this.#members.values()]
       .filter(member => member.code === code && member.disconnectedAt !== null)
-      .map(member => ({ name: member.role === 'host' ? 'TV' : room.players.get(member.id)?.name,
-        msLeft: Math.max(0, this.#graceMs - (this.#now() - member.disconnectedAt)) }));
-    const calibratedSlots = [...room.players.entries()]
-      .filter(([id]) => room.calibrating.has(id))
-      .map(([, p]) => p.slot);
-    return { code: room.code, sport: room.sport, phase: room.phase, players, countdown,
+      .map(member => ({ role: member.role, name: member.role === 'host' ? 'TV' : room.players.get(member.id)?.name,
+        msLeft: this.#keepHost(member) ? null : Math.max(0, this.#graceMs - (this.#now() - member.disconnectedAt)) }));
+    return { code: room.code, sport: room.sport, phase: room.phase, players, countdown, leaderSlot: this.#leaderSlot(room), canStart: this.#canStart(room),
       vote: this.#voteView(room), tutorial: this.#tutorialView(room),
       paused: room.pausedAt !== null, manuallyPaused: room.manuallyPaused, reconnecting,
       setupPending: players.filter(player => isController(room.sport, player.slot) && !player.setup).map(player => player.name),
-      gameId: room.gameId, gameState: room.gameState, soundMuted: room.soundMuted, gameOptions: room.gameOptions,
-      calibratedSlots };
+      resumeGame: room.savedMatch && BEFORE_PLAY.has(room.phase) ? {gameId:room.savedMatch.gameId, canContinue:this.#canStart(room, true)} : null,
+      recovery: {ownerRequired: Boolean(room.recoverySource), available: Boolean(room.checkpoint), saved: room.checkpoint?.saved ?? false, revision: room.checkpoint?.revision ?? 0},
+      gameId: room.gameId, matchRound: room.matchRound, inputGeneration: room.inputGeneration, hostEpoch: room.hostEpoch, gameState: room.gameState, soundMuted: room.soundMuted, gameOptions: room.gameOptions };
   }
 
-  /** Slot + host socket for forwarding volatile player events. Null if not in a room. */
-  memberRoom(socketId) {
-    const id = this.#sockets.get(socketId);
-    const member = this.#members.get(id);
-    if (!member) return null;
-    const room = this.#rooms.get(member.code);
-    if (!room) return null;
-    const player = member.role === 'player' ? room.players.get(id) : null;
-    const hostSocketId = this.#members.get(room.hostId)?.socketId ?? null;
-    return { slot: player?.slot ?? null, hostSocketId };
+  /** A lobby broadcast includes only this socket's own changing seat identity. */
+  lobbyForSocket(socketId, snapshot) {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    if (!member || member.code !== snapshot?.code) return snapshot;
+    const seat = this.#rooms.get(member.code)?.players.get(member.id);
+    return seat ? {...snapshot, slot: seat.slot, name: seat.name} : snapshot;
   }
 
   /** The code this id is hosting, or null. */
@@ -627,6 +796,16 @@ export class RoomStore {
     return this.#removeMember(this.#sockets.get(socketId));
   }
 
+  /** A pagehide may reserve the seat before its Leave acknowledgement arrives. */
+  leaveSession(socketId, payload, role) {
+    const current = this.#members.get(this.#sockets.get(socketId));
+    const claimed = payload?.token ? this.#members.get(this.#tokens.get(payload.token)) : current;
+    if (!claimed) return current ? {ok:false,error:ERRORS.BAD_SESSION} : {ok:true}; // Already expired/closed is left too.
+    if (claimed.role !== role || (payload?.code && claimed.code !== payload.code) ||
+        (claimed.socketId && claimed.socketId !== socketId) || (current && current.id !== claimed.id)) return {ok:false,error:ERRORS.BAD_SESSION};
+    return {ok:true,...this.#removeMember(claimed.id)};
+  }
+
   #removeMember(id) {
     const member = this.#members.get(id);
     if (!member) return null;
@@ -639,11 +818,13 @@ export class RoomStore {
       const playerIds = [...room.players.keys()].map(id => this.#members.get(id)?.socketId).filter(Boolean);
       for (const playerId of room.players.keys()) this.#deleteSession(playerId);
       this.#rooms.delete(room.code);
-      return { code: room.code, closed: true, playerIds };
+      return { code: room.code, closed: true, playerIds,
+        ...(room.recoverySource ? {recoverySource:{matchId:room.recoverySource.matchId,claimId:room.hostId}} : {}) };
     }
 
     const leavingSlot = room.players.get(id)?.slot;
     room.players.delete(id);
+    room.savedMatch = null;
     this.#updatePause(room);
     // A controller leaving ends this match, the vote and tutorial before it
     // included; temporary drops keep their reserved seat.
@@ -656,10 +837,13 @@ export class RoomStore {
       this.#advanceTutorial(room);
     }
     // Any seat change before play cancels the countdown and asks the remaining
-    // players to confirm again. Tennis needs P1 before a new match can start.
+    // players to confirm again. Seat compaction preserves a playable first controller.
     if (BEFORE_PLAY.has(room.phase) || room.phase === PHASES.COUNTDOWN) {
       const countdownCancelled = room.phase === PHASES.COUNTDOWN;
       room.deadline = null;
+      // Departures release seats; unlike a temporary disconnect they cannot strand
+      // a lone racket player at P2, or keep a smaller sport blocked by old slot IDs.
+      [...room.players.values()].sort((a, b) => a.slot - b.slot).forEach((player, slot) => {player.slot = slot;});
       this.#resetReady(room);
       this.#updatePause(room);
       if (countdownCancelled) return { code: room.code, closed: false, countdownCancelled };
@@ -688,7 +872,7 @@ export class RoomStore {
     const member = this.#members.get(id);
     const room = this.#rooms.get(member.code);
     const player = member.role === 'player' ? room.players.get(id) : null;
-    return { ok: true, token: member.token, role: member.role,
+    return { ok: true, token: member.token, role: member.role, capabilities: member.capabilities,
       ...(player ? { slot: player.slot, name: player.name } : {}), ...this.lobby(member.code) };
   }
 
@@ -699,6 +883,7 @@ export class RoomStore {
     else if (!missing && room.pausedAt !== null) {
       if (room.deadline !== null) room.deadline += this.#now() - room.pausedAt;
       room.pausedAt = null;
+      room.inputGeneration++; room.streams.clear();
     }
   }
 
@@ -711,24 +896,34 @@ export class RoomStore {
     member.socketId = null;
     member.disconnectedAt = this.#now();
     const room = this.#rooms.get(member.code);
+    if (member.role === 'host' && ((expectedCode && [PHASES.GAME, PHASES.COUNTDOWN, PHASES.VOTE, PHASES.TUTORIAL].includes(room.phase)) ||
+        (room.phase === PHASES.GAME && room.checkpoint && room.gameState?.phase !== 'complete'))) this.#parkMatch(room);
     this.#updatePause(room);
     return { code: member.code };
   }
 
-  resume(socketId, payload = {}) {
+  resume(socketId, payload = {}, authenticatedProfileId = null) {
     const { v, code, token, role } = payload ?? {};
     if (v !== PROTOCOL_VERSION) return { ok: false, error: ERRORS.BAD_VERSION };
     if (!this.#rooms.has(code)) return { ok: false, error: ERRORS.NO_ROOM };
     const id = this.#tokens.get(token);
     const member = this.#members.get(id);
     if (!member || member.code !== code || member.role !== role ||
-        (member.disconnectedAt !== null && this.#now() - member.disconnectedAt >= this.#graceMs)) {
+        (member.disconnectedAt !== null && this.#now() - member.disconnectedAt >= this.#graceMs && !this.#keepHost(member))) {
       return { ok: false, error: ERRORS.BAD_SESSION };
     }
+    const recoveryOwner = this.#rooms.get(code).recoverySource?.profileId;
+    if (recoveryOwner && authenticatedProfileId !== recoveryOwner) return {ok:false,error:'recovery-owner-required'};
     const occupying = this.#sockets.get(socketId);
     if (occupying && occupying !== id) return { ok: false, error: ERRORS.ALREADY_IN_ROOM };
     const replacedSocketId = member.socketId !== socketId ? member.socketId : null;
     if (replacedSocketId) this.#sockets.delete(replacedSocketId);
+    const room = this.#rooms.get(code);
+    if (member.role === 'host' && member.disconnectedAt !== null && room.phase === PHASES.GAME && room.checkpoint && room.gameState?.phase !== 'complete') this.#parkMatch(room);
+    if (member.socketId !== socketId) {
+      room.inputGeneration++; room.streams.clear();
+      if (member.role === 'host') room.hostEpoch++;
+    }
     member.socketId = socketId;
     member.disconnectedAt = null;
     this.#sockets.set(socketId, id);
@@ -741,10 +936,16 @@ export class RoomStore {
     const changes = [];
     for (const member of [...this.#members.values()]) {
       if (member.disconnectedAt === null || this.#now() - member.disconnectedAt < this.#graceMs) continue;
+      if (this.#keepHost(member)) continue;
       const result = this.#removeMember(member.id);
       if (result) changes.push(result);
     }
     return changes;
+  }
+
+  #keepHost(member) {
+    return member.role === 'host' && [...(this.#rooms.get(member.code)?.players.keys() ?? [])]
+      .some(id => this.#members.get(id)?.disconnectedAt === null);
   }
 
   get countdownCodes() {
@@ -765,17 +966,17 @@ export class RoomStore {
   }
 
   #resetReady(room) {
+    room.savedMatch = null;
     room.inputGeneration++;
+    room.streams.clear(); room.actionResults.clear(); room.checkpoint = null; room.profileBindings.clear();
     this.#clearReady(room);
     room.manuallyPaused = false;
-    room.gameId = null; room.gameState = null; room.pendingRoll = null; room.seenRolls.clear();
+    room.gameId = null; room.matchRound = 0; room.gameState = null; room.pendingRoll = null; room.seenRolls.clear();
     room.seenHits.clear(); room.lastHitAt.clear();
     room.pendingStrokes.clear();
     room.gameOptions = null; room.seenCommands.clear(); room.pendingGameCommand = null;
     room.vote = null; room.tutorial = null;
-    room.calibrating.clear();
-    room.phase = room.players.size >= READY_AT_PLAYERS &&
-      (room.sport === 'bowling' || [...room.players.values()].some(player => player.slot === 0)) ? PHASES.READY : PHASES.LOBBY;
+    room.phase = room.players.size >= READY_AT_PLAYERS ? PHASES.READY : PHASES.LOBBY;
   }
 
   /** Any Yes means the tutorial. Picks are frozen by slot for the reveal. */

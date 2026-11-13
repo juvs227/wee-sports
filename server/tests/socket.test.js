@@ -80,7 +80,7 @@ test('lobby swings reach only their TV, reject extra phones and stale sessions, 
   await send(second, EVENTS.PLAYER_SETUP, { setup: 'buttons' });
   await send(phone, EVENTS.PLAYER_READY, { ready: true });
   await send(second, EVENTS.PLAYER_READY, { ready: true });
-  await send(host, EVENTS.HOST_CALIBRATION_DONE, {});
+  await send(phone, EVENTS.PLAYER_START, {});
   now += 5000; store.finishCountdown(room.code);
   now += VOTE_SECONDS * 1000; store.expireVote(room.code);
   assert.equal(store.lobby(room.code).phase, PHASES.GAME);

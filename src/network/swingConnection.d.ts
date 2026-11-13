@@ -1,3 +1,5 @@
+export type NormalVector = [number, number, number];
+export interface SwingDetails {aim?: number; depth?: number; netNormal?: NormalVector; swingNormal?: NormalVector}
 export type SwingLabel = 'Forehand' | 'Backhand';
 export type SwingHand = 'Left' | 'Right';
 
@@ -7,6 +9,10 @@ export interface SwingEvent {
     label: SwingLabel;
     hand: SwingHand;
     power?: number;
+    aim?: number;
+    depth?: number;
+    netNormal?: NormalVector;
+    swingNormal?: NormalVector;
     player?: 1 | 2;
 }
 
@@ -20,7 +26,7 @@ export interface SwingConnectionOptions {
 }
 
 export interface SwingConnection {
-    sendSwing(label: SwingLabel, hand: SwingHand, power?: number): boolean;
+    sendSwing(label: SwingLabel, hand: SwingHand, power?: number, placement?: SwingDetails | NormalVector, swingNormal?: NormalVector): boolean;
     close(): void;
 }
 

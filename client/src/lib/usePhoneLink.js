@@ -10,23 +10,34 @@ export function usePhoneLink(code) {
     let disposed = false;
     let retry;
     let controller;
+    let requestTimeout;
+    let currentLink = link;
+    function updateLink(data) {
+      if (disposed) return;
+      currentLink = resolvePhoneLink(currentLink, data, window.location.origin);
+      setLink(currentLink);
+    }
     async function readLink() {
       controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 4000);
+      requestTimeout = setTimeout(() => controller.abort(), 4000);
       try {
         const response = await fetch('/api/phone-link', { signal: controller.signal, cache: 'no-store' });
         const data = response.ok ? await response.json() : null;
-        if (!disposed) setLink(current => resolvePhoneLink(current, data, window.location.origin));
+        updateLink(data);
       } catch {
-        if (!disposed) setLink(current => resolvePhoneLink(current, null, window.location.origin));
+        updateLink(null);
       }
       finally {
-        clearTimeout(timer);
-        if (!disposed) { setLoading(false); retry = setTimeout(readLink, 10000); }
+        clearTimeout(requestTimeout);
+        if (!disposed) {
+          setLoading(false);
+          const waiting = !currentLink.origin && ['connecting', 'reconnecting', 'unavailable'].includes(currentLink.status);
+          retry = setTimeout(readLink, waiting ? 1000 : 10000);
+        }
       }
     }
     void readLink();
-    return () => { disposed = true; clearTimeout(retry); controller?.abort(); };
+    return () => { disposed = true; clearTimeout(retry); clearTimeout(requestTimeout); controller?.abort(); };
   }, []);
   return { url: link.origin ? joinUrl(code, link.origin) : null, loading, status: link.status };
 }

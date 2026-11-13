@@ -321,14 +321,12 @@
   background: var(--surface);
   box-shadow: var(--shadow-sm);
   transition:
-    transform 200ms var(--ease),
     box-shadow 200ms var(--ease),
     border-color 200ms var(--ease);
 }
 
-.tile[data-open='true']:hover,
-.tile[data-open='true']:focus-within {
-  transform: translateY(-3px);
+.tile[data-interactive='true']:hover,
+.tile[data-interactive='true']:focus-within {
   border-color: var(--accent);
   box-shadow:
     0 0 0 4px var(--accent-soft),
@@ -352,7 +350,7 @@
   transition: transform 300ms var(--ease);
 }
 
-.tile[data-open='true']:hover .tile__icon {
+.tile[data-interactive='true']:hover .tile__icon {
   transform: scale(1.06) rotate(-3deg);
 }
 
@@ -397,6 +395,21 @@
 
 .tile__foot .btn {
   width: 100%;
+}
+
+/* The stretched action must not become a transformed containing block:
+   otherwise hovering its full-card hit area shrinks that area to the button,
+   repeatedly losing and regaining hover. Keep all interactive geometry fixed. */
+.tile__action,
+.tile__action:hover:not(:disabled),
+.tile__action:active:not(:disabled) {
+  transform: none;
+  transition: box-shadow 160ms var(--ease), border-color 160ms var(--ease), background-color 160ms var(--ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile, .tile__icon, .tile__action { transition: none; }
+  .tile[data-interactive='true']:hover .tile__icon { transform: none; }
 }
 
 /* Stretches the button over the whole tile. */
@@ -1504,17 +1517,35 @@
 }
 /* The lobby stays mounted while the existing tennis pages run inside it. */
 .tennis-session { padding: 16px; }
-.prototype-frame { position: relative; margin: 16px 0; }
-.prototype-frame iframe { display: block; width: 100%; height: 75vh; min-height: 480px; border: 0; border-radius: 12px; }
-.prototype-frame__pause { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; background: var(--page-overlay); color: var(--text); text-align: center; font-weight: 800; }
+.game-frame { position: relative; margin: 16px 0; }
+.game-frame iframe { display: block; width: 100%; height: 75vh; min-height: 480px; border: 0; border-radius: 12px; }
+.game-frame__pause { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; background: var(--page-overlay); color: var(--text); text-align: center; font-weight: 800; }
 
 /* Continue the homepage's rounded, light surfaces through the whole session. */
 .host-lobby { max-width: 64rem; }
 .host-lobby .stub__row { background: var(--surface); padding: 24px; border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); }
 .host-lobby .stub__qr { width: min(12rem, 60vw); }
 .phone-session { max-width: 42rem; }
+.phone-join { max-width: 30rem; padding-top: clamp(2rem, 12vh, 7rem); }
+.phone-join h1 { font-size: clamp(3.5rem, 15vw, 5.5rem); letter-spacing: -.055em; line-height: .98; }
+.phone-join__code { margin: 1.5rem 0 1rem; font-weight: 800; color: var(--text-muted); }
+.phone-join__name { margin: 1rem 0; }
+.phone-join__name summary { padding: .8rem 0; cursor: pointer; color: var(--text-muted); }
+.phone-join__name .field { margin-top: .5rem; }
+.phone-join .stub__actions { display: flex; flex-direction: column; align-items: stretch; }
+.phone-join .btn--primary { min-height: 3.6rem; font-size: 1.2rem; }
+.phone-join__hint { margin-top: 1rem; text-align: center; font-size: .88rem; color: var(--text-muted); }
+.phone-session--simple { max-width: 32rem; padding-top: 1rem; }
+.phone-session--simple .you { padding: .7rem .9rem; gap: .7rem; box-shadow: none; }
+.phone-session--simple .you h1 { font-size: 1.15rem; }
+.phone-session--simple .seat__badge--big { width: 2.4rem; height: 2.4rem; font-size: .9rem; }
+.phone-session--simple .phone-ready { padding: .4rem 0; }
+.phone-session--simple .game-frame { margin-top: .4rem; }
 .phone-session .you { padding: 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
 .phone-session__name { min-width: 0; flex: 1; }
+.phone-session__navigation { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.phone-session__navigation .btn { min-height: 44px; padding: 10px 16px; }
+.phone-session__navigation > span { color: var(--text-muted); font-size: .8rem; letter-spacing: .05em; }
 .phone-session .you h1 { font-size: 1.4rem; overflow-wrap: anywhere; }
 .phone-session .phone-ready { padding: 18px 0; }
 .phone-session .phone-ready__btn { width: 100%; }
@@ -1523,8 +1554,8 @@
 .phone-session--playing .you h1 { font-size: 1.1rem; overflow-wrap: anywhere; }
 .phone-session--playing .you .stub__muted { margin-top: 2px; font-size: 0.85rem; }
 .phone-session--playing .seat__badge--big { width: 2.5rem; height: 2.5rem; font-size: 1rem; }
-.phone-session--playing .prototype-frame { margin: 12px 0; }
-.phone-session--playing .prototype-frame--phone iframe { min-height: 0; }
+.phone-session--playing .game-frame { margin: 12px 0; }
+.phone-session--playing .game-frame--phone iframe { min-height: 0; }
 .phone-session__options { padding: 0 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
 .phone-session__options summary { min-height: 48px; padding: 14px 0; cursor: pointer; font-weight: 800; color: var(--text-muted); }
 .phone-session__options summary span { float: right; font-size: 0.85rem; font-weight: 600; letter-spacing: 0.08em; }
@@ -1571,227 +1602,35 @@
 .match-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
 .match-heading h1 { font-size: clamp(1.6rem, 4vw, 2.4rem); font-weight: 900; }
 .match-pill { background: var(--accent-soft); color: var(--accent-ink); padding: 8px 16px; border-radius: var(--radius-pill); font-weight: 800; }
-.prototype-frame iframe { border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); }
-.prototype-frame--phone iframe { box-shadow: none; border: 0; height: 1050px; }
-.prototype-frame__pause { border-radius: var(--radius-lg); }
+.game-frame iframe { border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); }
+.game-frame--phone iframe { box-shadow: none; border: 0; height: 1050px; }
+.game-frame__pause { border-radius: var(--radius-lg); }
 @media (max-width: 600px) { .host-lobby .stub__row { padding: 16px; justify-content: center; text-align: center; } .tennis-session { padding: 16px; } }
 
-/* Calibration – TV side --------------------------------------------------- */
-.cal-tv { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+.game-save-status { position: absolute; z-index: 2; bottom: .5rem; left: 1rem; margin: 0; font-size: .75rem; padding: .3rem .65rem; border-radius: .5rem; background: var(--surface); color: var(--text-muted); pointer-events: none; }
+.sport-switcher { margin-block: 1rem; }
+.sport-switcher select { margin-inline-start: .5rem; padding: .5rem; border-radius: .5rem; }
 
-.cal-tv__scene {
-  position: relative;
-  width: 220px;
-  height: 140px;
-  margin: 0.5rem 0 0.75rem;
-  align-self: center;
-}
+/* Keep normal scrolling, but prevent a pull-to-refresh from dropping a seat. */
+html:has(.phone-session), body:has(.phone-session) { overscroll-behavior-y: none; }
+.phone-reconnect-notice { display: grid; gap: 4px; margin: 10px 0; padding: 12px 16px; border-radius: 14px; background: var(--warn-soft); color: var(--warn-ink); font-size: .875rem; }
+.phone-reconnect-notice span { font-size: .95em; }
 
-.cal-tv__shell {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
+.phone-session > .sport-switcher { margin: 0 0 16px; }
+.phone-session .sport-switcher label { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 800; }
+.phone-session .sport-switcher select { min-height: 44px; max-width: 68%; margin: 0; padding: 8px 12px; border: 1px solid var(--border-strong); border-radius: 10px; font: inherit; color: var(--text); background: var(--surface); }
+.phone-session .sport-switcher .stub__muted { margin-top: 6px; font-size: .85rem; }
 
-.cal-tv__screen {
-  width: 190px;
-  height: 110px;
-  border-radius: 10px 10px 0 0;
-  background: var(--surface-sunk);
-  border: 3px solid var(--border-strong);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
+.phone-session__name h1 { display: flex; align-items: center; gap: 8px; }
+.phone-session__name h1 svg { width: 28px; height: 28px; flex-shrink: 0; color: var(--accent-ink); }
+.phone-options-sport-icon { width: 36px; height: 36px; flex-shrink: 0; color: var(--accent-ink); }
+.phone-game-options header > div { flex: 1; }
+.phone-options-done { position: sticky; top: 0; z-index: 2; min-height: 58px; margin: 16px 0; font-size: 1.1rem; font-weight: 850; box-shadow: var(--shadow-sm); }
+.phone-join > .room-scan-button { width: 100%; margin: 18px 0 4px; }
+.phone-session__options > .room-scan-button { width: 100%; margin: 12px 0; }
 
-.cal-tv__chin {
-  width: 190px;
-  height: 10px;
-  background: var(--border-strong);
-  border-radius: 0 0 4px 4px;
-}
-
-.cal-tv__stand {
-  width: 50px;
-  height: 20px;
-  background: var(--border-strong);
-  clip-path: polygon(20% 0, 80% 0, 100% 100%, 0% 100%);
-}
-
-.cal-tv__phone {
-  position: absolute;
-  bottom: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 2;
-  filter: drop-shadow(0 4px 12px rgb(0 0 0 / .22));
-}
-
-.cal-tv__title {
-  font-size: 1.7rem;
-  font-weight: 900;
-  line-height: 1.2;
-  margin: 0;
-}
-
-.cal-tv__help {
-  color: var(--text-muted);
-  margin: 0.1rem 0 0.75rem;
-}
-
-.cal-tv__players {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  width: 100%;
-}
-
-.cal-card {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  min-width: 180px;
-  flex: 1;
-  padding: 0.75rem 1rem;
-  border: 4px solid var(--player, var(--border-strong));
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--shadow-sm);
-}
-
-.cal-card[data-done='true'] { border-color: var(--p3); }
-
-.cal-card .seat__badge {
-  width: 2.6rem;
-  height: 2.6rem;
-  font-size: 1rem;
-  flex-shrink: 0;
-}
-
-.cal-card__body {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-}
-
-.cal-card__name {
-  font-weight: 800;
-  font-size: 1rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.cal-card__bar-wrap {
-  height: 7px;
-  border-radius: 999px;
-  background: var(--surface-sunk);
-  overflow: hidden;
-}
-
-.cal-card__bar {
-  height: 100%;
-  border-radius: 999px;
-  background: var(--accent);
-  transition: width 0.15s ease;
-}
-
-.cal-card[data-done='true'] .cal-card__bar { background: var(--p3); }
-
-.cal-card__pct {
-  font-weight: 900;
-  font-size: 1rem;
-  font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
-}
-
-.cal-card[data-done='true'] .cal-card__pct { color: var(--p3); }
-
-.cal-card__alert {
-  position: absolute;
-  top: -0.6rem;
-  right: 0.75rem;
-  padding: 0.15rem 0.55rem;
-  border-radius: var(--radius-pill);
-  background: var(--danger);
-  color: #fff;
-  font-size: 0.75rem;
-  font-weight: 800;
-  white-space: nowrap;
-  animation: cal-alert-pop 0.15s ease;
-}
-
-@keyframes cal-alert-pop {
-  from { transform: scale(0.7); opacity: 0; }
-  to   { transform: scale(1);   opacity: 1; }
-}
-
-/* Calibration – phone pre-start prompt ------------------------------------- */
-.phone-cal-prompt {
-  margin-top: 1.25rem;
-  padding: 1.25rem;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
-}
-
-.phone-cal-prompt__title {
-  font-size: 1.1rem;
-  font-weight: 900;
-  margin: 0 0 0.35rem;
-}
-
-.phone-cal-prompt__help {
-  color: var(--text-muted);
-  margin: 0 0 1rem;
-  font-size: 0.9rem;
-}
-
-.phone-cal-prompt__btn { width: 100%; }
-
-/* Calibration – phone side ------------------------------------------------- */
-.phone-cal {
-  display: flex;
-  align-items: center;
-  gap: 1.25rem;
-  margin-top: 1.25rem;
-  padding: 1.25rem;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
-}
-
-.phone-cal__ring-wrap { flex-shrink: 0; }
-.phone-cal__ring { display: block; }
-
-.phone-cal__text { flex: 1; min-width: 0; }
-
-.phone-cal__title {
-  font-size: 1.1rem;
-  font-weight: 900;
-  margin: 0 0 0.25rem;
-}
-
-.phone-cal__status {
-  font-weight: 800;
-  margin: 0 0 0.3rem;
-}
-
-.phone-cal__status[data-state='moving'] { color: var(--danger); }
-.phone-cal__status[data-done='true']    { color: var(--p3); }
-
-.phone-cal__help {
-  margin: 0;
-  font-size: 0.88rem;
-  color: var(--text-muted);
-}
+.phone-start-confirm{width:min(420px,calc(100vw - 32px));padding:28px;border:1px solid var(--border);border-radius:24px;background:var(--surface);color:var(--text);box-shadow:0 24px 80px #0006;}
+.phone-start-confirm::backdrop{background:#07141bc9;}
+.phone-start-confirm h2{font-size:1.5rem;margin:0 0 12px;}
+.phone-start-confirm p{margin:0 0 24px;}
+.phone-start-confirm button{width:100%;margin-top:12px;min-height:52px;}

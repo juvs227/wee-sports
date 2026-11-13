@@ -3,16 +3,24 @@
   "compilerOptions": {
     "rootDir": ".",
     "outDir": "build",
-    "lib": ["DOM", "DOM.Iterable", "ESNext"],
-    "types": ["node"],
+    "tsBuildInfoFile": "./node_modules/.cache/wee-sports/tsconfig.tsbuildinfo",
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "ESNext"
+    ],
+    "types": [
+      "node"
+    ],
     "skipLibCheck": true,
-    "allowImportingTsExtensions": true, 
-    "noEmit": true                      
+    "allowImportingTsExtensions": true,
+    "noEmit": true
   },
   "include": [
     "src/**/*.ts",
     "test/**/*.ts",
     "components/**/*.ts",
-    "*.ts"
+    "*.ts",
+    "shared/**/*.d.ts"
   ]
 }

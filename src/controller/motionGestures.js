@@ -32,7 +32,7 @@ export function createSimpleSwingStream(label = 'Forehand') {
       peak = Math.max(peak, speed);
       angle += speed * Math.max(0, Math.min(gap, 100)) / 1000;
       if (sample.timeMs - started >= 100 && angle >= 22) {
-        pending.push({ label, early: true, complete: false, peakRotation: peak, detectionDelayMs: sample.timeMs - started, simple: true });
+        pending.push({ label, early: true, complete: false, startMs: started, peakRotation: peak, detectionDelayMs: sample.timeMs - started, simple: true });
         recovering = true; recoveryStarted = sample.timeMs; reset();
       }
     },
@@ -42,16 +42,19 @@ export function createSimpleSwingStream(label = 'Forehand') {
 }
 
 /** A bowling delivery is a forward underhand pitch followed by deceleration.
- * The UI explicitly arms one delivery, so repositioning between turns cannot roll.
+ * The turn gate below admits one delivery after a brief rest.
  * Power is a bounded game input, not an estimate of real ball speed.
  */
 export function createBowlingMotionDetector() {
   let previous = null;
   let started = null;
+  let confirmed = false;
+  let candidateSamples = 0;
   let peak = 0;
   let rotation = 0;
   let pitchRotation = 0;
   let slowSince = null;
+  let quietSamples = 0;
   let finished = false;
   let twist = 0;
   let accelerationPeak = 0;
@@ -63,11 +66,11 @@ export function createBowlingMotionDetector() {
     const power = peak ? clamp(Math.max(gyroPower, gyroPower * .8 + accelerationPower * .2), .2, 1) : 0;
     // Normal grip changes should stay straight. Deliberate wrist turns ramp
     // gently, with less than full side spin even at the end of the range.
-    const turn = clamp((Math.abs(twist) - 10) / 60, 0, 1);
-    const spin = Math.sign(twist) * Math.pow(turn, 1.5) * .55 || 0;
+    const turn = clamp((Math.abs(twist) - 6) / 45, 0, 1);
+    const spin = Math.sign(twist) * turn * .55 || 0;
     return { power, spin, peakRotation: peak };
   }
-  function reset() { started = null; peak = 0; rotation = 0; pitchRotation = 0; slowSince = null; twist = 0; accelerationPeak = 0; }
+  function reset() { started = null; confirmed = false; candidateSamples = 0; peak = 0; rotation = 0; pitchRotation = 0; slowSince = null; quietSamples = 0; twist = 0; accelerationPeak = 0; }
   return {
     push(sample) {
       if (finished) return null;
@@ -75,17 +78,20 @@ export function createBowlingMotionDetector() {
       const gap = previous === null ? 0 : sample.timeMs - previous;
       if (gap <= 0 || gap > 100) reset();
       previous = sample.timeMs;
-      // DeviceMotion rates are alpha=X (underhand pitch), beta=Y (wrist
-      // roll), gamma=Z. DeviceOrientation angle names use a different order.
-      // Screen up, top toward the TV: +X rotation lifts the top forward/up.
-      // A backswing has the opposite sign. It must neither arm a release nor
+      // DeviceMotion rotationRate uses alpha=X, beta=Y, gamma=Z (W3C).
+      // With screen up and the phone top toward the TV, +X is forward pitch;
+      // +Y wrist rotation requests curve to the right as seen on the TV.
+      // A negative forward sample must neither arm a release nor
       // contribute power, angle or curve to the following forward delivery.
       if (sample.rotationAlpha < -35) { reset(); return null; }
       const pitch = Math.max(0, sample.rotationAlpha);
       const speed = Math.hypot(sample.rotationAlpha, sample.rotationBeta, sample.rotationGamma);
       let dt = Math.max(0, Math.min(gap, 100)) / 1000;
+      // Aiming can briefly pitch the phone as well as turn it sideways. Keep
+      // the line live until a sustained, mostly forward movement is present.
+      // Once confirmed, normal wrist curve and deceleration remain unrestricted.
+      if (!confirmed && (pitch < 100 || pitch < speed * .75)) { reset(); return null; }
       if (started === null) {
-        if (pitch < 100 || pitch < speed * .55) return null;
         started = sample.timeMs;
         dt = 0; // No angle is credited from before this forward segment.
       }
@@ -95,34 +101,101 @@ export function createBowlingMotionDetector() {
       peak = Math.max(peak, pitch);
       rotation += speed * dt;
       pitchRotation += pitch * dt;
-      // Wrist movement after the forward delivery must not add extra hook.
+      if (!confirmed) {
+        candidateSamples++;
+        if (candidateSamples >= 3 && sample.timeMs - started >= 40 - 1e-6 && pitchRotation >= 8 - 1e-6) confirmed = true;
+      }
+      // Include wrist rotation as the swing slows into release. Active wrist
+      // turns keep the full 80 ms window; a confirmed, quiet finish can release
+      // sooner. Backswing samples were excluded above.
       const forwardPower = pitch >= Math.max(100, peak * .45);
-      if (forwardPower) twist += sample.rotationBeta * dt;
+      twist += sample.rotationBeta * dt;
       const acceleration = sample.acceleration;
       if (forwardPower && acceleration && ['x', 'y', 'z'].every(axis => Number.isFinite(acceleration[axis]))) {
         accelerationPeak = Math.max(accelerationPeak, Math.min(30, Math.hypot(acceleration.x, acceleration.y, acceleration.z)));
       }
       slowSince = pitch < peak * .45 ? slowSince ?? sample.timeMs : null;
-      if (slowSince !== null && sample.timeMs - slowSince >= 80) {
+      quietSamples = slowSince !== null && pitch <= 35 &&
+        Math.abs(sample.rotationBeta) <= 12 && Math.abs(sample.rotationGamma) <= 12 ? quietSamples + 1 : 0;
+      const settled = quietSamples >= 2 && sample.timeMs - slowSince >= 40;
+      if (slowSince !== null && (sample.timeMs - slowSince >= 80 || settled)) {
         if (sample.timeMs - started >= 160 && pitchRotation >= 25 && pitchRotation >= rotation * .55 && peak >= 150) {
           finished = true;
           return values();
         }
-        reset();
+        // A quick compact swing may settle before its minimum duration. Keep
+        // the original confirmation window to qualify it instead of erasing it.
+        if (sample.timeMs - slowSince >= 80) reset();
       }
       return null;
     },
     get preview() { return values(); },
+    get phase() { return finished ? 'finished' : started === null ? 'ready' : confirmed ? 'forward' : 'candidate'; },
   };
 }
 
-/** Screen-up tilt aim uses gravity only while positioning, never during a roll.
- * Reject vigorous movement/near-vertical grips rather than letting them aim.
+/** Natural swing entry: fresh quiet samples prepare the current player's turn.
+ * A release stays latched until an authoritative turnKey changes. Pausing,
+ * reconnecting or a local timeout cannot create a new turn. An explicit,
+ * correlated rejection that proves no ball was released can permit a retry.
  */
+export function createBowlingDeliveryGate({quietMs = 250, quietSpeed = 45} = {}) {
+  let key, previous = null, quietSince = null, detector = null, aim = null, candidateAim = null, released = false;
+  const suspend = () => { previous = null; quietSince = null; detector = null; aim = null; candidateAim = null; };
+  return {
+    push(sample, {active = false, turnKey, aim: liveAim = 0} = {}) {
+      if (turnKey !== key) { key = turnKey; released = false; suspend(); }
+      if (!active || released || !finiteSample(sample)) { suspend(); return null; }
+      const gap = previous === null ? 0 : sample.timeMs - previous;
+      if (gap <= 0 || gap > 100) suspend();
+      previous = sample.timeMs;
+      if (!detector) {
+        const speed = Math.hypot(sample.rotationAlpha, sample.rotationBeta, sample.rotationGamma);
+        quietSince = speed <= quietSpeed ? quietSince ?? sample.timeMs : null;
+        if (quietSince === null || sample.timeMs - quietSince < quietMs) return null;
+        detector = createBowlingMotionDetector();
+      }
+      const before = detector.phase;
+      const delivery = detector.push(sample);
+      if (before === 'ready' && detector.phase === 'candidate') candidateAim = clamp(Number.isFinite(liveAim) ? liveAim : 0, -1, 1);
+      // Confirmation must not capture aim already displaced by the forward
+      // movement. Retain its starting line without showing a premature lock.
+      if (before !== 'forward' && detector.phase === 'forward') aim = candidateAim;
+      if (detector.phase === 'ready') { aim = null; candidateAim = null; }
+      if (!delivery) return null;
+      released = true;
+      return {...delivery, aim: aim ?? clamp(liveAim, -1, 1)};
+    },
+    suspend,
+    rejectRelease(turnKey, result) {
+      // Unknown outcomes and duplicates may already be moving on the TV. Do
+      // not unlock them on a timeout, a delayed ACK or a changed generation.
+      if (!released || turnKey !== key || result?.ok !== false || ![
+        'network-busy', 'disconnected', 'paused', 'not-playing', 'wrong-generation',
+        'game-loading', 'game-command-pending', 'not-ready-to-roll', 'not-your-turn', 'bad-roll',
+      ].includes(result.error)) return false;
+      released = false;
+      suspend();
+      return true;
+    },
+    get phase() { return released ? 'finished' : detector?.phase ?? 'rest'; },
+    get lockedAim() { return aim; },
+    get preview() { return detector?.preview ?? {power: 0, spin: 0, peakRotation: 0}; },
+  };
+}
+
+/** Screen-up tilt aim consumes gravity only while positioning. The delivery
+ * gate locks the line; speed alone must not freeze a legitimate side tilt. */
 export function bowlingTiltAim(gravity, rotationSpeed) {
-  if (!gravity || !['x', 'y', 'z'].every(axis => Number.isFinite(gravity[axis])) || !Number.isFinite(rotationSpeed) || rotationSpeed > 65) return null;
+  if (!gravity || !['x', 'y', 'z'].every(axis => Number.isFinite(gravity[axis])) || !Number.isFinite(rotationSpeed)) return null;
   const magnitude = Math.hypot(gravity.x, gravity.y, gravity.z);
-  if (magnitude < 7.5 || magnitude > 12 || gravity.z < 5) return null;
-  const angle = -Math.atan2(gravity.x, gravity.z) * 180 / Math.PI;
-  return Math.sign(angle) * clamp((Math.abs(angle) - 4) / 31, 0, 1) || 0;
+  if (magnitude < 7.5 || magnitude > 12 || Math.abs(gravity.z) < 5) return null;
+  // Engines expose either support acceleration or downward gravity. For the
+  // screen-up playing pose the two vectors are opposites; their tilt ratio
+  // must produce the same lane direction, without browser-name detection.
+  const supportSign = Math.sign(gravity.z);
+  const angle = -Math.atan2(gravity.x * supportSign, Math.abs(gravity.z)) * 180 / Math.PI;
+  // A small center band removes hand tremor without hiding the first four
+  // degrees of every aiming movement. Full travel still takes 35 degrees.
+  return Math.sign(angle) * clamp((Math.abs(angle) - 1) / 34, 0, 1) || 0;
 }

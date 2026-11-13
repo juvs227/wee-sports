@@ -1,5 +1,5 @@
 import { test, expect } from 'vitest';
-import { createSwingDetector, SWING_LIMITS } from '../src/controller/classifySwing.js';
+import { createSwingDetector, SWING_LIMITS } from '../src/controller/accelerationSwing.js';
 
 const sample = (timeMs: number, accelMag: number) => ({ timeMs, accelMag });
 
@@ -47,4 +47,70 @@ test('swing result includes startMs and peakTimeMs equal to the sample time', ()
   const result = detector.push(sample(42, SWING_LIMITS.start));
   expect(result!.startMs).toBe(42);
   expect(result!.peakTimeMs).toBe(42);
+});
+
+// check if can correctly categorize a swing as a forehand or backhand
+// sample normal vector
+// if facing the same way, forehand
+// if facing the opposite way, backhand
+
+// initialize with a sample normal vector
+// create a swing detector
+// and push a sample
+
+// do this in 2 different directions verify
+
+const swing = (netNormal: [number, number, number], currentNormal: [number, number, number]) =>
+  createSwingDetector().push({
+    timeMs: 0,
+    accelMag: SWING_LIMITS.start,
+    netOrientation: { normal: netNormal },
+    currentNormal,
+  });
+
+// facing east (net normal [1,0,0])
+test('forehand when facing same direction as net — east', () => {
+  expect(swing([1, 0, 0], [1, 0, 0])!.label).toBe('Forehand');
+});
+test('backhand when facing opposite to net — east', () => {
+  expect(swing([1, 0, 0], [-1, 0, 0])!.label).toBe('Backhand');
+});
+
+// facing north (net normal [0,1,0])
+test('forehand when facing same direction as net — north', () => {
+  expect(swing([0, 1, 0], [0, 1, 0])!.label).toBe('Forehand');
+});
+test('backhand when facing opposite to net — north', () => {
+  expect(swing([0, 1, 0], [0, -1, 0])!.label).toBe('Backhand');
+});
+
+// verify classification stays consistent across many swings with the same orientation
+test('forehand classification stays consistent across 20 swings', () => {
+  const detector = createSwingDetector();
+  const netNormal: [number, number, number] = [0, 1, 0];
+  const currentNormal: [number, number, number] = [0, 1, 0];
+  const results = [];
+  for (let i = 0; i < 20; i++) {
+    const t = i * 1100; // spaced beyond cooldown
+    detector.push({ timeMs: t, accelMag: 0, netOrientation: { normal: netNormal }, currentNormal });
+    const r = detector.push({ timeMs: t + 10, accelMag: SWING_LIMITS.start, netOrientation: { normal: netNormal }, currentNormal });
+    if (r) results.push(r.label);
+  }
+  expect(results).toHaveLength(20);
+  expect(results.every(l => l === 'Forehand')).toBe(true);
+});
+
+test('backhand classification stays consistent across 20 swings', () => {
+  const detector = createSwingDetector();
+  const netNormal: [number, number, number] = [0, 1, 0];
+  const currentNormal: [number, number, number] = [0, -1, 0];
+  const results = [];
+  for (let i = 0; i < 20; i++) {
+    const t = i * 1100;
+    detector.push({ timeMs: t, accelMag: 0, netOrientation: { normal: netNormal }, currentNormal });
+    const r = detector.push({ timeMs: t + 10, accelMag: SWING_LIMITS.start, netOrientation: { normal: netNormal }, currentNormal });
+    if (r) results.push(r.label);
+  }
+  expect(results).toHaveLength(20);
+  expect(results.every(l => l === 'Backhand')).toBe(true);
 });
