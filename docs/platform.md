@@ -20,5 +20,13 @@ tennis supports stable boundaries within a live room.
 The desktop entry keeps the team's sport-card homepage. Phones have a controller
 homepage, QR scanner, manual entry, automatic setup and touch fallback.
 
+For `npm run dev`, a fresh phone build and temporary HTTPS tunnel are prepared
+concurrently. The combined server starts only after both succeed; the QR stays
+hidden until the public health endpoint responds. The lobby checks readiness
+every second while waiting, then every ten seconds once ready. The launcher also
+retries a failed public health check after one second instead of its healthy
+fifteen-second monitoring interval. Cloudflare provisioning and internet delays
+can still affect startup time. This changes session startup, not game input.
+
 See [controller ownership and state transitions](controller-design.md) for the
 concrete input contract, recovery rules, source map and acceptance checks.
