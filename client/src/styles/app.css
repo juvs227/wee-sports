@@ -321,14 +321,12 @@
   background: var(--surface);
   box-shadow: var(--shadow-sm);
   transition:
-    transform 200ms var(--ease),
     box-shadow 200ms var(--ease),
     border-color 200ms var(--ease);
 }
 
-.tile[data-open='true']:hover,
-.tile[data-open='true']:focus-within {
-  transform: translateY(-3px);
+.tile[data-interactive='true']:hover,
+.tile[data-interactive='true']:focus-within {
   border-color: var(--accent);
   box-shadow:
     0 0 0 4px var(--accent-soft),
@@ -352,7 +350,7 @@
   transition: transform 300ms var(--ease);
 }
 
-.tile[data-open='true']:hover .tile__icon {
+.tile[data-interactive='true']:hover .tile__icon {
   transform: scale(1.06) rotate(-3deg);
 }
 
@@ -397,6 +395,21 @@
 
 .tile__foot .btn {
   width: 100%;
+}
+
+/* The stretched action must not become a transformed containing block:
+   otherwise hovering its full-card hit area shrinks that area to the button,
+   repeatedly losing and regaining hover. Keep all interactive geometry fixed. */
+.tile__action,
+.tile__action:hover:not(:disabled),
+.tile__action:active:not(:disabled) {
+  transform: none;
+  transition: box-shadow 160ms var(--ease), border-color 160ms var(--ease), background-color 160ms var(--ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile, .tile__icon, .tile__action { transition: none; }
+  .tile[data-interactive='true']:hover .tile__icon { transform: none; }
 }
 
 /* Stretches the button over the whole tile. */

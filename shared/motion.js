@@ -255,8 +255,9 @@ export function createMotionRecorder({maxSamples = 6000, sport = 'tennis', adapt
  * caller-declared safe boundary, never during a delivery or rally.
  */
 export function createAutomaticMotionSetup({warmupSeconds = .15, minimumSamples = 5,
-  maxGapSeconds = .25, quietWindowSeconds = .6} = {}) {
-  if (![warmupSeconds, maxGapSeconds, quietWindowSeconds].every(value => Number.isFinite(value) && value > 0) ||
+  maxGapSeconds = .25, readyGapSeconds = maxGapSeconds, quietWindowSeconds = .6} = {}) {
+  if (![warmupSeconds, maxGapSeconds, readyGapSeconds, quietWindowSeconds].every(value => Number.isFinite(value) && value > 0) ||
+      readyGapSeconds < maxGapSeconds ||
       !Number.isSafeInteger(minimumSamples) || minimumSamples < 2) throw new RangeError('Invalid automatic motion timing');
   let first = null, previous = null, count = 0, calibration = null, revision = 0;
   let bias = {x: 0, y: 0, z: 0}, biasSource = 'provisional', quiet = [], centeredAtBoundary = false;
@@ -270,8 +271,14 @@ export function createAutomaticMotionSetup({warmupSeconds = .15, minimumSamples 
       if (!isMotionSample(sample) || !sample.angularVelocity) {
         clear(); return {...status(null), state: 'no-readings'};
       }
-      if (previous && (sample.timeSeconds <= previous.timeSeconds || sample.sequence <= previous.sequence ||
-          sample.timeSeconds - previous.timeSeconds > maxGapSeconds || sample.screenAngle !== previous.screenAngle)) clear();
+      const gap = previous ? sample.timeSeconds - previous.timeSeconds : 0;
+      if (previous && (gap <= 0 || sample.sequence <= previous.sequence ||
+          gap > (calibration ? readyGapSeconds : maxGapSeconds) || sample.screenAngle !== previous.screenAngle)) clear();
+      else if (previous && gap > maxGapSeconds) {
+        // Retaining established setup never makes missing samples a quiet
+        // calibration window. Each sport still discards interrupted gestures.
+        quiet = []; centeredAtBoundary = false;
+      }
       first ??= sample.timeSeconds;
       previous = sample; count++;
       let justReady = false;
@@ -312,7 +319,7 @@ export function createAutomaticMotionSetup({warmupSeconds = .15, minimumSamples 
     /** Watchdog for a silent sensor stream. Reading status never replays input. */
     read(timeSeconds) {
       if (!Number.isFinite(timeSeconds) || !previous || timeSeconds < previous.timeSeconds ||
-          timeSeconds - previous.timeSeconds > maxGapSeconds) clear();
+          timeSeconds - previous.timeSeconds > (calibration ? readyGapSeconds : maxGapSeconds)) clear();
       return {...status(null), sample: null};
     },
     /** Interruptions discard partial movement but retain a bounded bias estimate. */
