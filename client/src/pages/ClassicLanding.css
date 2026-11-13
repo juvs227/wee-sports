@@ -1,72 +1,14 @@
-.classic-landing { padding-bottom: 1rem; }
-.classic-welcome { display: grid; grid-template-columns: 1.04fr 1fr; align-items: center; gap: clamp(2rem, 5vw, 5rem); padding-block: clamp(2.5rem, 5vw, 5rem) 3rem; }
-.classic-welcome__copy { position: relative; z-index: 1; }
-.classic-welcome h1 { margin: 1rem 0 1.25rem; font-size: clamp(2.8rem, 4.9vw, 4.6rem); line-height: 1.04; font-weight: 950; letter-spacing: -.045em; }
-.classic-welcome h1 span { color: var(--accent-ink); }
-.classic-welcome__lede { max-width: 36ch; color: var(--text-muted); font-size: 1.08rem; line-height: 1.65; }
-.classic-welcome__actions { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem 1.5rem; margin-top: 1.75rem; }
-.classic-welcome__play { min-width: 9rem; min-height: 3.3rem; justify-content: space-between; font-size: 1.15rem; }
-.classic-welcome__join, .classic-welcome__resume { display: inline-flex; align-items: center; min-height: 44px; gap: .5rem; color: var(--accent-ink); font-size: .9rem; font-weight: 750; text-underline-offset: .25em; }
-.classic-welcome__note { margin-top: 1rem; color: var(--text-muted); font-size: .8rem; }
-.classic-welcome__resume { margin-top: .5rem; }
-.classic-scene { position: relative; min-width: 0; aspect-ratio: 1.12; margin: .5rem 0; isolation: isolate; }
-.classic-scene__halo { position: absolute; inset: 2% -3% 0; z-index: -1; border-radius: 50%; background: radial-gradient(ellipse, var(--accent-soft) 10%, transparent 70%); }
-.classic-scene__screen { position: absolute; top: 12%; left: 0; width: 91%; padding: 3%; border: 5px solid #304b5c; border-radius: 24px; background: #fff; box-shadow: 0 20px 45px #1e526c24, inset 0 0 0 1px #fff; transform: rotate(-3deg); }
-.classic-scene__screen-bar { display: flex; justify-content: space-between; align-items: center; padding: 1% 2% 6%; color: #385262; font-size: clamp(.65rem, 1.05vw, .9rem); font-weight: 750; }
-.classic-scene__screen-bar > span:first-child { font-weight: 950; font-size: 1.3em; }
-.classic-scene__dots { color: #a4c2d2; font-size: .55em; letter-spacing: .15em; }
-.classic-scene__games { display: grid; grid-template-columns: 1fr 1fr; gap: 4%; }
-.classic-scene__game { display: grid; place-items: center; gap: .25rem; padding: 12% 5%; color: #274b36; background: #e6f4c4; border-radius: 15px; font-weight: 850; font-size: clamp(.8rem, 1.3vw, 1.05rem); }
-.classic-scene__game--bowling { background: #e7e0fa; color: #524475; }
-.classic-scene__game > svg { width: 56%; max-width: 100px; height: auto; }
-.classic-scene__screen-footer { display: flex; justify-content: center; align-items: center; gap: .4rem; padding-top: 6%; font-size: clamp(.6rem, .95vw, .8rem); color: #5b6e7a; }
-.classic-scene__player-dot { width: .5rem; height: .5rem; border-radius: 50%; background: #2b8fbd; }
-.classic-scene__stand { position: absolute; top: 72%; left: 31%; width: 27%; height: 7%; border-bottom: 8px solid #304b5c; border-radius: 50%; z-index: -1; }
-.classic-scene__stand::before { content: ''; position: absolute; left: 39%; bottom: 0; width: 23%; height: 230%; background: #304b5c; }
-.classic-scene__phone { position: absolute; right: -1%; bottom: 5%; display: flex; flex-direction: column; align-items: center; gap: .55rem; width: 29%; padding: 4% 2% 3%; border: 5px solid #304b5c; border-radius: 25px; background: #eff9fd; color: #194e69; transform: rotate(9deg); box-shadow: 0 12px 24px #163a4f29; }
-.classic-scene__phone-speaker { width: 28%; height: 4px; margin-bottom: .45rem; border-radius: 99px; background: #304b5c; }
-.classic-scene__phone-player { font-size: clamp(.5rem, .7vw, .6rem); font-weight: 850; letter-spacing: .08em; }
-.classic-scene__phone > svg { width: 68%; height: auto; margin: 8% 0; color: #167aa4; }
-.classic-scene__phone strong { font-size: clamp(.7rem, 1vw, .95rem); }
-.classic-scene__phone-button { padding: 10% 5%; border-radius: 99px; width: 100%; background: #156a93; color: white; font-size: clamp(.5rem, .7vw, .65rem); font-weight: 800; text-align: center; }
-.classic-scene__phone-home { width: 38%; height: 3px; margin-top: .5rem; border-radius: 99px; background: #304b5c; }
-.classic-scene__connection { position: absolute; left: 14%; bottom: 6%; padding: .6rem .9rem; border: 1px solid var(--border); border-radius: 99px; background: var(--surface); color: var(--accent-ink); font-size: .75rem; font-weight: 750; box-shadow: var(--shadow-sm); transform: rotate(-3deg); }
-.classic-sports-preview { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; padding: 1.4rem 1.8rem; border: 1px solid var(--border); border-radius: 24px; background: var(--surface); box-shadow: var(--shadow-sm); }
-.classic-sports-preview > p { color: var(--text-muted); font-size: .85rem; line-height: 1.55; }
-.classic-sports-preview > p strong { color: var(--text); font-size: 1rem; }
-.classic-sports-preview__games { display: flex; gap: clamp(1.5rem, 4vw, 4rem); }
-.classic-sports-preview__game { display: flex; align-items: center; gap: .65rem; }
-.classic-sports-preview__game > svg { width: 2.75rem; height: 2.75rem; color: var(--accent-ink); }
-.classic-sports-preview__game > div { display: grid; gap: .1rem; }
-.classic-sports-preview__game strong { font-weight: 850; }
-.classic-sports-preview__game span { color: var(--text-muted); font-size: .75rem; }
-.classic-sports-preview__hint { color: var(--text-muted); font-size: .8rem; }
-.classic-join { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 3rem; padding-block: 1rem 3rem; scroll-margin-top: 1.5rem; }
-.classic-join h2 { margin: .75rem 0; font-size: 1.8rem; line-height: 1.15; letter-spacing: -.03em; }
-.classic-join > div > p:last-child { max-width: 35ch; color: var(--text-muted); line-height: 1.65; }
-.classic-join .join-card { width: 100%; }
-.classic-landing a:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
-:root[data-theme='dark'] .classic-scene__screen, :root[data-theme='dark'] .classic-scene__phone { border-color: #7191a5; }
-:root[data-theme='dark'] .classic-scene__stand, :root[data-theme='dark'] .classic-scene__stand::before { border-color: #7191a5; background-color: #7191a5; }
-@media (max-width: 1000px) {
-  .classic-welcome { gap: 1.5rem; }
-  .classic-sports-preview__hint { display: none; }
-}
+.home--welcome { min-height: 100svh; display: flex; flex-direction: column; }
+.classic-landing { flex: 1; display: grid; place-items: center; min-height: 28rem; padding-block: 3rem 5rem; }
+.classic-welcome { text-align: center; }
+.classic-welcome h1 { margin: 0; font-size: clamp(3rem, 6.5vw, 5.5rem); line-height: 1.05; font-weight: 950; letter-spacing: -.045em; }
+.classic-welcome h1 span { display: inline-block; margin-top: .7rem; color: var(--accent-ink); font-size: clamp(1.5rem, 3.4vw, 2.75rem); line-height: 1.2; letter-spacing: -.025em; }
+.classic-welcome p { margin-top: 1.4rem; color: var(--text-muted); font-size: 1.05rem; }
+.classic-welcome__play { min-width: 9rem; min-height: 3.25rem; margin-top: 2rem; gap: 1rem; font-size: 1.15rem; }
+.classic-landing a:focus-visible { outline: 3px solid var(--accent-ink); outline-offset: 4px; }
 @media (max-width: 760px) {
-  .classic-welcome { grid-template-columns: 1fr; gap: .5rem; padding-top: 2rem; }
-  .classic-welcome__copy { text-align: center; }
-  .classic-welcome__copy .eyebrow { font-size: .72rem; }
-  .classic-welcome h1 { font-size: clamp(2.6rem, 8vw, 4rem); }
-  .classic-welcome__lede { margin-inline: auto; font-size: 1rem; }
-  .classic-welcome__actions { justify-content: center; }
-  .classic-scene { width: min(calc(100% - 24px), 440px); justify-self: center; margin-top: 1rem; }
-  .classic-scene__screen { border-width: 4px; }
-  .classic-scene__phone { border-width: 4px; gap: .4rem; }
-  .classic-sports-preview { flex-direction: column; align-items: center; gap: 1.2rem; padding: 1.2rem; }
-  .classic-sports-preview > p { text-align: center; }
-  .classic-sports-preview__games { justify-content: center; flex-wrap: wrap; gap: 1.25rem; }
-  .classic-join { grid-template-columns: 1fr; gap: 1.5rem; }
+  .classic-landing { min-height: 24rem; padding-block: 2.5rem 4rem; }
+  .classic-welcome h1 { font-size: clamp(2.6rem, 9vw, 4rem); }
+  .classic-welcome p { font-size: .95rem; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .classic-landing .btn { transition: none; }
-}
+@media (prefers-reduced-motion: reduce) { .classic-landing .btn { transition: none; } }

@@ -80,7 +80,7 @@ export default function Home() {
   }
 
   return (
-    <div className={`home home--polished home--${view}`}>
+    <div className={`home home--polished home--${view}${view === 'classic' && pathname === '/' ? ' home--welcome' : ''}`}>
       <header className="topbar page home-header">
         <a className="wordmark" href={`/?view=${view}`}>
           <BallMark className="wordmark__mark" />
@@ -90,7 +90,6 @@ export default function Home() {
         </a>
         <HomeViewSwitch value={view} onChange={changeView} disabled={Boolean(opening)} />
         <div className="topbar__actions">
-          {view === 'classic' && <a className="topbar__link home-header__help" href="#how">How it works</a>}
           <a className="topbar__link home-header__profile" href="/profile">Profile &amp; history</a>
           <ThemeToggle />
         </div>
@@ -101,7 +100,7 @@ export default function Home() {
           {pathname === '/home' ? <IslandHome host={host} opening={opening} failure={failure} connection={connection} /> : <IslandLanding />}
         </Suspense>
       </IslandBoundary> : <>
-      {pathname === '/' ? <ClassicLanding lastRoom={lastRoom} /> : <main className="page">
+      {pathname === '/' ? <ClassicLanding /> : <main className="page">
         <section className="hero" aria-labelledby="hero-title">
           <div className="hero__copy">
             <p className="eyebrow">Sports for your whole crew</p>
