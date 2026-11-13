@@ -61,3 +61,12 @@ Vitest cases, 74 server cases, five recorded motion fixtures and the production
 build. Browser checks passed in both homepage modes, including phone play,
 bowling recovery, optional profile registration, keyboard focus, narrow layouts,
 blocked storage and failed island image/module recovery.
+
+
+## Combined team test branch
+
+`integration/all-proposals-test` combines all five proposals on current team main
+in `juvs227/wee-sports` for testing before PRs or a main merge. It adds a proper
+Classic welcome screen, with Play leading to the existing card chooser. The
+individual proposal branches remain unchanged by this test-branch addition.
+See [integration-testing.md](integration-testing.md) for running and accepting it.

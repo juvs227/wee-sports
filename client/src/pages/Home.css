@@ -78,3 +78,11 @@
 }
 @media (prefers-reduced-motion: reduce) { .home-view-switch__option > span { transition: none; } }
 .home-view-switch > legend { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+/* Keep the shared header inside small desktop windows after fonts load. */
+@media (max-width: 400px) {
+  .home-header.topbar { column-gap: 8px; }
+  .home-header .wordmark { font-size: 1.1rem; gap: .35rem; }
+  .home-header .topbar__actions { gap: .4rem; }
+  .home-header__profile { font-size: .7rem; }
+}

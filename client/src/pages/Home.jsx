@@ -13,6 +13,7 @@ import { SPORTS } from '../lib/sports.js';
 import {createControllerCapabilities} from '../../../shared/controllerCapabilities.js';
 import {HomeViewSwitch} from '../components/HomeViewSwitch.jsx';
 import {readHomeView, saveHomeView, validHomeView} from '../lib/homeView.js';
+import ClassicLanding from './ClassicLanding.jsx';
 import './Home.css';
 
 const IslandHome = lazy(() => import('./IslandHome.jsx'));
@@ -49,9 +50,10 @@ export default function Home() {
   const mounted = useRef(false);
   const lastRoom = lastHostRoom();
   useEffect(() => {
-    mounted.current = true; document.title = 'Choose a sport · Wee Sports';
+    mounted.current = true;
     return () => {mounted.current = false;};
   }, []);
+  useEffect(() => {document.title = pathname === '/home' ? 'Choose a sport · Wee Sports' : 'Wee Sports · Game night, made simple';}, [pathname]);
   /** { sport, message } for the last failed attempt to open a lobby. */
   const [failure, setFailure] = useState(null);
 
@@ -99,7 +101,7 @@ export default function Home() {
           {pathname === '/home' ? <IslandHome host={host} opening={opening} failure={failure} connection={connection} /> : <IslandLanding />}
         </Suspense>
       </IslandBoundary> : <>
-      <main className="page">
+      {pathname === '/' ? <ClassicLanding lastRoom={lastRoom} /> : <main className="page">
         <section className="hero" aria-labelledby="hero-title">
           <div className="hero__copy">
             <p className="eyebrow">Sports for your whole crew</p>
@@ -136,7 +138,7 @@ export default function Home() {
         </section>
 
         <HowItWorks />
-      </main>
+      </main>}
 
       <footer className="footer page">
         <span>Wee Sports · a team project</span>

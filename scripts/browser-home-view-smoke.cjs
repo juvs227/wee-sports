@@ -12,14 +12,40 @@ const base = process.env.WEE_SMOKE_URL || 'http://127.0.0.1:5190';
     page.on('pageerror', error => errors.push(error.message));
     page.on('request', request => requests.push(request.url()));
     await page.goto(base + '/');
-    await page.getByRole('heading', {name: 'Pick a sport', exact: true}).waitFor();
+    await page.getByRole('heading', {name: 'Game night, made simple.', exact: true}).waitFor();
     assert.equal(await page.getByRole('radio', {name: 'Classic', exact: true}).isChecked(), true);
     assert.equal(requests.some(url => /\/island\/|\/Island(?:Home|Landing|Motion|Scenery)[-.]/.test(url)), false);
     const classic = page.getByRole('radio', {name: 'Classic', exact: true});
     const island = page.getByRole('radio', {name: 'Island', exact: true});
+    // Each presentation has its own welcome page, then a separate sport chooser.
+    await page.getByRole('link', {name: 'Play', exact: true}).click();
+    await page.getByRole('heading', {name: 'Pick a sport', exact: true}).waitFor();
+    await page.goBack();
+    await page.getByRole('heading', {name: 'Game night, made simple.', exact: true}).waitFor();
+    await page.evaluate(() => document.fonts.ready);
+    for (const [width, height] of [[320, 844], [390, 844], [768, 900], [1440, 900]]) {
+      await page.setViewportSize({width, height});
+      try {await page.waitForFunction(() => document.documentElement.scrollWidth <= innerWidth, undefined, {timeout: 2000});}
+      catch (error) {
+        console.error('Viewport overflow', width, await page.evaluate(() => ({width: innerWidth, scroll: document.documentElement.scrollWidth,
+          elements: [...document.querySelectorAll('body *')].map(el => ({tag: el.tagName, cls: String(el.className), right: el.getBoundingClientRect().right})).filter(el => el.right > innerWidth + 1)})));
+        throw error;
+      }
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `Classic overflow at ${width}px`);
+      const play = await page.getByRole('link', {name: 'Play', exact: true}).boundingBox();
+      assert.ok(play.height >= 44);
+    }
+    await page.getByRole('button', {name: 'Switch to dark mode', exact: true}).click();
+    assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
+    await page.getByRole('button', {name: 'Switch to light mode', exact: true}).click();
     await classic.focus(); await page.keyboard.press('ArrowRight');
     await page.getByRole('link', {name: 'Play', exact: true}).waitFor();
     assert.equal(await island.evaluate(input => input === document.activeElement), true);
+    await page.keyboard.press('ArrowLeft');
+    await page.getByRole('heading', {name: 'Game night, made simple.', exact: true}).waitFor();
+    assert.equal(await classic.evaluate(input => input === document.activeElement), true);
+    await page.keyboard.press('ArrowRight');
+    await page.locator('.island-landing').waitFor();
     assert.equal(await page.evaluate(() => localStorage.getItem('wee:home-view:v1')), 'island');
     await page.getByRole('link', {name: 'Play', exact: true}).click();
     await page.getByRole('heading', {name: 'Choose a sport', exact: true}).waitFor();
@@ -46,6 +72,12 @@ const base = process.env.WEE_SMOKE_URL || 'http://127.0.0.1:5190';
     await page.goto(base + '/home?view=island');
     for (const width of [390, 768, 1024, 1920]) {
       await page.setViewportSize({width, height: 900});
+      try {await page.waitForFunction(() => document.documentElement.scrollWidth <= innerWidth, undefined, {timeout: 2000});}
+      catch (error) {
+        console.error('Viewport overflow', width, await page.evaluate(() => ({width: innerWidth, scroll: document.documentElement.scrollWidth,
+          elements: [...document.querySelectorAll('body *')].map(el => ({tag: el.tagName, cls: String(el.className), right: el.getBoundingClientRect().right})).filter(el => el.right > innerWidth + 1)})));
+        throw error;
+      }
       await page.getByRole('button', {name: 'Play: Tennis', exact: true}).waitFor();
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `no overflow at ${width}`);
       for (const name of ['Classic', 'Island']) {
