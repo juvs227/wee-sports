@@ -2,14 +2,17 @@
 
 ## Browser improvements and recovery
 
-The phone now publishes a replaceable aim preview up to 20 times per second.
+The phone throttles normal replaceable aim previews to once per 12 ms, suppressing
+changes smaller than 0.005 except for a 200 ms heartbeat. Lock transitions publish
+immediately; the server still validates and rate-limits received previews.
 The room service authenticates the active player; the lane accepts only its
-current game, input generation, host epoch and increasing sequence. Forward swing onset
-stores an explicit immutable aim for the delivery and changes the TV line to
-gold. The preview never authorizes a roll or changes a rolling ball. Aim
-filtering uses elapsed time with an 84 ms time constant, approximately matching
-the old 0.18-per-sample response at 60 Hz. Identical sampled step responses at
-30, 60 and 100 Hz now agree. This is a cadence fix, not hardware feel evidence.
+current game, input generation, host epoch and increasing sequence. Candidate onset
+privately stores the pre-movement aim; forward confirmation locks that value and
+changes the TV line to gold. The preview never authorizes a roll or changes a rolling ball. Aim
+filtering uses elapsed time with an adaptive 12–35 ms time constant. Motion aim
+retains its precision independently of the touch slider's 0.05 steps. These are
+software settings, not hardware latency measurements. They differ from the old
+0.18-per-sample response and require physical-phone acceptance testing.
 
 Solo practice resets a fresh rack after each settled delivery. Select it in
 game options, or use **Practice a fresh rack** on the standalone bowling page.
@@ -44,7 +47,7 @@ off vibration keeps visible confirmation and contact feedback available.
 
 ## Rules implemented
 
-One to four players complete ten frames in order. A frame normally has two
+One to eight players complete ten frames in order. A frame normally has two
 rolls; a strike ends it immediately. A strike earns the next two deliveries as
 bonus points; a spare earns the next one. Unresolved cumulative scores remain
 blank. The tenth frame grants two fill deliveries for a strike or one for a
@@ -105,7 +108,7 @@ certification or tournament-grade realism.
 
 The lane fills the game viewport, including shorter laptop windows. The old
 640px minimum page height and scorecard below the canvas have been removed.
-A compact top scoreboard shares its player colors, point cards and typography
+A compact scoreboard shares its player colors, point cards and typography
 with tennis. It shows each player's total, the active player and the current
 frame/ball. **Full scorecard** expands the ten-frame history when needed; it
 scrolls within the overlay instead of shrinking or cutting off the lane.
@@ -129,16 +132,24 @@ The initial motion choice requests browser permission from a tap; an embedded
 controller reuses that granted intent without a second prompt. Permission alone
 cannot make it ready: five real gyro readings covering at least 150 ms are required.
 This allows immediate provisional zero bias while moving. A quiet safe boundary
-refines bias without interrupting play. Missing readings for more than 250 ms
-revoke automatic readiness. Provisional values are never saved as verified
+refines bias without interrupting play. Initial setup requires continuous samples
+with gaps no longer than 250 ms. Once established, browser setup survives brief
+foreground gaps up to 1.5 seconds; fresh aim resumes immediately. This does not
+join motion across a gap: recognizers discard interrupted gestures after 100 ms,
+and quiet calibration windows cannot span missing readings. Native setup retains
+its 250 ms freshness limit. Backgrounding and screen rotation reset readiness.
+Provisional values are never saved as verified
 stationary calibration. Optional Reset motion in Settings retains the explicit
 stationary calibration workflow for drift diagnosis; it is not a play requirement.
 
 Bowling needs no Arm button. On the current player's ready turn, 250 ms of quiet
-fresh readings prepares one delivery. Hold the phone screen up with its top toward
-the TV; tilt left/right to aim. Aim locks only when a positive X forward segment
-starts. The existing pitch dominance, travel, peak and 80 ms deceleration checks
-release once. Power uses forward peak speed with gravity-free acceleration assist.
+fresh readings prepares recognition. Hold the phone screen up with its top toward
+the TV; tilt left/right to aim. A short forward-dominant candidate must be confirmed
+before aim locks; brief pitch twitches and side-dominant positioning do not lock
+the line or release a ball. The locked value is the aim from before that candidate.
+Duration, pitch travel, peak and deceleration checks then release once. A quiet
+finish can confirm after 40 ms; active wrist rotation retains the 80 ms window.
+Power uses forward peak speed with gravity-free acceleration assist.
 Backswing never charges a shot. A release stays latched through acknowledgements,
 timeouts and reconnects until an authoritative new delivery boundary.
 
@@ -162,9 +173,10 @@ See [MDN Crypto.getRandomValues](https://developer.mozilla.org/en-US/docs/Web/AP
 The homepage parent owns the authenticated socket. The server validates bounded
 inputs, stamps the seat/match ID, checks the current turn, deduplicates delivery
 IDs and locks a pending delivery. The TV acknowledges only after the game accepts
-the roll. A late roll for an old match cannot affect a new one. All four bowling
-seats require setup before Ready. Reloading the TV resets the local match;
-network reconnection without a page reload preserves it.
+the roll. A late roll for an old match cannot affect a new one. All joined bowling
+seats require setup before the game starts. A TV reload offers continuation from
+the last accepted stable checkpoint; an interrupted in-flight roll is not replayed.
+Network reconnection without a page reload preserves the TV-owned match.
 
 ## Verification
 

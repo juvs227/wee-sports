@@ -25,7 +25,8 @@ async function fixture() {
   const feedback = [];
   let now = 1000;
   const session = new ControllerSession('https://game.example', { makeSocket: () => socket, now: () => now, feedback: event => feedback.push(event) });
-  session.seat = { code: 'K7PM', slot: 0, phase: 'game', gameId: 'game-a', inputGeneration: 3, hostEpoch: 2, sport: 'bowling', paused: false };
+  session.seat = { code: 'K7PM', slot: 0, phase: 'game', gameId: 'game-a', inputGeneration: 3, hostEpoch: 2, sport: 'bowling', paused: false,
+    gameState: {phase:'ready',currentPlayer:1,frame:1} };
   session.inputSetup='motion';
   return { session, socket, feedback, EVENTS, advance: ms => { now += ms; } };
 }
@@ -113,6 +114,22 @@ test('Tools suspend gameplay while preserving live aim, setup, connection and de
   session.seat.gameState={phase:'complete'};advance(17);
   assert.equal(session.controlsPlaying(),false);assert.equal(session.latest('aim',{}),false);
   assert.equal((await session.action(EVENTS.PLAYER_GAME_COMMAND,{action:'new-match'})).ok,true);
+  session.dispose();
+});
+
+test('bowling aim cannot steer a released ball or another player and resumes only on a fresh ready turn', async () => {
+  const {session,socket,EVENTS,advance}=await fixture();
+  assert.equal(session.latest('aim',{aim:.2,locked:false}),true);
+  for(const phase of ['rolling','settling','resetting','complete']) {
+    session.seat.gameState={phase,currentPlayer:1,frame:1};advance(20);
+    assert.equal(session.latest('aim',{aim:-1,locked:false}),false);
+  }
+  session.seat.gameState={phase:'ready',currentPlayer:2,frame:1};advance(20);
+  assert.equal(session.latest('aim',{aim:1,locked:false}),false);
+  assert.equal(socket.sent.filter(packet=>packet.event===EVENTS.PLAYER_AIM).length,1);
+  session.seat.gameState={phase:'ready',currentPlayer:1,frame:2};advance(20);
+  assert.equal(session.latest('aim',{aim:-.3,locked:false}),true);
+  assert.equal(socket.sent.filter(packet=>packet.event===EVENTS.PLAYER_AIM).at(-1).payload.aim,-.3);
   session.dispose();
 });
 

@@ -48,6 +48,8 @@ export function createSimpleSwingStream(label = 'Forehand') {
 export function createBowlingMotionDetector() {
   let previous = null;
   let started = null;
+  let confirmed = false;
+  let candidateSamples = 0;
   let peak = 0;
   let rotation = 0;
   let pitchRotation = 0;
@@ -68,7 +70,7 @@ export function createBowlingMotionDetector() {
     const spin = Math.sign(twist) * turn * .55 || 0;
     return { power, spin, peakRotation: peak };
   }
-  function reset() { started = null; peak = 0; rotation = 0; pitchRotation = 0; slowSince = null; quietSamples = 0; twist = 0; accelerationPeak = 0; }
+  function reset() { started = null; confirmed = false; candidateSamples = 0; peak = 0; rotation = 0; pitchRotation = 0; slowSince = null; quietSamples = 0; twist = 0; accelerationPeak = 0; }
   return {
     push(sample) {
       if (finished) return null;
@@ -85,8 +87,11 @@ export function createBowlingMotionDetector() {
       const pitch = Math.max(0, sample.rotationAlpha);
       const speed = Math.hypot(sample.rotationAlpha, sample.rotationBeta, sample.rotationGamma);
       let dt = Math.max(0, Math.min(gap, 100)) / 1000;
+      // Aiming can briefly pitch the phone as well as turn it sideways. Keep
+      // the line live until a sustained, mostly forward movement is present.
+      // Once confirmed, normal wrist curve and deceleration remain unrestricted.
+      if (!confirmed && (pitch < 100 || pitch < speed * .75)) { reset(); return null; }
       if (started === null) {
-        if (pitch < 100 || pitch < speed * .55) return null;
         started = sample.timeMs;
         dt = 0; // No angle is credited from before this forward segment.
       }
@@ -96,6 +101,10 @@ export function createBowlingMotionDetector() {
       peak = Math.max(peak, pitch);
       rotation += speed * dt;
       pitchRotation += pitch * dt;
+      if (!confirmed) {
+        candidateSamples++;
+        if (candidateSamples >= 3 && sample.timeMs - started >= 40 - 1e-6 && pitchRotation >= 8 - 1e-6) confirmed = true;
+      }
       // Include wrist rotation as the swing slows into release. Active wrist
       // turns keep the full 80 ms window; a confirmed, quiet finish can release
       // sooner. Backswing samples were excluded above.
@@ -121,7 +130,7 @@ export function createBowlingMotionDetector() {
       return null;
     },
     get preview() { return values(); },
-    get phase() { return finished ? 'finished' : started === null ? 'ready' : 'forward'; },
+    get phase() { return finished ? 'finished' : started === null ? 'ready' : confirmed ? 'forward' : 'candidate'; },
   };
 }
 
@@ -131,8 +140,8 @@ export function createBowlingMotionDetector() {
  * correlated rejection that proves no ball was released can permit a retry.
  */
 export function createBowlingDeliveryGate({quietMs = 250, quietSpeed = 45} = {}) {
-  let key, previous = null, quietSince = null, detector = null, aim = null, released = false;
-  const suspend = () => { previous = null; quietSince = null; detector = null; aim = null; };
+  let key, previous = null, quietSince = null, detector = null, aim = null, candidateAim = null, released = false;
+  const suspend = () => { previous = null; quietSince = null; detector = null; aim = null; candidateAim = null; };
   return {
     push(sample, {active = false, turnKey, aim: liveAim = 0} = {}) {
       if (turnKey !== key) { key = turnKey; released = false; suspend(); }
@@ -148,8 +157,11 @@ export function createBowlingDeliveryGate({quietMs = 250, quietSpeed = 45} = {})
       }
       const before = detector.phase;
       const delivery = detector.push(sample);
-      if (before !== 'forward' && detector.phase === 'forward') aim = clamp(Number.isFinite(liveAim) ? liveAim : 0, -1, 1);
-      if (detector.phase === 'ready') aim = null;
+      if (before === 'ready' && detector.phase === 'candidate') candidateAim = clamp(Number.isFinite(liveAim) ? liveAim : 0, -1, 1);
+      // Confirmation must not capture aim already displaced by the forward
+      // movement. Retain its starting line without showing a premature lock.
+      if (before !== 'forward' && detector.phase === 'forward') aim = candidateAim;
+      if (detector.phase === 'ready') { aim = null; candidateAim = null; }
       if (!delivery) return null;
       released = true;
       return {...delivery, aim: aim ?? clamp(liveAim, -1, 1)};

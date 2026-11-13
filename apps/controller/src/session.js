@@ -188,7 +188,9 @@ export class ControllerSession {
   controlsPlaying() {return this.playing() && this.controlsActive && Boolean(this.inputSetup) && this.seat.gameState?.phase!=='complete';}
 
   latest(kind, value) {
-    if (kind !== 'aim' || this.seat?.sport !== 'bowling' || !this.playing() || this.seat.gameState?.phase==='complete') return false;
+    // Aim is a pre-release preview, never steering for a ball already in play.
+    if (kind !== 'aim' || this.seat?.sport !== 'bowling' || !this.playing() ||
+        this.seat.gameState?.phase !== 'ready' || this.seat.gameState.currentPlayer !== this.seat.slot + 1) return false;
     const now = this.now();
     // The gyro provides about 60 samples/second. A little scheduling headroom
     // keeps alternate 16 ms callbacks from being dropped by a 16.67 ms gate.

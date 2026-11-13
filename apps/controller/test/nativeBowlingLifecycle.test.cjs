@@ -129,6 +129,39 @@ test('native 30 Hz gravity and 60 Hz gyro keep a quick aiming tilt continuous wi
   } finally {f.stop();}
 });
 
+for (const hz of [30, 60, 100]) test(`native automatic bowling at ${hz} Hz keeps positioning live and releases only the confirmed forward swing`, async () => {
+  const f = await fixture();
+  const dt = 1000 / hz;
+  const gravity = angle => ({x: Math.sin(angle * Math.PI / 180) * 9.80665, y: 0, z: -Math.cos(angle * Math.PI / 180) * 9.80665});
+  const send = (pitch = 0, twist = 0, angle = 0) => f.sample({dt, gravity: gravity(angle),
+    gyro: {x: pitch * Math.PI / 180, y: twist * Math.PI / 180, z: 0}});
+  try {
+    f.flow.update(f.session.seat, 'online'); await tick();
+    for (let i = 0; i < hz / 2; i++) send();
+    await tick(); f.start();
+    for (let i = 0; i < hz / 2; i++) send();
+    const positioningStart = f.socket.sent.length;
+    for (let i = 0; i < hz / 2; i++) send(160, 180, i * 20 / hz);
+    send(700); send(700); send();
+    for (let i = 0; i < hz / 4; i++) send(0, 0, 12);
+    const positioning = f.socket.sent.slice(positioningStart);
+    assert.equal(positioning.some(item => item.event === 'player:roll'), false);
+    const aims = positioning.filter(item => item.event === 'player:aim');
+    assert.ok(aims.length > 5);
+    assert.ok(aims.every(item => item.payload.locked === false));
+    assert.ok(aims.at(-1).payload.aim > .25, 'the user can still change aim after mixed-axis positioning');
+    const expectedAim = f.motion.aim;
+    for (let i = 0; i < hz / 3; i++) send(400, 70, -20);
+    for (let i = 0; i < hz / 2; i++) send();
+    await tick();
+    const rolls = f.socket.sent.filter(item => item.event === 'player:roll');
+    assert.equal(rolls.length, 1);
+    assert.equal(rolls[0].payload.aim, expectedAim);
+    assert.ok(rolls[0].payload.spin > 0);
+    assert.ok(rolls[0].payload.power > .5);
+  } finally {f.stop();}
+});
+
 test('temporary inactive permission overlays do not expire an otherwise live motion controller', async () => {
   const f=await fixture();
   try {

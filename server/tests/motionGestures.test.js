@@ -229,7 +229,7 @@ test('opposite gravity and support-acceleration conventions keep the same bowlin
 });
 
 
-test('natural bowling gate freezes aim at forward onset and latches until a new authoritative turn', () => {
+test('natural bowling gate confirms forward movement before locking its starting aim and latching the turn', () => {
   const gate = createBowlingDeliveryGate();
   let time = 0, key = 'turn-1', aim = .35;
   const push = (pitch = 0, twist = 0, active = true) => gate.push(bowlSample(time += 20, pitch, twist), {active, turnKey: key, aim});
@@ -241,9 +241,12 @@ test('natural bowling gate freezes aim at forward onset and latches until a new 
   expect(gate.preview.power).toBe(0);
   aim = -.4;
   push(400);
+  expect(gate.phase).toBe('candidate');
+  expect(gate.lockedAim).toBeNull();
+  aim = .8;
+  push(400); push(400);
   expect(gate.phase).toBe('forward');
   expect(gate.lockedAim).toBe(-.4);
-  aim = .8;
   const rolls = [];
   for (let i = 0; i < 35; i++) { const result = push(i < 15 ? 400 : 0, i < 20 ? 100 : 0); if (result) rolls.push(result); }
   expect(rolls).toHaveLength(1);
@@ -256,6 +259,91 @@ test('natural bowling gate freezes aim at forward onset and latches until a new 
   for (let i = 0; i < 16; i++) push();
   for (let i = 0; i < 35; i++) { const result = push(i < 15 ? 400 : 0); if (result) rolls.push(result); }
   expect(rolls).toHaveLength(2);
+});
+
+test.each([30, 60, 100])('automatic bowling at %i Hz rejects diagonal positioning and short pitch twitches without locking aim', hz => {
+  const gate = createBowlingDeliveryGate();
+  let frame = 0;
+  const push = (pitch = 0, twist = 0) => gate.push(bowlSample(frame++ * 1000 / hz, pitch, twist),
+    {active: true, turnKey: 1, aim: Math.sin(frame / 10) * .4});
+  for (let i = 0; i < hz / 2; i++) push();
+  for (let i = 0; i < hz; i++) {
+    // Previously this mixed-axis positioning motion both locked and released.
+    expect(push(160, i % 2 ? 180 : -180)).toBeNull();
+    expect(gate.lockedAim).toBeNull();
+    expect(gate.phase).toBe('ready');
+  }
+  for (let pulse = 0; pulse < 5; pulse++) {
+    for (let i = 0; i < 2; i++) {
+      expect(push(700)).toBeNull();
+      expect(gate.lockedAim).toBeNull();
+    }
+    for (let i = 0; i < 5; i++) expect(push()).toBeNull();
+    expect(gate.phase).toBe('ready');
+  }
+});
+
+test.each([30, 60, 100])('sideways positioning at %i Hz does not change the next genuine automatic delivery', hz => {
+  const run = noisy => {
+    const gate = createBowlingDeliveryGate();
+    let frame = 0, aim = .27;
+    const push = (pitch = 0, twist = 0) => gate.push(bowlSample(frame++ * 1000 / hz, pitch, twist), {active: true, turnKey: 1, aim});
+    for (let i = 0; i < hz / 2; i++) push();
+    for (let i = 0; i < hz; i++) {
+      const result = noisy ? push(i % 9 === 0 ? 400 : 160, i % 9 === 0 ? 0 : 180) : push();
+      expect(result).toBeNull(); expect(gate.lockedAim).toBeNull();
+    }
+    // Separate positioning from the next stroke, without another arming delay.
+    push();
+    let onset = null, lockedAt = null;
+    const releases = [];
+    for (let i = 0; i <= hz; i++) {
+      const time = i * 1000 / hz;
+      const envelope = time < 400 ? Math.sin(Math.PI * time / 400) : 0;
+      const phase = gate.phase;
+      const result = push(400 * envelope, 100 * envelope);
+      if (phase === 'ready' && gate.phase === 'candidate') {onset = time; aim = -.8;}
+      if (lockedAt === null && gate.lockedAim !== null) lockedAt = time;
+      if (result) releases.push({...result, time});
+    }
+    expect(releases).toHaveLength(1);
+    expect(lockedAt - onset).toBeGreaterThanOrEqual(40 - 1e-6);
+    expect(lockedAt - onset).toBeLessThanOrEqual(100);
+    expect(releases[0].aim).toBe(.27);
+    expect(releases[0].spin).toBeGreaterThan(0);
+    // Neither further follow-through nor repeated forward movement replays it.
+    for (let i = 0; i < hz; i++) expect(push(500, -150)).toBeNull();
+    return releases[0];
+  };
+  const clean = run(false), afterPositioning = run(true);
+  expect(afterPositioning.time).toBe(clean.time);
+  expect(afterPositioning.power).toBeCloseTo(clean.power, 10);
+  expect(afterPositioning.spin).toBeCloseTo(clean.spin, 10);
+});
+
+test.each(['sideways', 'reversal', 'gap', 'invalid'])('unconfirmed bowling candidates cancel on %s and never lock a later aim', interruption => {
+  const gate = createBowlingDeliveryGate();
+  let time = 0;
+  const push = (pitch = 0, twist = 0, aim = -.6) => gate.push(bowlSample(time += 20, pitch, twist), {active: true, turnKey: 1, aim});
+  for (let i = 0; i < 16; i++) push();
+  push(400); push(400);
+  expect(gate.lockedAim).toBeNull();
+  if (interruption === 'gap') time += 150;
+  push(interruption === 'reversal' ? -400 : interruption === 'invalid' ? NaN : 0, interruption === 'sideways' ? 400 : 0);
+  expect(gate.lockedAim).toBeNull();
+  for (let i = 0; i < 16; i++) push();
+  for (let i = 0; i < 3; i++) push(400, 0, .4);
+  expect(gate.lockedAim).toBe(.4);
+});
+
+test('two sparse callbacks cannot confirm forward movement without a third supporting sample', () => {
+  const detector = createBowlingMotionDetector();
+  detector.push(bowlSample(0, 400));
+  detector.push(bowlSample(80, 400));
+  expect(detector.phase).toBe('candidate');
+  detector.push(bowlSample(100, 0, 400));
+  expect(detector.phase).toBe('ready');
+  expect(detector.preview.power).toBe(0);
 });
 
 test('natural gate drops partial swings on a sensor gap, hidden page or turn loss', () => {
