@@ -19,3 +19,6 @@ tennis supports stable boundaries within a live room.
 
 The desktop entry keeps the team's sport-card homepage. Phones have a controller
 homepage, QR scanner, manual entry, automatic setup and touch fallback.
+
+See [controller ownership and state transitions](controller-design.md) for the
+concrete input contract, recovery rules, source map and acceptance checks.

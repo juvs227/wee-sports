@@ -38,9 +38,9 @@ function SportTile({sport,seat,disabled,onPress}) {
 function Field({ label, ...props }) {
   return <View style={styles.field}><Text style={styles.label}>{label}</Text><TextInput accessibilityLabel={label} placeholderTextColor="#8792aa" style={styles.input} {...props}/></View>;
 }
-function Stepper({ label, value, change, min = -1, max = 1, step = .1 }) {
+function Stepper({ label, value, change, disabled = false, min = -1, max = 1, step = .1 }) {
   return <View style={styles.stepper}><Text style={styles.label}>{label} {Math.round(value * 100)}%</Text>
-    <View style={styles.row}><Button quiet onPress={() => change(clamp(value - step, min, max))}>−</Button><Button quiet onPress={() => change(clamp(value + step, min, max))}>+</Button></View></View>;
+    <View style={styles.row}><Button quiet disabled={disabled} onPress={() => change(clamp(value - step, min, max))}>−</Button><Button quiet disabled={disabled} onPress={() => change(clamp(value + step, min, max))}>+</Button></View></View>;
 }
 function KeepControllerAwake() { useKeepAwake('wee-controller', {suppressDeactivateWarnings:true}); return null; }
 
@@ -296,7 +296,8 @@ export default function App() {
   const tvAway = waitingForTv(seat);
   const inLobby = ['lobby','ready'].includes(seat?.phase);
   const playable = seat?.phase === 'game' && !seat.paused && status === 'online';
-  const canRoll = playable && !optionsOpen && !profileOpen && seat?.gameState?.phase === 'ready' && seat?.gameState?.currentPlayer === seat.slot + 1;
+  const canAdjustBowling = playable && !rollState && seat?.gameState?.phase === 'ready' && seat?.gameState?.currentPlayer === seat.slot + 1;
+  const canRoll = canAdjustBowling && !optionsOpen && !profileOpen;
   const summary = matchSummary(seat);
   const completed = seat?.gameState?.phase === 'complete';
   const playState = controllerPlayState(seat,status,setup);
@@ -366,7 +367,7 @@ export default function App() {
         {seat && typeof seat.soundMuted==='boolean' ? <Button quiet disabled={status!=='online' || busy} onPress={() => task(async () => result(await sessionRef.current.request(EVENTS.SOUND_SET,{muted:!seat.soundMuted})))}>TV sound {seat.soundMuted ? 'off' : 'on'}</Button> : null}
         {seat && mode==='motion' ? <Button quiet onPress={() => motionRef.current?.recenter()}>Center motion</Button> : null}
         {seat?.sport==='tennis' && mode==='motion' ? <View style={styles.row}>{['auto','Forehand','Backhand'].map(value=><Button quiet key={value} onPress={() => setStrokeMode(value)}>{value==='auto' ? 'Automatic strokes' : `Simple ${value.toLowerCase()}`}{strokeMode===value ? ' ✓' : ''}</Button>)}</View> : null}
-        {seat?.sport==='bowling' && mode==='touch' ? <><Stepper label="Power" value={power} change={setPower} min={.2}/><Stepper label="Curve" value={spin} change={setSpin}/></> : null}
+        {seat?.sport==='bowling' && mode==='touch' ? <><Stepper label="Power" value={power} change={setPower} min={.2} disabled={!canAdjustBowling}/><Stepper label="Curve" value={spin} change={setSpin} disabled={!canAdjustBowling}/></> : null}
       </View>
       {seat && isLeader && seat.phase==='game' ? <View style={styles.card}><Text style={styles.subheading}>Game options</Text>
         <Button quiet disabled={status!=='online' || (completed && !seat.manuallyPaused)} onPress={() => task(async () => result(await sessionRef.current.request(EVENTS.PLAYER_PAUSE,{gameId:seat.gameId,paused:!seat.manuallyPaused})))}>{seat.manuallyPaused ? 'Resume game' : 'Pause game'}</Button>
@@ -429,7 +430,7 @@ export default function App() {
           <Text accessibilityLiveRegion="polite" style={styles.playTitle}>{playState.title}</Text>
           <Text style={styles.playHint}>{playState.hint}</Text>
           {mode === 'touch' && !completed ? seat.sport === 'bowling' ? <>
-            <Stepper label="Aim" value={aim} change={setAim}/>
+            <Stepper label="Aim" value={aim} change={setAim} disabled={!canRoll || !setup}/>
             <Button disabled={!canRoll || !setup || Boolean(rollState)} onPress={() => {setNotice('');release().catch(error=>setNotice(error.message));}}>{rollState ? 'Watch the TV' : 'Roll'}</Button>
           </> : (<View style={styles.row}>{['Forehand','Backhand'].map(label=><Button key={label} disabled={!playable || !setup} onPress={()=>task(async()=>{animatePlay('swing',label);result(await sessionRef.current.action(EVENTS.PLAYER_SWING,{type:'swing',label,hand,power}));})}>{label}</Button>)}</View>) : null}
           {rollState?.status==='unknown' ? <Button quiet onPress={()=>{setNotice('');checkRoll().catch(error=>setNotice(error.message));}}>Check previous roll outcome</Button> : null}
