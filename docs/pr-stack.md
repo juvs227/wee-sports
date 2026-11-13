@@ -55,12 +55,20 @@ its default exercises Classic. Both accept `WEE_SMOKE_URL` and
 `WEE_SMOKE_PROFILES=1`. They require Playwright on the Node module path.
 
 
-The published functional repair heads are `fc97950` (PR 1), `76d1f38` (PR 2),
-`aa6a20b` (PR 4), and `d02bf16` (PR 5). Each preserves its original branch history
-and passed compile/lint, its full unit/server suites, recorded-motion replay and
-production build. PRs 4 and 5 also passed their native tests; the combined repair
-passed both Expo platform exports. Final PR5's application code is identical to
-the accepted `test/prs-1-2-4-5` build at `62d228e`.
+The QR startup heads are `c8615f2` (PR 1), `9a537ba` (PR 2),
+`f90600d` (PR 4), and `d82162a` (PR 5). The change belongs to PR 1 and is
+inherited by the remaining stack. It overlaps build and tunnel provisioning,
+still waits for the public HTTPS health check before advertising a phone URL,
+and retries discovery every second while the TV is waiting for that URL.
+Each branch preserves its original history; gameplay, motion recognition,
+native controller code and homepage presentation are unchanged by this update.
+
+PRs 2, 4 and 5 each passed compile/lint, production build and all 38 focused
+QR-startup tests. The combined integration passed 923 Vitest tests, compile/lint
+and its production build. The preceding functional repair passed its full
+unit/server suites, recorded-motion replay, native tests and both Expo exports.
+Its gameplay and native code still matches the accepted `test/prs-1-2-4-5`
+build at `62d228e`; the new browser behavior is limited to phone-link discovery.
 
 
 ## Combined team test branch

@@ -50,12 +50,18 @@ browser/native session. Do not point tests at a production profile database.
 ## Validated source and integration behavior
 
 The user accepted the functional test build `62d228e` on `test/prs-1-2-4-5`.
-The corresponding repair heads are `fc97950` (PR 1), `76d1f38` (PR 2),
-`aa6a20b` (PR 4), and `d02bf16` (PR 5); each contains team main `78d04a0`.
-The complete functional stack was merged cleanly into the published integration
-branch. Its controller, server and gameplay code matches the accepted build;
-the existing published Classic/Island pages were preserved. No new gameplay
-changes were introduced to avoid conflicts.
+The current QR startup heads are `c8615f2` (PR 1), `9a537ba` (PR 2),
+`f90600d` (PR 4), and `d82162a` (PR 5); each contains team main `78d04a0`.
+The QR change belongs to PR 1 and is inherited by the other proposals. The
+complete stack merged cleanly into integration base `47caedc`. It changes only
+phone-link discovery and development-session startup, with accompanying tests
+and documentation. Motion recognition, native controllers, server gameplay and
+the existing Classic/Island pages remain identical to that tested base.
+No gameplay changes were introduced to avoid conflicts.
+
+Build and tunnel provisioning now overlap, but the QR still waits for a verified
+public HTTPS URL. While no URL is available, the TV retries discovery every
+second; a ready link returns to the normal ten-second refresh interval.
 
 The integration keeps our gyro stroke detector and automatic setup.
 PR 14's orientation readings are optional diagnostic metadata; its calibrated
@@ -68,10 +74,16 @@ multi-device combination. Those checks are the purpose of the acceptance pass ab
 
 ## Automated verification
 
-The combined source passed 901 Vitest tests, 74 server tests, compile/lint,
-recorded-motion replay and its production build. The identical functional stack
-passed 72 native controller tests and Android/iOS Expo exports. GitHub CI passed for all four
-published functional repair heads, including native checks on PRs 4 and 5.
+The QR integration passed 923 Vitest tests across 89 files, compile/lint and
+its production build, including verification of the existing Island assets.
+PRs 2, 4 and 5 each also passed all 38 focused QR-startup tests. Focused browser
+verification checked the localhost TV's secure QR, recovery from a connecting
+response, and controller loading through the advertised HTTPS phone URL.
+
+Before this QR update, the functional integration passed 74 server tests,
+recorded-motion replay, 72 native controller tests and Android/iOS Expo exports.
+GitHub CI passed for its four functional repair heads. Those results describe
+the preceding repair; native, gameplay and motion sources are unchanged here.
 
 Browser validation covers both presentation flows, phone joining, tennis swings,
 bowling rolls and TV reload recovery, profile request failure/recovery, phone
