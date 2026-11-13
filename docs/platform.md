@@ -13,7 +13,7 @@
 - If a phone does not return, its seat is released. Before play, readiness resets;
   during a match, losing either tennis player or any bowler ends the match and
   returns the remaining group to the lobby. Tennis has two playing seats and
-  bowling has four; there are no extra spectator seats. Reserved disconnected
+  bowling has eight; there are no extra spectator seats. Reserved disconnected
   seats still count toward the limit until they expire.
   If the TV does not return, the lobby closes. Explicit **Leave game** and
   **Close lobby** still take effect immediately.
@@ -22,7 +22,7 @@
   message rather than silently creating a different session.
 
 **Integration scope:** tennis uses one phone against the bot or two phones
-playing each other. Bowling supports one to four players through ten frames,
+playing each other. Bowling supports one to eight players through ten frames,
 with turn validation and game acknowledgements; see [bowling details](bowling.md). Both controllers open before Play and stay loaded through the
 countdown. Each must report successful motion calibration or an explicit button-control
 choice before Ready. Reloading a controller clears its setup and pauses an active
@@ -46,7 +46,7 @@ Vite locally without a phone tunnel. Do not bypass certificate warnings. The
 phone still needs a direct **Calibrate** tap and the browser’s motion permission.
 
 Start with one phone, then repeat with two separate phones for tennis and up to
-four for bowling. Record actual phone/browser results: automated sensor recordings
+eight for bowling. Record actual phone/browser results: automated sensor recordings
 do not verify physical hardware permissions or the feel of a live swing.
 
 1. Refresh a phone and the TV; verify the same room, names, and seats. Refinish controller setup after a reload. The TV starts a fresh world on reload.
@@ -60,7 +60,7 @@ do not verify physical hardware permissions or the feel of a live swing.
    controller leaving returns everyone to the lobby.
 8. In bowling, test tilt aiming, swing power and wrist-twist curve with each hand;
    compare gentle and stronger releases, turn changes and repeated rolls. Verify
-   four players can join and the fifth is rejected. Test button fallback separately.
+   eight players can join and the ninth is rejected. Test button fallback separately.
 9. Start from the TV’s Play button and check fullscreen. Exit and re-enter the
    full-screen view during a roll; its position and score must continue without
    a reload. Repeat when the browser denies native fullscreen to check the
@@ -126,3 +126,6 @@ All seven tested stages passed with no errors, missed sends, or disconnects.
 short, synthetic results are not a supported production player limit. See the
 [full recorded report](../server/benchmarks/local-capacity.json), including the server
 revision, all stages, workload, and machine details.
+
+See [controller ownership and state transitions](controller-design.md) for the
+input contract, recovery rules and proposal availability.

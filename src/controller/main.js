@@ -70,7 +70,9 @@ const controllerPreferences = createControllerPreferences(setupStorage ?? fallba
 let motionSensitivity = controllerPreferences.values.sensitivity;
 let automaticSetupPending = true;
 let motionAcquired = false;
-const automaticMotion = createAutomaticMotionSetup();
+// Brief foreground scheduling gaps retain setup, while recognizers discard
+// partial gestures and resume from fresh samples. Backgrounding resets below.
+const automaticMotion = createAutomaticMotionSetup({readyGapSeconds: 1.5});
 element('hand').value = savedSetup?.hand ?? controllerPreferences.values.hand;
 let strengthProfile = null;
 let rehearsal = null;
@@ -173,8 +175,11 @@ function publishSetup() {
   }
 }
 function turnReady() { return bowling && gameActive && connected && !lobbyPaused && canRoll && currentPlayer === player && !pendingRoll; }
+// The touch slider has deliberately coarse steps. Keep motion at sensor
+// precision so its preview and locked delivery never inherit those steps.
+function currentAim() { return buttonMode ? Number(element('aim').value) : liveAim; }
 function publishAim() {
-  aimStream.publish(lockedAim ?? Number(element('aim').value), lockedAim !== null, performance.now(),
+  aimStream.publish(lockedAim ?? currentAim(), lockedAim !== null, performance.now(),
     turnReady() && pageActive && !document.hidden && !settingsOpen && (buttonMode || Boolean(bias)));
 }
 function cancelArmedRoll() { bowlingGate.suspend(); bowlingDetector = null; lockedAim = null; }
@@ -250,8 +255,11 @@ function renderPlayState() {
         state = 'waiting'; title = 'Watch the lane'; help = 'Your ball is rolling. Let the pins settle.';
       } else if (turnReady()) {
         status = 'Your turn';
-        title = buttonMode ? 'Choose your line' : bowlingGate.phase === 'finished' ? 'Watch the lane' : 'Swing forward to bowl';
-        help = buttonMode ? 'Aim, then tap Roll.' : bowlingGate.phase === 'finished' ? 'Waiting for the next ball.' : 'Screen up. Tilt to aim, then swing gently forward.';
+        title = buttonMode ? 'Choose your line' : bowlingGate.phase === 'finished' ? 'Watch the lane'
+          : bowlingGate.phase === 'rest' ? 'Hold still for a moment' : 'Swing forward to bowl';
+        help = buttonMode ? 'Aim, then tap Roll.' : bowlingGate.phase === 'finished' ? 'Waiting for the next ball.'
+          : bowlingGate.phase === 'rest' ? 'Screen up. Keep your hand steady until the swing prompt appears.'
+            : 'Screen up. Tilt to aim, then swing gently forward.';
       } else {
         state = 'waiting'; title = currentPlayer ? `P${currentPlayer} is bowling` : 'Waiting for the lane';
         help = 'Watch the TV. Your turn will appear here.';
@@ -359,7 +367,7 @@ element('forehand').onclick = () => send('Forehand');
 element('backhand').onclick = () => send('Backhand');
 function roll(power, measuredSpin = null) {
   if (!turnReady() || document.hidden) return;
-  const aim = lockedAim ?? Number(element('aim').value);
+  const aim = lockedAim ?? currentAim();
   cancelArmedRoll();
   const event = { type: 'roll', id: createInputId(), power,
     aim, spin: measuredSpin ?? Number(element('spin').value) };
@@ -378,13 +386,16 @@ function showBowlingReadout(readout) {
   element('motion-curve').textContent = Math.abs(readout.spin) < .005 ? 'Straight'
     : `${readout.spin < 0 ? 'Left' : 'Right'} ${Math.round(Math.abs(readout.spin) / .55 * 100)}%`;
 }
+function showDeliveryValue(id, value) {
+  element(`${id}-value`).textContent = id === 'power' ? `${Math.round(value * 100)}%`
+    : value === 0 ? id === 'aim' ? 'Center' : 'Straight'
+    : `${value < 0 ? 'Left' : 'Right'} ${Math.round(Math.abs(value) * 100)}%`;
+}
 for (const id of ['aim', 'spin', 'power']) {
   element(id).oninput = () => {
     const value = Number(element(id).value);
-    element(`${id}-value`).textContent = id === 'power' ? `${Math.round(value * 100)}%`
-      : value === 0 ? id === 'aim' ? 'Center' : 'Straight'
-      : `${value < 0 ? 'Left' : 'Right'} ${Math.round(Math.abs(value) * 100)}%`;
-    if (id === 'aim') publishAim();
+    showDeliveryValue(id, value);
+    if (id === 'aim') { liveAim = value; publishAim(); }
   };
 }
 function analyze() {
@@ -522,7 +533,13 @@ window.addEventListener('message', event => {
   if (data?.type === 'wee:bowling-state' && bowling) {
     // Readiness also changes on pause/reconnect. Only an actual lane/player
     // transition can grant a new delivery while an earlier outcome is unknown.
-    if (data.phase === 'ready' && (bowlingPhase !== 'ready' || currentPlayer !== data.currentPlayer)) bowlingTurn++;
+    if (data.phase === 'ready' && (bowlingPhase !== 'ready' || currentPlayer !== data.currentPlayer)) {
+      bowlingTurn++;
+      // A new authoritative turn resolves the previous delivery even if its
+      // reply was lost. Replaying the same ready state after pause/reconnect
+      // does not create a turn, and cannot unlock an uncertain release.
+      if (pendingRoll && pendingRoll.turnKey !== bowlingTurn) pendingRoll = null;
+    }
     canRoll = data.canRoll === true;
     currentPlayer = data.currentPlayer;
     bowlingPhase = data.phase;
@@ -623,6 +640,17 @@ function motion(event) {
     bias = {alpha: setup.calibration.bias.x * degrees, beta: setup.calibration.bias.y * degrees, gamma: setup.calibration.bias.z * degrees};
     sample = toLegacyMotionSample(setup.sample, {timeOriginSeconds: (rehearsal ? rehearsalStarted : started) / 1000});
     if (setup.justReady) {
+      if (savedSetup) {
+        // Revalidate when fresh readings arrive: storage alone never readies
+        // motion, and waiting on permission must not extend a tuning's expiry.
+        const restored = calibrationMemory.read();
+        if (restored?.hand === element('hand').value) {
+          strengthProfile = restored.strength;
+          if (strengthProfile) element('strength-status').textContent = 'Your comfortable strength was restored for this playing hand.';
+        }
+        // Later reconnects must preserve an explicit retune/default choice.
+        savedSetup = null;
+      }
       motionAcquired = true;
       if (!userPaused) motionWanted = true;
       element('motion').textContent = 'Motion ready. Watch the TV.';
@@ -644,7 +672,8 @@ function motion(event) {
   if (bowling) {
     // Capture the last positioning line before the first forward-pitch sample
     // can move its gravity vector. Delivery recognition owns the aim lock.
-    const result = bowlingGate.push(sample, {active: turnReady(), turnKey: bowlingTurn, aim: Number(element('aim').value)});
+    const previousPhase = bowlingGate.phase;
+    const result = bowlingGate.push(sample, {active: turnReady(), turnKey: bowlingTurn, aim: currentAim()});
     if (bowlingGate.lockedAim === null && turnReady()) {
       const degrees = Math.PI / 180;
       const tilt = aimMotion.push({...reading.sample, angularVelocity: {
@@ -652,8 +681,9 @@ function motion(event) {
       }}, {sensitivity: motionSensitivity});
       if (tilt !== null) {
         liveAim = tilt;
-        element('aim').value = String(Math.round(liveAim * 100) / 100);
-        element('aim').oninput();
+        element('aim').value = String(liveAim);
+        showDeliveryValue('aim', liveAim);
+        publishAim();
       }
     }
     bowlingDetector = bowlingGate.phase === 'forward' ? bowlingGate : null;
@@ -666,6 +696,7 @@ function motion(event) {
       showBowlingReadout(bowlingReadout);
     }
     if (result) roll(Math.min(1, result.power * motionSensitivity), result.spin);
+    else if (previousPhase !== bowlingGate.phase) renderPlayState();
   } else {
     const radians = Math.PI / 180;
     tennisAim.push({...canonical, angularVelocity:{x:sample.rotationAlpha * radians,y:sample.rotationBeta * radians,z:sample.rotationGamma * radians}});
@@ -708,9 +739,13 @@ function showMotionError(error) {
   renderPlayState();
 }
 function rememberCalibration() {
-  if (bias && Number.isFinite(verifiedAt)) calibrationMemory.save({
-    hand: element('hand').value, bias, strength: strengthProfile, verifiedAt,
-  });
+  if (!bias) return;
+  const hand = element('hand').value;
+  // Automatic readiness can still be using a provisional zero. Updating
+  // strength must retain an already verified bias and its original expiry.
+  const verified = automaticSetupPending ? calibrationMemory.read()
+    : Number.isFinite(verifiedAt) ? {hand, bias, verifiedAt} : null;
+  if (verified?.hand === hand) calibrationMemory.save({...verified, strength: strengthProfile});
 }
 function beginCalibration(restore = false) {
   stop();
