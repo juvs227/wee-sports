@@ -16,7 +16,7 @@ function fixture(sport = 'tennis') {
   });
   const start = () => {
     for (const socket of ['p1', 'p2']) store.setReady(socket, { ready: true });
-    store.calibrationDone('tv');
+    store.startGame('p1');
     now += 5000; store.finishCountdown(room.code);
     now += VOTE_SECONDS * 1000; store.expireVote(room.code);
     return store.lobby(room.code).gameId;
@@ -140,7 +140,7 @@ for (const sport of ['tennis', 'bowling']) test(`real sockets: ${sport} phone/TV
     await send(phone, EVENTS.PLAYER_SETUP, { setup: 'motion' });
   }
   for (const phone of [p1, p2]) await send(phone, EVENTS.PLAYER_READY, { ready: true });
-  await send(tv, EVENTS.HOST_CALIBRATION_DONE, {});
+  await send(p1, EVENTS.PLAYER_START, {});
   now += 5000; store.finishCountdown(room.code); now += VOTE_SECONDS * 1000; store.expireVote(room.code);
   const gameId = store.lobby(room.code).gameId;
   assert.equal((await send(p2, EVENTS.PLAYER_PAUSE, { gameId, paused: true })).error, 'not-game-leader');

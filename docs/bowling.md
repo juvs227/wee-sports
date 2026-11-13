@@ -1,5 +1,47 @@
 # Bowling and phone motion
 
+## Browser improvements and recovery
+
+The phone now publishes a replaceable aim preview up to 20 times per second.
+The room service authenticates the active player; the lane accepts only its
+current game, input generation, host epoch and increasing sequence. Forward swing onset
+stores an explicit immutable aim for the delivery and changes the TV line to
+gold. The preview never authorizes a roll or changes a rolling ball. Aim
+filtering uses elapsed time with an 84 ms time constant, approximately matching
+the old 0.18-per-sample response at 60 Hz. Identical sampled step responses at
+30, 60 and 100 Hz now agree. This is a cadence fix, not hardware feel evidence.
+
+Solo practice resets a fresh rack after each settled delivery. Select it in
+game options, or use **Practice a fresh rack** on the standalone bowling page.
+Switch back to a ten-frame game between deliveries; switching during a roll
+is rejected. Touch aim, curve and power remain available without sensors.
+
+The TV exports versioned checkpoints only before a delivery or after settlement.
+They contain the settled delivery history and full position/quaternion of every
+standing pin. Restore replays the rules to derive the score and next turn,
+checks the roster and pin transforms, and preserves off-spot pins. It refuses
+to restore moving balls or accept a late restore after local gameplay began.
+The service owns storage, revision and host-epoch authorization; raw movement
+is not included. An interrupted in-flight delivery resumes from the last
+accepted settled boundary, not from a fabricated mid-flight simulation.
+
+The canonical adapter uses the W3C DeviceMotion rotationRate convention:
+`alpha=X`, `beta=Y`, `gamma=Z`, in degrees per second at the browser boundary.
+Canonical motion uses radians per second; conversion back to the recognizer
+preserves browser signals. With screen up and the phone top toward the TV,
+positive X is the expected forward pitch, and positive Y requests a curve right
+on the TV. Physical iOS/Android grip trials remain required to verify native
+sensor signs and comfort; synthetic tests establish deterministic signal mapping,
+not hardware feel. Cannon-es coefficients and forward release thresholds are unchanged.
+
+Signed-in profile preferences can supply initial hand, motion response, vibration
+and button-mode defaults. Explicit choices on this device and an active setup
+take precedence over a late profile response. The local preference record is
+separate from calibration, contains no gyro bias or account credentials, and
+cannot grant sensor permission. Motion response changes the bounded aim/power
+mapping, not the release detector; touch power stays exactly as selected. Turning
+off vibration keeps visible confirmation and contact feedback available.
+
 ## Rules implemented
 
 One to four players complete ten frames in order. A frame normally has two
@@ -83,31 +125,31 @@ on reset. Speaker balance and real-phone delivery feel remain device checks.
 
 ## Motion setup and delivery
 
-A direct Calibrate tap requests motion permission while the browser still has
-user activation. Permission alone is not success. Calibration ignores 800 ms of
-settling and then requires a fresh continuous 1.2-second still window, with a
-10-second timeout and explicit failure reason. Missing/null gyroscope readings
-cannot pass. Live diagnostics distinguish denied access, absent data, movement
-and insecure HTTP. Motion starts automatically once calibrated and playing;
-explicit Stop, hidden pages, pauses and disconnects discard partial gestures.
+The initial motion choice requests browser permission from a tap; an embedded
+controller reuses that granted intent without a second prompt. Permission alone
+cannot make it ready: five real gyro readings covering at least 150 ms are required.
+This allows immediate provisional zero bias while moving. A quiet safe boundary
+refines bias without interrupting play. Missing readings for more than 250 ms
+revoke automatic readiness. Provisional values are never saved as verified
+stationary calibration. Optional Reset motion in Settings retains the explicit
+stationary calibration workflow for drift diagnosis; it is not a play requirement.
 
-Bowling arms one delivery at a time. Hold the phone screen up with its top toward
-the TV. Tilt left/right to aim; arming locks the aim so the swing cannot move it.
-A sustained X-axis underhand pitch (`rotationRate.alpha`) followed by deceleration
-releases once. Power comes from peak pitch speed, assisted by gravity-free linear
-acceleration when available. Integrated Y-axis wrist rotation (`rotationRate.beta`)
-sets left/right curve with a 10-degree dead zone, a progressive response and a
-55% cap on motion curve. Only the active forward swing contributes wrist turn;
-late follow-through does not add a surprise hook. Aim has a 4-degree center dead
-zone. The phone shows the measured power
-and curve while armed and briefly after release. Motion rates use a different
-axis order from DeviceOrientation angles; this follows the deployed
-[Chromium implementation](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/modules/device_orientation/device_motion_event_pump.cc).
-Unusable gravity readings restore manual aim. Explicit button mode retains aim,
-curve and power sliders. Tennis uses the team’s post-peak fast confirmation by default, retaining the
-physical motion window to avoid duplicate follow-through and missed repeat swings.
-The automatic classifier still offers
-explicit simple shot mappings for devices/grips that cannot satisfy it.
+Bowling needs no Arm button. On the current player's ready turn, 250 ms of quiet
+fresh readings prepares one delivery. Hold the phone screen up with its top toward
+the TV; tilt left/right to aim. Aim locks only when a positive X forward segment
+starts. The existing pitch dominance, travel, peak and 80 ms deceleration checks
+release once. Power uses forward peak speed with gravity-free acceleration assist.
+Backswing never charges a shot. A release stays latched through acknowledgements,
+timeouts and reconnects until an authoritative new delivery boundary.
+
+Y wrist rotation through that same forward and deceleration window sets curve:
+6 degrees of dead zone, then a linear response capped at 55% spin after another
+45 degrees. Positive requests TV-right, negative TV-left, independent of hand.
+Movement after release cannot alter the ball. The brief result readout shows
+curve direction and strength relative to this bounded motion range. Touch controls
+keep aim and Roll visible, with optional curve and power adjustments. Hand selection,
+sensor diagnostics and power tuning stay in Settings. Tennis keeps its existing
+post-peak classifier and optional simple shot mapping.
 
 - [MDN: motion permission and transient activation](https://developer.mozilla.org/en-US/docs/Web/API/DeviceMotionEvent/requestPermission_static)
 - [W3C Device Orientation and Motion](https://www.w3.org/TR/orientation-event/)

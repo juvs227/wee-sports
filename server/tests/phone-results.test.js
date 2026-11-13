@@ -61,7 +61,7 @@ test('completion prompts once, respects dismissal/reconnect, and prompts again a
   expect(f.text()).toContain('Sam wins!');
 });
 
-test('paused results wait for reconnect; only P1 can replay with the applied match format', async () => {
+test('paused results wait for reconnect; only P1 can replay and legacy quick matches become best of three', async () => {
   const lobby = tennis();
   lobby.paused = true; lobby.gameState = { phase: 'complete', winner: 1, server: 1 };
   const f = mount(lobby);
@@ -73,7 +73,7 @@ test('paused results wait for reconnect; only P1 can replay with the applied mat
   const first = action(); action();
   expect(h.request).toHaveBeenCalledTimes(1);
   expect(h.request).toHaveBeenCalledWith(EVENTS.PLAYER_GAME_COMMAND,
-    expect.objectContaining({ gameId: 'game-1', action: 'new-match', format: 'quick' }));
+    expect.objectContaining({ gameId: 'game-1', action: 'new-match', format: 'full' }));
   finish({ ok: true }); await first;
   f.update({ phase: 'prepare', server: 1, winner: null });
   expect(f.button('Play again')).toBeUndefined();
@@ -106,11 +106,11 @@ test('P1 confirms a return without requiring game options or every participant t
   expect(f.button('Return to lobby').props.disabled).toBe(false);
   await f.button('Return to lobby').props.onClick(); f.render();
   expect(h.request).not.toHaveBeenCalled();
-  expect(f.text()).toContain('controller setup stay in the lobby');
+  expect(f.text()).toContain('Continue the unfinished match from the TV');
   f.button('Keep playing').props.onClick(); f.render();
-  expect(f.button('End match and return')).toBeUndefined();
+  expect(f.button('Save and return')).toBeUndefined();
   await f.button('Return to lobby').props.onClick(); f.render();
-  await f.button('End match and return').props.onClick(); f.render();
+  await f.button('Save and return').props.onClick(); f.render();
   expect(h.request).toHaveBeenCalledExactlyOnceWith(EVENTS.PLAYER_RETURN_TO_LOBBY, { gameId: 'game-1' });
   expect(f.dialog.close).toHaveBeenCalled();
 });
@@ -132,7 +132,7 @@ test('return requests are coalesced, and a stale reply cannot alter the next mat
   await f.button('Return to lobby').props.onClick(); f.render();
   let finish;
   h.request.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
-  const action = f.button('End match and return').props.onClick;
+  const action = f.button('Save and return').props.onClick;
   const first = action(); action();
   expect(h.request).toHaveBeenCalledTimes(1);
   f.render({ lobby: { ...tennis(), gameId: 'game-2' } }); f.render();
@@ -140,16 +140,16 @@ test('return requests are coalesced, and a stale reply cannot alter the next mat
   finish({ ok: false, error: 'timeout' }); await first; f.render();
   expect(f.dialog.close).not.toHaveBeenCalled();
   expect(f.text()).not.toContain("Couldn't reach the game server.");
-  expect(f.button('End match and return')).toBeUndefined();
+  expect(f.button('Save and return')).toBeUndefined();
 });
 
 test('a failed return retains its confirmation and tells the player why', async () => {
   const f = mount();
   await f.button('Return to lobby').props.onClick(); f.render();
   h.request.mockResolvedValue({ ok: false, error: 'disconnected' });
-  await f.button('End match and return').props.onClick(); f.render();
+  await f.button('Save and return').props.onClick(); f.render();
   expect(f.text()).toContain('Reconnecting… Keep this page open.');
-  expect(f.button('End match and return').props.disabled).toBe(false);
+  expect(f.button('Save and return').props.disabled).toBe(false);
 });
 
 test('P1 pause is explicit, coalesced and remains resumable while shared play is paused', async () => {
@@ -162,7 +162,7 @@ test('P1 pause is explicit, coalesced and remains resumable while shared play is
   finish({ ok: true, manuallyPaused: true, paused: true }); await first;
   f.render({ lobby: { ...tennis(), manuallyPaused: true, paused: true } });
   expect(f.button('Resume game').props.disabled).toBe(false);
-  expect(f.text()).toContain('Game paused. Player 1 or the TV can resume.');
+  expect(f.text()).toContain('Game paused. The first player or the TV can resume.');
   h.request.mockResolvedValue({ ok: true, manuallyPaused: false, paused: true });
   await f.button('Resume game').props.onClick();
   f.render({ lobby: { ...tennis(), manuallyPaused: false, paused: true } });

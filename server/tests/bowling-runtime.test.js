@@ -44,6 +44,91 @@ const state = overrides => receive({type: 'wee:lobby-state', sport: 'bowling', p
 const command = overrides => receive({type: 'wee:game-command', command: {id: 'cmd-1', gameId: 'bowl-one', action: 'new-match', ...overrides}});
 const result = () => parent.postMessage.mock.calls.filter(([message]) => message.type === 'wee:game-command-result').at(-1)?.[0].result;
 
+test('live aim accepts only fresh authenticated current-turn state and never changes a moving ball', async () => {
+  await import('@wee/src/bowlingMain.ts');
+  state({generation: 3, hostEpoch: 2});
+  expect(runtime.world.setAim).toHaveBeenCalledExactlyOnceWith(0);
+  expect(document.getElementById('aim-hud').hidden).toBe(false);
+  runtime.world.setAim.mockClear();
+  const snapshots = vi.spyOn(runtime.world, 'getState');
+  const aim = (overrides = {}, source = parent) => receive({type: 'wee:game-aim', event: {
+    gameId: 'bowl-one', player: 1, generation: 3, hostEpoch: 2, seq: 4, aim: .4, locked: true, ...overrides,
+  }}, source);
+  aim();
+  expect(runtime.world.setAim).toHaveBeenCalledExactlyOnceWith(.4, true);
+  expect(document.getElementById('aim-label').textContent).toBe('Aim · right');
+  expect(document.getElementById('aim-state').textContent).toBe('Locked');
+  expect(snapshots).not.toHaveBeenCalled();
+  for (const overrides of [{seq: 3}, {gameId: 'old'}, {player: 2}, {generation: 2}, {hostEpoch: 1}, {seq: 5, aim: NaN}, {seq: 5, aim: 2}]) aim(overrides);
+  aim({seq: 5}, {});
+  expect(runtime.world.setAim).toHaveBeenCalledTimes(1);
+  expect(document.getElementById('aim-label').textContent).toBe('Aim · right');
+  runtime.world.rolling = true;
+  runtime.world.onState(runtime.world.getState());
+  aim({seq: 5});
+  expect(runtime.world.setAim).toHaveBeenCalledTimes(1);
+  runtime.world.rolling = false;
+  runtime.world.onState(runtime.world.getState());
+  state({generation: 4, hostEpoch: 2});
+  aim({generation: 4, seq: 1, locked: false});
+  expect(runtime.world.setAim).toHaveBeenLastCalledWith(.4, false);
+  expect(document.getElementById('aim-state').textContent).toBe('Live');
+  state({generation: 4, hostEpoch: 2, paused: true});
+  expect(document.getElementById('aim-hud').hidden).toBe(true);
+  aim({generation: 4, seq: 2});
+  expect(runtime.world.setAim).toHaveBeenCalledTimes(3); // Centre on turn boundary, then the new aim.
+});
+
+test('eight-player standings remain complete and move the turn marker without opening the full scorecard', async () => {
+  runtime.match = new BowlingMatch(Array.from({length: 8}, (_, index) => ({player: index + 1, name: `Player ${index + 1}`})));
+  await import('@wee/src/bowlingMain.ts');
+  state({players: Array.from({length: 8}, (_, slot) => ({slot, name: `Player ${slot + 1}`}))});
+  const standings = () => document.getElementById('score-totals').children;
+  expect(standings()).toHaveLength(8);
+  expect(standings().map(row => row.dataset.active)).toEqual(['true', ...Array(7).fill('false')]);
+  for (let i = 0; i < 7; i++) runtime.match.record([]);
+  runtime.world.onState(runtime.world.getState());
+  expect(standings().map(row => row.dataset.active)).toEqual([...Array(7).fill('false'), 'true']);
+  expect(standings()[7].children[0].textContent).toBe('P8 · Player 8');
+  expect(document.getElementById('score-body').children).toHaveLength(8);
+  const dialog = document.getElementById('scorecard-dialog');
+  dialog.showModal = vi.fn();
+  document.getElementById('open-scorecard').onclick();
+  expect(dialog.showModal).toHaveBeenCalledOnce();
+});
+
+test('a completed delivery reveals an unlocked centre guide for the next turn', async () => {
+  await import('@wee/src/bowlingMain.ts'); state({});
+  receive({type: 'wee:game-aim', event: {gameId: 'bowl-one', player: 1, seq: 1, aim: -.6, locked: true}});
+  expect(document.getElementById('aim-state').textContent).toBe('Locked');
+  receive({type: 'wee:game-roll', event: {id: 'delivery', gameId: 'bowl-one', player: 1, aim: -.6, spin: 0, power: .7}});
+  expect(document.getElementById('aim-hud').hidden).toBe(true);
+  runtime.match.record([1, 2]);
+  runtime.world.rolling = false;
+  runtime.world.onState(runtime.world.getState());
+  expect(runtime.world.setAim).toHaveBeenLastCalledWith(0);
+  expect(document.getElementById('aim-label').textContent).toBe('Aim · centre');
+  expect(document.getElementById('aim-state').textContent).toBe('Live');
+  expect(document.getElementById('aim-hud').hidden).toBe(false);
+});
+
+test('recovery bridge can request a fresh stable checkpoint without accepting a foreign request', async () => {
+  await import('@wee/src/bowlingMain.ts'); state({});
+  const payload = {version: 1, boundary: 'settled', match: {version: 1, players: [{player: 1, name: 'Yit'}], deliveries: []}, pins: [], settings: {aim: 0}};
+  runtime.world.exportCheckpoint = vi.fn(() => payload);
+  receive({type: 'wee:checkpoint-request', gameId: 'old'});
+  receive({type: 'wee:checkpoint-request', gameId: 'bowl-one'}, {});
+  expect(runtime.world.exportCheckpoint).not.toHaveBeenCalled();
+  receive({type: 'wee:checkpoint-request', gameId: 'bowl-one'});
+  receive({type: 'wee:checkpoint-request', gameId: 'bowl-one'});
+  const checkpoints = parent.postMessage.mock.calls.filter(([message]) => message.type === 'wee:game-checkpoint');
+  expect(checkpoints).toHaveLength(2);
+  expect(checkpoints[0][0]).toMatchObject({gameId: 'bowl-one', sport: 'bowling', checkpointVersion: 1, rulesVersion: 1, payload});
+  runtime.world.exportCheckpoint.mockReturnValue(null); // A delivery is in flight.
+  receive({type: 'wee:checkpoint-request', gameId: 'bowl-one'});
+  expect(parent.postMessage.mock.calls.filter(([message]) => message.type === 'wee:game-checkpoint')).toHaveLength(2);
+});
+
 test('phone restart is scoped to the current match and a duplicate cannot restart twice', async () => {
   await import('@wee/src/bowlingMain.ts'); state({});
   expect(document.getElementById('replay').hidden).toBe(true);

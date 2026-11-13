@@ -10,6 +10,25 @@ export const FIXED_STEP = 1 / 240;
 export interface RollControls {power: number; aim: number; spin: number}
 export interface PinBody {id: number; body: Body}
 export interface RollSettlement {remaining: number[]; gutter: boolean; elapsed: number}
+export interface SettledPin {
+  id: number;
+  position: [number, number, number];
+  quaternion: [number, number, number, number];
+  standing: true;
+}
+
+export function validSettledPins(value: unknown, ids: readonly number[]): value is SettledPin[] {
+  if (!Array.isArray(value) || value.length !== ids.length || new Set(value.map(pin => pin?.id)).size !== value.length) return false;
+  return value.every(pin => {
+    if (!pin || !ids.includes(pin.id) || pin.standing !== true || !Array.isArray(pin.position) || pin.position.length !== 3 ||
+        !pin.position.every(Number.isFinite) || !Array.isArray(pin.quaternion) || pin.quaternion.length !== 4 ||
+        !pin.quaternion.every(Number.isFinite)) return false;
+    const [x, y, z] = pin.position;
+    const [qx, qy, qz, qw] = pin.quaternion;
+    return Math.abs(x) <= LANE.width / 2 + .02 && y > PIN_COM * .65 && y < .5 && z >= 0 && z <= LANE.deckEnd &&
+      Math.abs(Math.hypot(qx, qy, qz, qw) - 1) < .001 && 1 - 2 * (qx * qx + qz * qz) > .65;
+  });
+}
 
 export function pinSpot(id: number): {x: number; z: number} {
   let row = 0;
@@ -125,6 +144,30 @@ export class BowlingPhysics {
       }
     }
     this.prepareBall();
+  }
+
+  exportSettledPins(ids: readonly number[]): SettledPin[] | null {
+    if (this.active) return null;
+    const pins = this.pins.filter(pin => ids.includes(pin.id)).map(({id, body}) => ({
+      id, position: body.position.toArray() as [number, number, number],
+      quaternion: body.quaternion.toArray() as [number, number, number, number], standing: true as const,
+    }));
+    return validSettledPins(pins, ids) ? pins : null;
+  }
+
+  restoreSettledPins(pins: SettledPin[], ids: readonly number[]): boolean {
+    if (this.active || !validSettledPins(pins, ids)) return false;
+    this.resetRack(ids);
+    for (const saved of pins) {
+      const body = this.pins.find(pin => pin.id === saved.id)!.body;
+      body.position.set(...saved.position);
+      body.quaternion.set(...saved.quaternion);
+      body.previousPosition.copy(body.position); body.interpolatedPosition.copy(body.position);
+      body.previousQuaternion.copy(body.quaternion); body.interpolatedQuaternion.copy(body.quaternion);
+      body.aabbNeedsUpdate = true;
+      body.sleep();
+    }
+    return true;
   }
 
   private prepareBall(): void {

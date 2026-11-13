@@ -1,9 +1,18 @@
 import * as THREE from 'three';
-import {BowlingMatch, BowlingPlayer, BowlingState} from './match';
-import {BALL_RADIUS, BowlingPhysics, LANE, PIN_COM, pinSpot, RollControls, RollSettlement, validRoll} from './physics';
+import {BowlingMatch, BowlingPlayer, BowlingState, BowlingMatchCheckpoint, BowlingResult} from './match';
+import {BALL_RADIUS, BowlingPhysics, LANE, PIN_COM, pinSpot, RollControls, RollSettlement, validRoll, SettledPin, validSettledPins} from './physics';
+import {createBowlingAimGuide, updateBowlingAimGuide} from './aimGuide';
+import {createFrameQuality, FrameQualitySettings} from '../rendering/frameQuality';
 
 export type {BowlingPlayer, BowlingState} from './match';
 export interface BowlingRoll extends RollControls {player: number}
+export interface BowlingCheckpoint {
+  version: 1;
+  boundary: 'settled';
+  match: BowlingMatchCheckpoint;
+  pins: SettledPin[];
+  settings: {aim: number; practice?: boolean};
+}
 export type BowlingSoundEvent = 'release' | 'roll' | 'roll-end' | 'pin' | 'gutter' | 'strike' | 'spare' | 'result' | 'match';
 
 /** A TV-owned scene. Phones only request deliveries; all pinfall is simulated here. */
@@ -34,7 +43,13 @@ export class BowlingWorld {
   private lastTime = 0;
   private cameraPosition = new THREE.Vector3(0.1, 2.25, -4);
   private cameraTarget = new THREE.Vector3(0, 0.05, 7.8);
+  private cameraDirection = new THREE.Vector3();
+  private readonly frameQuality = createFrameQuality({maxPixelRatio: Math.min(window.devicePixelRatio || 1, 2)});
+  private renderedFrames = 0;
+  private shadowsDirty = true;
   private aim = 0;
+  private practice = false;
+  private practiceLastRoll: BowlingResult | null = null;
 
   constructor(private container: HTMLElement, players: BowlingPlayer[]) {
     this.players = players.map(player => ({...player}));
@@ -42,9 +57,9 @@ export class BowlingWorld {
     this.physics.onPinHit = () => this.pinContact();
     this.physics.onGutter = () => this.gutterContact();
     this.renderer = new THREE.WebGLRenderer({antialias: true, alpha: false});
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.shadowMap.autoUpdate = false;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.25;
@@ -67,9 +82,7 @@ export class BowlingWorld {
     this.buildAlley();
     this.buildPins();
     this.buildBall();
-    this.aimLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({
-      color: 0x496c25, dashSize: 0.15, gapSize: 0.13, transparent: true, opacity: 0.65,
-    }));
+    this.aimLine = createBowlingAimGuide();
     this.scene.add(this.aimLine);
     const trailGeometry = new THREE.BufferGeometry();
     trailGeometry.setAttribute('position', new THREE.BufferAttribute(this.trailPositions, 3).setUsage(THREE.DynamicDrawUsage));
@@ -84,10 +97,55 @@ export class BowlingWorld {
     this.observer.observe(container);
     this.resize();
     this.syncBodies();
+    this.shadowsDirty = true;
     this.render();
   }
 
-  getState(): BowlingState { return this.match.getState(this.rolling); }
+  getState(): BowlingState {
+    const state = this.match.getState(this.rolling);
+    return this.practice ? {...state, practice: true, lastRoll: this.practiceLastRoll} : state;
+  }
+
+  setPractice(active: boolean): boolean {
+    if (this.rolling || this.disposed || (active && this.players.length !== 1)) return false;
+    this.practice = active;
+    this.practiceLastRoll = null;
+    this.reset();
+    return true;
+  }
+
+  exportCheckpoint(): BowlingCheckpoint | null {
+    if (this.rolling || this.settlement || this.disposed) return null;
+    const pins = this.physics.exportSettledPins(this.match.getState().pinsStanding);
+    if (!pins) return null;
+    return {version: 1, boundary: 'settled', match: this.match.exportCheckpoint(), pins,
+      settings: {aim: this.aim, ...(this.practice ? {practice: true} : {})}};
+  }
+
+  restoreCheckpoint(value: unknown): boolean {
+    if (this.rolling || this.settlement || this.disposed) return false;
+    const data = value as BowlingCheckpoint;
+    try {
+      if (!data || data.version !== 1 || data.boundary !== 'settled' || !Number.isFinite(data.settings?.aim) || Math.abs(data.settings.aim) > 1) return false;
+      if (data.settings.practice !== undefined && typeof data.settings.practice !== 'boolean') return false;
+      if (data.settings.practice && this.players.length !== 1) return false;
+      const match = BowlingMatch.fromCheckpoint(data.match);
+      const players = match.getState().players;
+      if (players.length !== this.players.length || players.some((player, index) => player.player !== this.players[index].player || player.name !== this.players[index].name)) return false;
+      const ids = match.getState().pinsStanding;
+      if (!validSettledPins(data.pins, ids)) return false;
+      if (!this.physics.restoreSettledPins(data.pins, ids)) return false;
+      this.match = match;
+      this.practice = data.settings.practice === true;
+      this.practiceLastRoll = null;
+      this.setAim(data.settings.aim);
+      this.aimLine.visible = !match.getState().complete;
+      this.trail.visible = false;
+      this.syncBodies(); this.shadowsDirty = true; this.render();
+      this.onState?.(this.getState());
+      return true;
+    } catch { return false; }
+  }
 
   start(): void {
     if (this.disposed || this.running) return;
@@ -99,6 +157,7 @@ export class BowlingWorld {
   stop(): void {
     this.running = false;
     cancelAnimationFrame(this.animation);
+    this.frameQuality.sample(0, 0, false);
     this.endRollingSound();
     // Neither physical time nor the result-reveal timer advances while paused.
   }
@@ -114,6 +173,7 @@ export class BowlingWorld {
     // screen-right is world -X. Keep the physics' world coordinates unchanged.
     if (!this.physics.roll({...roll, aim: -roll.aim, spin: -roll.spin})) return {ok: false, error: 'This delivery could not start.'};
     this.rolling = true;
+    this.shadowsDirty = true;
     this.trailCount = 0;
     this.trail.geometry.setDrawRange(0, 0);
     this.trail.visible = true;
@@ -126,22 +186,17 @@ export class BowlingWorld {
   }
 
   /** Optional TV preview; the phone's authenticated roll remains authoritative. */
-  setAim(aim: number): void {
-    if (!Number.isFinite(aim)) return;
+  setAim(aim: number, locked = false): void {
+    if (!Number.isFinite(aim) || this.rolling) return;
     this.aim = THREE.MathUtils.clamp(aim, -1, 1);
-    this.aimLine?.geometry.dispose();
-    if (this.aimLine) {
-      this.aimLine.geometry = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(0, 0.012, 0.35), new THREE.Vector3(-Math.tan(this.aim * 0.06) * 7, 0.012, 7.35),
-      ]);
-      this.aimLine.computeLineDistances();
-    }
+    if (this.aimLine) updateBowlingAimGuide(this.aimLine, this.aim, locked);
   }
 
   reset(players: BowlingPlayer[] = this.players): void {
     this.endRollingSound();
     this.players = players.map(player => ({...player}));
     this.match = new BowlingMatch(players);
+    this.practiceLastRoll = null;
     this.physics.resetRack();
     this.rolling = false;
     this.settlement = null;
@@ -149,6 +204,7 @@ export class BowlingWorld {
     this.aimLine.visible = true;
     this.trail.visible = false;
     this.syncBodies();
+    this.shadowsDirty = true;
     this.render();
     this.onState?.(this.getState());
   }
@@ -187,7 +243,9 @@ export class BowlingWorld {
     const height = Math.max(this.container.clientHeight, 1);
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(width, height, false);
+    // Change logical size and pixel ratio together: setPixelRatio first would
+    // briefly reallocate the old (possibly 4K) viewport at the new higher ratio.
+    this.renderer.setDrawingBufferSize(width, height, this.frameQuality.resize(width, height).pixelRatio);
     this.render();
   };
 
@@ -214,6 +272,7 @@ export class BowlingWorld {
 
   private tick = (time: number): void => {
     if (!this.running) return;
+    const frameAt = performance.now();
     const dt = Math.min(Math.max((time - this.lastTime) / 1000, 0), 0.1);
     this.lastTime = time;
     this.advanceDelivery(dt);
@@ -223,11 +282,13 @@ export class BowlingWorld {
     this.cameraPosition.set(0.1, this.rolling ? 2.35 : 2.25, advance - (this.rolling ? 2.9 : 4));
     this.cameraTarget.set(0, 0.05, Math.min(advance + 7.8, 18.8));
     this.camera.position.lerp(this.cameraPosition, 1 - Math.exp(-dt * 3));
-    const target = new THREE.Vector3();
+    const target = this.cameraDirection;
     this.camera.getWorldDirection(target);
     target.multiplyScalar(10).add(this.camera.position).lerp(this.cameraTarget, 1 - Math.exp(-dt * 5));
     this.camera.lookAt(target);
     this.render();
+    const quality = this.frameQuality.sample(time, performance.now() - frameAt, !document.hidden);
+    if (quality) this.applyQuality(quality);
     this.animation = requestAnimationFrame(this.tick);
   };
 
@@ -238,16 +299,22 @@ export class BowlingWorld {
       this.settlement = this.physics.step(dt);
       if (this.settlement) {
         this.revealTime = 1.1;
+        this.shadowsDirty = true;
         this.endRollingSound();
       }
     } else if (this.settlement) {
       this.revealTime -= dt;
       if (this.revealTime <= 0) {
         const transition = this.match.record(this.settlement.remaining);
-        if (transition.resetRack) this.physics.resetRack();
+        if (this.practice) {
+          this.practiceLastRoll = transition.result;
+          this.match = new BowlingMatch(this.players);
+          this.physics.resetRack();
+        } else if (transition.resetRack) this.physics.resetRack();
         else if (!this.match.getState().complete) this.physics.sweep(this.settlement.remaining);
         this.settlement = null;
         this.rolling = false;
+        this.shadowsDirty = true;
         this.trail.visible = false;
         this.aimLine.visible = !this.match.getState().complete;
         this.onState?.(this.getState());
@@ -280,7 +347,30 @@ export class BowlingWorld {
     this.trail.geometry.setDrawRange(0, this.trailCount);
   }
 
-  private render(): void { this.renderer.render(this.scene, this.camera); }
+  private applyQuality(quality: FrameQualitySettings): void {
+    if (this.renderer.getPixelRatio() !== quality.pixelRatio) this.renderer.setPixelRatio(quality.pixelRatio);
+    if (this.renderer.shadowMap.enabled !== quality.shadows) {
+      this.renderer.shadowMap.enabled = quality.shadows;
+      // Shadow shader variants are cached on materials. Invalidate them when
+      // emergency quality changes so recovery actually restores the shadows.
+      this.scene.traverse(object => {
+        const material = (object as THREE.Mesh).material;
+        if (material) for (const value of Array.isArray(material) ? material : [material]) value.needsUpdate = true;
+      });
+      this.shadowsDirty = true;
+    }
+  }
+
+  private render(): void {
+    // The light and alley stay fixed. Camera/aim movement does not change their
+    // shadow map; only a moving delivery or a rack/quality change needs a pass.
+    const moving = this.rolling && !this.settlement;
+    const shadowFrame = this.renderedFrames++ % this.frameQuality.settings.shadowEvery === 0;
+    this.renderer.shadowMap.needsUpdate = this.renderer.shadowMap.enabled &&
+      (this.shadowsDirty || moving && shadowFrame);
+    this.renderer.render(this.scene, this.camera);
+    this.shadowsDirty = false;
+  }
 
   private mesh(geometry: THREE.BufferGeometry, material: THREE.Material, x: number, y: number, z: number): THREE.Mesh {
     const mesh = new THREE.Mesh(geometry, material);
@@ -323,12 +413,13 @@ export class BowlingWorld {
 
   private buildAlley(): void {
     const wood = new THREE.MeshStandardMaterial({map: this.woodTexture(), roughness: 0.32, metalness: 0.05});
+    const adjacentWood = new THREE.MeshStandardMaterial({map: wood.map, color: '#a4b1a1', roughness: .6, metalness: 0});
     const gutter = new THREE.MeshStandardMaterial({color: '#344d43', roughness: 0.45, metalness: 0.3});
     const trim = new THREE.MeshStandardMaterial({color: '#f5f1e3', roughness: 0.5});
     const lime = new THREE.MeshStandardMaterial({color: '#b2d568', emissive: '#6b961d', emissiveIntensity: 0.2});
     this.mesh(new THREE.BoxGeometry(18, 0.15, 34), new THREE.MeshStandardMaterial({color: '#344c40', roughness: 0.9}), 0, -0.475, 10);
     for (const offset of [-3.2, -1.6, 0, 1.6, 3.2]) {
-      this.mesh(new THREE.BoxGeometry(LANE.width, 0.2, LANE.deckEnd + 1.6), wood, offset, -0.1, (LANE.deckEnd - 1.6) / 2);
+      this.mesh(new THREE.BoxGeometry(LANE.width, 0.2, LANE.deckEnd + 1.6), offset === 0 ? wood : adjacentWood, offset, -0.1, (LANE.deckEnd - 1.6) / 2);
       for (const side of [-1, 1]) {
         this.mesh(new THREE.BoxGeometry(LANE.gutterWidth, 0.06, LANE.deckEnd), gutter,
           offset + side * (LANE.width + LANE.gutterWidth) / 2, -0.14, LANE.deckEnd / 2);

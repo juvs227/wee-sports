@@ -1,0 +1,33 @@
+.remote-home { min-height: 100svh; display: flex; flex-direction: column; gap: 28px; padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom)); font-family: 'Wee Rounded', system-ui, sans-serif; font-size: medium; color: var(--text); background: var(--bg); }
+.remote-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.remote-wordmark { color: var(--text); font-size: 1.6em; font-weight: 900; letter-spacing: -.035em; text-decoration: none; line-height: 1.15; }
+.remote-wordmark span { display: block; font-size: .45em; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); margin-top: 6px; }
+.remote-connect { width: 100%; max-width: 420px; margin: auto; padding-top: 16px; text-align: center; }
+.remote-controller-mark { width: 100px; height: 120px; margin: 0 auto 22px; border-radius: 36px; background: var(--accent-soft); color: var(--accent-ink); padding: 16px; transform: rotate(-8deg); }
+.remote-controller-mark svg { width: 100%; height: 100%; stroke: currentColor; stroke-width: 3; stroke-linecap: round; }
+.remote-connect h1 { font-size: 2em; font-weight: 850; letter-spacing: -.035em; margin-bottom: 12px; }
+.remote-connect h1:focus { outline: none; }
+.remote-connect > p { color: var(--text-muted); font-size: 1.05em; line-height: 1.55; }
+.remote-scan { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; min-height: 58px; margin-top: 28px; padding: 16px; border: 0; border-radius: 18px; font-size: 1.05em; font-weight: 800; background: var(--accent-ink); color: var(--surface); cursor: pointer; }
+.remote-scan svg { flex-shrink: 0; }
+.remote-manual { margin-top: 20px; text-align: left; }
+.remote-manual summary { min-height: 44px; padding: 12px 0; text-align: center; color: var(--text-muted); font-weight: 700; cursor: pointer; list-style: none; }
+.remote-manual summary::-webkit-details-marker { display: none; }
+.remote-manual .join-card { margin-top: 8px; padding: 18px; }
+.remote-manual .join-card__title { font-size: 1.125em; }
+.remote-manual .join-card__sub, .remote-manual .join-card__hint { font-size: .875em; }
+.remote-manual .join-form { flex-wrap: wrap; }
+.remote-manual .code-input { flex: 1 1 120px; }
+.remote-connect .remote-notice { font-size: .9em; margin-top: 16px; }
+.remote-return { display: grid; gap: 10px; margin: 24px 0; padding: 18px; border: 1px solid var(--border); border-radius: 18px; background: var(--surface); }
+.remote-return .btn { min-height: 48px; justify-content: center; }
+.remote-return p { margin: 0; color: var(--text-muted); font-size: .85em; }
+.remote-return .btn--ghost { justify-self: center; font-size: .85em; }
+.remote-footer { width: 100%; max-width: 420px; margin: auto auto 0; padding-top: 24px; }
+.remote-footer a { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 56px; padding: 14px 18px; border: 1px solid var(--border); border-radius: 18px; color: var(--text); background: var(--surface); text-decoration: none; font-weight: 750; }
+.remote-footer p { font-size: .8em; text-align: center; color: var(--text-muted); margin-top: 14px; }
+@media (max-height: 560px) and (orientation: landscape) { .remote-controller-mark { display: none; } .remote-home { gap: 14px; } }
+
+.remote-sports { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 0; margin: 22px 0 0; list-style: none; }
+.remote-sports li { display: grid; justify-items: center; gap: 6px; font-size: .75rem; color: var(--text-muted); font-weight: 750; }
+.remote-sports svg { width: 38px; height: 38px; color: var(--accent-ink); }

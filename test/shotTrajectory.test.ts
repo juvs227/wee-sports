@@ -85,3 +85,28 @@ test('strength changes pace while retaining net clearance and legal landings', (
         }
     } finally { random.mockRestore(); }
 });
+
+test('captured aim and depth choose mirrored legal targets independent of power or stroke label', () => {
+    for (const player of [1, 2] as const) for (const aim of [-.8, 0, .8]) for (const depth of [-1, 0, 1]) {
+        const origin = new THREE.Vector3(0, 1.2, player === 1 ? 10 : -10);
+        const gentle = planCourtShot(origin, player, false, .006, .2, {aim, depth})!;
+        const strong = planCourtShot(origin, player, true, .006, 1, {aim, depth})!;
+        assert.ok(gentle && strong);
+        assert.ok(gentle.target.equals(strong.target));
+        assert.equal(gentle.target.x, aim * (player === 1 ? 1 : -1) * 2.1);
+        assert.ok(strong.flightTime < gentle.flightTime);
+        const ball = createBall(origin.x, origin.y, origin.z);
+        hitBall(ball, strong.velocity, player === 1 ? 'player1' : 'player2');
+        const data = ball.userData as BallUserData;
+        for (let i = 0; i < 600 && !data.bounceCount; i++) updateBallMotion(ball, 1 / 120);
+        assert.equal(data.firstBounceInBounds, true);
+        assert.ok(ball.position.distanceTo(strong.target) < .4);
+        ball.geometry.dispose();
+        (ball.material as THREE.Material).dispose();
+    }
+    const origin = new THREE.Vector3(0, 1.2, 10);
+    const short = planCourtShot(origin, 1, false, .006, .5, {depth: -1})!;
+    const deep = planCourtShot(origin, 1, false, .006, .5, {depth: 1})!;
+    assert.ok(Math.abs(deep.target.z) - Math.abs(short.target.z) > 3);
+    assert.deepEqual(planCourtShot(origin, 1, false, .006, .5, {aim: NaN, depth: Infinity}), planCourtShot(origin, 1, false));
+});

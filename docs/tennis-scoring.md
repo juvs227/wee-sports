@@ -1,19 +1,19 @@
 # Tennis scoring, controls and practice
 
-## Match formats
+## Match scoring
 
-**Full match** uses best of three tie-break sets: 0/15/30/40, deuce and advantage;
+Every match uses best of three tie-break sets: 0/15/30/40, deuce and advantage;
 win six games by two, with a seven-point tie-break at 6–6. The same server keeps
 the whole standard game. Tie-break service is one point, then two points each;
 the first tie-break server receives in the following set. Two sets wins the match.
 
-**Quick match** is a standalone seven-point tie-break, win by two. It has numeric
-points and the same one-then-two service rotation. It is clearly labelled as a
-short format, rather than a complete regulation best-of-three match.
+The Quick format has been removed from the phone and TV. An older controller's
+`quick` command starts the same best-of-three match. A match can finish 2–0;
+a 1–1 tie requires the deciding third set. It never plays a fourth set.
 
 The scoreboard separates points/games/sets, names the server and retains the
 last result. Completed matches reject further swings. **New match / Play again**
-resets the selected format. Selecting the same format does not itself erase a score.
+starts a fresh best-of-three match. Changing assistance never erases a score.
 
 ## Serving and court rules
 
@@ -103,7 +103,7 @@ behavior now have explicit, testable state transitions rather than visual-only r
 
 Offline checks cover both service sides/players, first/second faults, lets,
 serve-volley penalties, net tunnelling, boundary contact, legal service trajectories,
-repeatable aim, tie-break rotation, quick/full completion, practice score preservation,
+repeatable aim, tie-break rotation, two-set and deciding-third-set completion, practice score preservation,
 left/right-hand contact, diagnostic ID ownership and existing frame-rate regressions.
 No browser, game server, tunnel or physical phone session is launched by those tests.
 

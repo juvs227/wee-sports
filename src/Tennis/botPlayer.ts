@@ -6,6 +6,14 @@ export interface BotStroke {
     offset: { x: number; y: number; z: number };
 }
 
+/** Player-two camera coordinates. Rally mode offers reachable depth; challenge
+ * mode chooses space deliberately without changing a ball after contact. */
+export function chooseBotPlacement(opponentX: number, shot: number, difficulty: 'beginner' | 'standard') {
+    if (difficulty === 'beginner') return {aim: Math.max(-.3, Math.min(.3, -opponentX / 2.1)), depth: -.45};
+    const side = Math.abs(opponentX) > .6 ? Math.sign(opponentX) : shot % 2 === 0 ? -1 : 1;
+    return {aim: side * .9, depth: shot % 3 === 2 ? -.65 : .65};
+}
+
 const CONTACT_START = 0.2;
 const CONTACT_END = 0.7;
 const POSITION_TOLERANCE_X = 0.75;

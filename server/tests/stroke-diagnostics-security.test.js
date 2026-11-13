@@ -9,8 +9,7 @@ function fixture() {
     const host = store.createRoom(`${prefix}-tv`, { v, sport: 'tennis' });
     const phone = store.join(`${prefix}-phone`, { v, code: host.code, name: 'Player' });
     store.setSetup(`${prefix}-phone`, { setup: 'motion' });
-    store.setReady(`${prefix}-phone`, { ready: true });
-    store.calibrationDone(`${prefix}-tv`);
+    store.setReady(`${prefix}-phone`, { ready: true }); store.startGame(`${prefix}-phone`);
     now += COUNTDOWN_SECONDS * 1000;
     store.finishCountdown(host.code);
     now += VOTE_SECONDS * 1000;

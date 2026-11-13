@@ -124,6 +124,20 @@ test('bowling pin contact gives one distinct double pulse after the release puls
   expect(navigator.vibrate.mock.calls).toEqual([[18], [[35, 35, 55]]]);
 });
 
+test('haptic preference disables pulses while preserving visible contact and release feedback', () => {
+  const {feedback, navigator, visual, animate} = experience();
+  feedback.setHaptics(false);
+  navigator.vibrate.mockClear();
+  feedback.delivered('roll');
+  feedback.hit(2000, 'bowling');
+  expect(navigator.vibrate).not.toHaveBeenCalled();
+  expect(visual.animate).toHaveBeenCalledTimes(2);
+  expect(animate).toHaveBeenCalledOnce();
+  feedback.setHaptics(true);
+  feedback.hit(3000);
+  expect(navigator.vibrate).toHaveBeenCalledExactlyOnceWith(40);
+});
+
 test('accepted bowling delivery animates toward the TV and pause cancels feedback', () => {
   const { feedback, navigator, animate, animations } = experience();
   feedback.delivered('roll');

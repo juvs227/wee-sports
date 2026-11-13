@@ -7,6 +7,11 @@ export interface BowlingScore extends BowlingPlayer {
   total: number;
 }
 export interface BowlingResult { player: number; pins: number; strike: boolean; spare: boolean }
+export interface BowlingMatchCheckpoint {
+  version: 1;
+  players: BowlingPlayer[];
+  deliveries: number[][];
+}
 export interface BowlingState {
   phase: 'ready' | 'rolling' | 'complete';
   currentPlayer: number | null;
@@ -17,6 +22,7 @@ export interface BowlingState {
   complete: boolean;
   lastRoll: BowlingResult | null;
   ranking: Array<BowlingPlayer & {total: number; rank: number}>;
+  practice?: boolean;
 }
 export const FULL_RACK = Object.freeze(Array.from({length: 10}, (_, index) => index + 1));
 
@@ -64,15 +70,35 @@ export class BowlingMatch {
   private standing = [...FULL_RACK];
   private complete = false;
   private lastRoll: BowlingResult | null = null;
+  private deliveries: number[][] = [];
 
   constructor(players: BowlingPlayer[]) {
-    if (players.length < 1 || players.length > 4 ||
+    if (players.length < 1 || players.length > 8 ||
         new Set(players.map(p => p.player)).size !== players.length ||
-        players.some(p => !Number.isInteger(p.player) || p.player < 1 || p.player > 4)) {
-      throw new Error('Bowling needs one to four unique players.');
+        players.some(p => !Number.isInteger(p.player) || p.player < 1 || p.player > 8)) {
+      throw new Error('Bowling needs one to eight unique players.');
     }
     this.participants = players.map(p => ({...p}));
     this.frames = players.map(() => Array.from({length: 10}, () => []));
+  }
+
+  exportCheckpoint(): BowlingMatchCheckpoint {
+    return {version: 1, players: this.participants.map(player => ({...player})),
+      deliveries: this.deliveries.map(remaining => [...remaining])};
+  }
+
+  /** Replay the settled deliveries so forged totals/turns cannot bypass rules. */
+  static fromCheckpoint(value: unknown): BowlingMatch {
+    const data = value as BowlingMatchCheckpoint;
+    if (!data || data.version !== 1 || !Array.isArray(data.players) ||
+        data.players.some(player => !player || typeof player.name !== 'string' || !player.name.trim() || player.name.length > 80) ||
+        !Array.isArray(data.deliveries) || data.deliveries.length > 168) throw new Error('Invalid bowling checkpoint.');
+    const match = new BowlingMatch(data.players);
+    for (const remaining of data.deliveries) {
+      if (!Array.isArray(remaining) || remaining.some(id => !Number.isInteger(id))) throw new Error('Invalid saved delivery.');
+      match.record(remaining);
+    }
+    return match;
   }
 
   getState(rolling = false): BowlingState {
@@ -103,6 +129,7 @@ export class BowlingMatch {
     if (new Set(remaining).size !== remaining.length || remaining.some(id => !this.standing.includes(id))) {
       throw new Error('Invalid pinfall: a delivery cannot add pins to the rack.');
     }
+    this.deliveries.push([...remaining]);
     const pins = this.standing.length - remaining.length;
     const frame = this.frames[this.turn][this.frame];
     const before = [...frame];

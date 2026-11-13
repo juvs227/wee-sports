@@ -13,8 +13,8 @@ export function createParkClub(): {group: THREE.Group; dispose: () => void} {
         materials.add(material);
         return material;
     };
-    const grass = paint(0x8caa72);
-    const path = paint(0xc9c7a4);
+    const grass = paint(0x96b586);
+    const path = paint(0xd3cdb5);
     const hedge = paint(0x315b41);
     const wood = paint(0xb6a17b);
     const trunk = paint(0x66543f);
@@ -54,11 +54,21 @@ export function createParkClub(): {group: THREE.Group; dispose: () => void} {
         transform.position.set(x, 5.1, z);
         transform.scale.set(3.3, 4.5 + (index % 3) * .25, 3.3);
         transform.updateMatrix(); crowns.setMatrixAt(index, transform.matrix);
+        crowns.setColorAt(index, new THREE.Color().setHSL(.27 + (index % 3) * .014, .16, .76 + (index % 2) * .08));
     }
     group.add(crowns, trunks);
+    // Low-detail distant landscaping gives depth without moving scenery or
+    // adding shadow passes. Instancing keeps this to one extra draw call.
+    const hills = new THREE.InstancedMesh(crownGeometry, paint(0x91b5a7), 8);
+    for (let index = 0; index < 8; index++) {
+        transform.position.set((index % 4 - 1.5) * 27, 1, index < 4 ? -69 : 69);
+        transform.scale.set(22, 12 + (index % 3) * 4, 14);
+        transform.updateMatrix(); hills.setMatrixAt(index, transform.matrix);
+    }
+    group.add(hills);
     return {group, dispose: () => {
         group.removeFromParent();
-        crowns.dispose(); trunks.dispose();
+        crowns.dispose(); trunks.dispose(); hills.dispose();
         for (const geometry of geometries) geometry.dispose();
         for (const material of materials) material.dispose();
     }};

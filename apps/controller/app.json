@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Wee Sports Controller",
+    "slug": "wee-sports-controller",
+    "version": "0.1.0",
+    "platforms": ["ios", "android"],
+    "orientation": "portrait",
+    "scheme": "wee-sports-controller",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "dev.weesports.controller"
+    },
+    "android": {
+      "package": "dev.weesports.controller"
+    },
+    "plugins": [
+      ["expo-camera", {"cameraPermission": "Scan the room QR code on your TV to join a game.", "recordAudioAndroid": false}],
+      ["expo-sensors", {"motionPermission": "Use your phone as a Wee Sports motion controller."}],
+      "expo-secure-store"
+    ]
+  }
+}

@@ -4,12 +4,18 @@ import {TENNIS_COURT} from '../tennisRules';
 export function createCourt(): THREE.Group {
     const group = new THREE.Group();
     const court = new THREE.Mesh(new THREE.PlaneGeometry(20, 50),
-        new THREE.MeshStandardMaterial({color: 0x15803d, roughness: .8, metalness: .1}));
+        new THREE.MeshStandardMaterial({color: 0x315f57, roughness: .95, metalness: 0}));
     court.rotation.x = -Math.PI / 2;
     court.position.y = .02;
     court.receiveShadow = true;
     group.add(court);
     const {halfWidth, halfLength, serviceLine, lineWidth} = TENNIS_COURT;
+    const playingSurface = new THREE.Mesh(new THREE.PlaneGeometry(halfWidth * 2, halfLength * 2),
+        new THREE.MeshStandardMaterial({color: 0x478c7b, roughness: .95, metalness: 0}));
+    playingSurface.rotation.x = -Math.PI / 2;
+    playingSurface.position.y = .022;
+    playingSurface.receiveShadow = true;
+    group.add(playingSurface);
     const paint = new THREE.MeshBasicMaterial({color: 0xffffff, side: THREE.DoubleSide});
     const line = (x: number, z: number, width: number, depth: number): void => {
         const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), paint);
