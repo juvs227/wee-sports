@@ -289,6 +289,35 @@ test('automatic readiness watchdog notices silent sensors without replaying a sa
   expect(setup.push(native(.52)).ready).toBe(false);
 });
 
+test('established readiness can survive a brief gap without treating the gap as quiet calibration', async () => {
+  const {createAutomaticMotionSetup} = await import('@wee/shared/motion.js');
+  const setup = createAutomaticMotionSetup({readyGapSeconds: 1.5});
+  let result;
+  for (let i = 0; i <= 8; i++) result = setup.push(native(i * .02, {x: .02, y: 0, z: 0}), {safeBoundary: true});
+  const revision = result.calibration.revision;
+  expect(setup.read(.45).ready).toBe(true);
+  expect(setup.read(.45).sample).toBeNull();
+  for (let i = 0; i <= 15; i++) result = setup.push(native(.5 + i * .02, {x: .02, y: 0, z: 0}), {safeBoundary: true});
+  expect(result.ready).toBe(true);
+  expect(result.justReady).toBe(false);
+  expect(result.calibration.revision).toBe(revision);
+  expect(result.biasSource).toBe('provisional');
+  for (let i = 16; i <= 31; i++) result = setup.push(native(.5 + i * .02, {x: .02, y: 0, z: 0}), {safeBoundary: true});
+  expect(result.biasSource).toBe('stationary');
+  expect(setup.read(2.7).ready).toBe(false);
+});
+
+test.each(['startup', 'time', 'sequence', 'rotation', 'reset'])('readiness grace still rejects %s discontinuities', async reason => {
+  const {createAutomaticMotionSetup} = await import('@wee/shared/motion.js');
+  const setup = createAutomaticMotionSetup({readyGapSeconds: 1.5});
+  for (let i = 0; i <= (reason === 'startup' ? 3 : 8); i++) setup.push(native(i * .02));
+  if (reason === 'reset') setup.reset();
+  const sample = reason === 'time' ? native(.1, undefined, {sequence: 200})
+    : reason === 'sequence' ? native(.2, undefined, {sequence: 1})
+    : reason === 'rotation' ? native(.2, undefined, {screenAngle: 90}) : native(.4);
+  expect(setup.push(sample).ready).toBe(false);
+});
+
 test('browser adapter can resume after pagehide plus stop without requiring a new permission prompt', async () => {
   const target = new EventTarget(), document = new EventTarget();
   const permission = vi.fn(async () => 'granted');
