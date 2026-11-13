@@ -1,0 +1,892 @@
+{
+  "method": "Five attributed motion recordings, scaled gyroscope amplitudes only; same sample times. A controlled compact-stroke check, not new hardware data.",
+  "beforeCommit": "ba6affa",
+  "before": [
+    {
+      "file": "two-forehands-one-backhand",
+      "hand": "Right",
+      "gain": 0.35,
+      "expected": 3,
+      "recognized": 2,
+      "labels": [
+        "Forehand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        50,
+        51
+      ]
+    },
+    {
+      "file": "two-forehands-one-backhand",
+      "hand": "Right",
+      "gain": 0.5,
+      "expected": 3,
+      "recognized": 3,
+      "labels": [
+        "Forehand",
+        "Forehand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        50,
+        67,
+        250
+      ]
+    },
+    {
+      "file": "two-forehands-one-backhand",
+      "hand": "Right",
+      "gain": 0.65,
+      "expected": 3,
+      "recognized": 3,
+      "labels": [
+        "Forehand",
+        "Forehand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        50,
+        67,
+        51
+      ]
+    },
+    {
+      "file": "two-forehands-one-backhand",
+      "hand": "Right",
+      "gain": 0.8,
+      "expected": 3,
+      "recognized": 3,
+      "labels": [
+        "Forehand",
+        "Forehand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        50,
+        67,
+        51
+      ]
+    },
+    {
+      "file": "two-forehands-one-backhand",
+      "hand": "Right",
+      "gain": 1,
+      "expected": 3,
+      "recognized": 3,
+      "labels": [
+        "Forehand",
+        "Forehand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        50,
+        67,
+        51
+      ]
+    },
+    {
+      "file": "four-backhands",
+      "hand": "Right",
+      "gain": 0.35,
+      "expected": 4,
+      "recognized": 1,
+      "labels": [
+        "Backhand"
+      ],
+      "postPeakMs": [
+        49
+      ]
+    },
+    {
+      "file": "four-backhands",
+      "hand": "Right",
+      "gain": 0.5,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Backhand",
+        "Backhand",
+        "Backhand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        50,
+        150,
+        167,
+        50
+      ]
+    },
+    {
+      "file": "four-backhands",
+      "hand": "Right",
+      "gain": 0.65,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Backhand",
+        "Backhand",
+        "Backhand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        167,
+        50,
+        49,
+        50
+      ]
+    },
+    {
+      "file": "four-backhands",
+      "hand": "Right",
+      "gain": 0.8,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Backhand",
+        "Backhand",
+        "Backhand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        50,
+        50,
+        49,
+        50
+      ]
+    },
+    {
+      "file": "four-backhands",
+      "hand": "Right",
+      "gain": 1,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Backhand",
+        "Backhand",
+        "Backhand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        50,
+        50,
+        49,
+        50
+      ]
+    },
+    {
+      "file": "left-mixed",
+      "hand": "Left",
+      "gain": 0.35,
+      "expected": 4,
+      "recognized": 2,
+      "labels": [
+        "Backhand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        51,
+        46
+      ]
+    },
+    {
+      "file": "left-mixed",
+      "hand": "Left",
+      "gain": 0.5,
+      "expected": 4,
+      "recognized": 3,
+      "labels": [
+        "Forehand",
+        "Forehand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        100,
+        49,
+        46
+      ]
+    },
+    {
+      "file": "left-mixed",
+      "hand": "Left",
+      "gain": 0.65,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Forehand",
+        "Backhand",
+        "Forehand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        100,
+        51,
+        283,
+        46
+      ]
+    },
+    {
+      "file": "left-mixed",
+      "hand": "Left",
+      "gain": 0.8,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Forehand",
+        "Backhand",
+        "Forehand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        100,
+        51,
+        49,
+        46
+      ]
+    },
+    {
+      "file": "left-mixed",
+      "hand": "Left",
+      "gain": 1,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Forehand",
+        "Backhand",
+        "Forehand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        100,
+        51,
+        49,
+        46
+      ]
+    },
+    {
+      "file": "left-four-backhands-new",
+      "hand": "Left",
+      "gain": 0.35,
+      "expected": 4,
+      "recognized": 0,
+      "labels": [],
+      "postPeakMs": []
+    },
+    {
+      "file": "left-four-backhands-new",
+      "hand": "Left",
+      "gain": 0.5,
+      "expected": 4,
+      "recognized": 2,
+      "labels": [
+        "Backhand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        51,
+        199
+      ]
+    },
+    {
+      "file": "left-four-backhands-new",
+      "hand": "Left",
+      "gain": 0.65,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Backhand",
+        "Forehand",
+        "Backhand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        50,
+        133,
+        51,
+        199
+      ]
+    },
+    {
+      "file": "left-four-backhands-new",
+      "hand": "Left",
+      "gain": 0.8,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Backhand",
+        "Forehand",
+        "Backhand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        50,
+        133,
+        51,
+        52
+      ]
+    },
+    {
+      "file": "left-four-backhands-new",
+      "hand": "Left",
+      "gain": 1,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Backhand",
+        "Backhand",
+        "Backhand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        50,
+        83,
+        51,
+        52
+      ]
+    },
+    {
+      "file": "left-four-forehands",
+      "hand": "Left",
+      "gain": 0.35,
+      "expected": 4,
+      "recognized": 0,
+      "labels": [],
+      "postPeakMs": []
+    },
+    {
+      "file": "left-four-forehands",
+      "hand": "Left",
+      "gain": 0.5,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Forehand",
+        "Forehand",
+        "Forehand",
+        "Forehand"
+      ],
+      "postPeakMs": [
+        50,
+        317,
+        284,
+        67
+      ]
+    },
+    {
+      "file": "left-four-forehands",
+      "hand": "Left",
+      "gain": 0.65,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Forehand",
+        "Forehand",
+        "Forehand",
+        "Forehand"
+      ],
+      "postPeakMs": [
+        50,
+        317,
+        284,
+        267
+      ]
+    },
+    {
+      "file": "left-four-forehands",
+      "hand": "Left",
+      "gain": 0.8,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Forehand",
+        "Forehand",
+        "Forehand",
+        "Forehand"
+      ],
+      "postPeakMs": [
+        50,
+        51,
+        51,
+        67
+      ]
+    },
+    {
+      "file": "left-four-forehands",
+      "hand": "Left",
+      "gain": 1,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Forehand",
+        "Forehand",
+        "Forehand",
+        "Forehand"
+      ],
+      "postPeakMs": [
+        50,
+        51,
+        51,
+        67
+      ]
+    }
+  ],
+  "after": [
+    {
+      "file": "two-forehands-one-backhand",
+      "hand": "Right",
+      "gain": 0.35,
+      "expected": 3,
+      "recognized": 3,
+      "labels": [
+        "Forehand",
+        "Forehand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        50,
+        67,
+        51
+      ]
+    },
+    {
+      "file": "two-forehands-one-backhand",
+      "hand": "Right",
+      "gain": 0.5,
+      "expected": 3,
+      "recognized": 3,
+      "labels": [
+        "Forehand",
+        "Forehand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        50,
+        67,
+        51
+      ]
+    },
+    {
+      "file": "two-forehands-one-backhand",
+      "hand": "Right",
+      "gain": 0.65,
+      "expected": 3,
+      "recognized": 3,
+      "labels": [
+        "Forehand",
+        "Forehand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        50,
+        67,
+        51
+      ]
+    },
+    {
+      "file": "two-forehands-one-backhand",
+      "hand": "Right",
+      "gain": 0.8,
+      "expected": 3,
+      "recognized": 3,
+      "labels": [
+        "Forehand",
+        "Forehand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        50,
+        67,
+        51
+      ]
+    },
+    {
+      "file": "two-forehands-one-backhand",
+      "hand": "Right",
+      "gain": 1,
+      "expected": 3,
+      "recognized": 3,
+      "labels": [
+        "Forehand",
+        "Forehand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        50,
+        67,
+        51
+      ]
+    },
+    {
+      "file": "four-backhands",
+      "hand": "Right",
+      "gain": 0.35,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Backhand",
+        "Backhand",
+        "Backhand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        50,
+        50,
+        49,
+        50
+      ]
+    },
+    {
+      "file": "four-backhands",
+      "hand": "Right",
+      "gain": 0.5,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Backhand",
+        "Backhand",
+        "Backhand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        50,
+        50,
+        49,
+        50
+      ]
+    },
+    {
+      "file": "four-backhands",
+      "hand": "Right",
+      "gain": 0.65,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Backhand",
+        "Backhand",
+        "Backhand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        50,
+        50,
+        49,
+        50
+      ]
+    },
+    {
+      "file": "four-backhands",
+      "hand": "Right",
+      "gain": 0.8,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Backhand",
+        "Backhand",
+        "Backhand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        50,
+        50,
+        49,
+        50
+      ]
+    },
+    {
+      "file": "four-backhands",
+      "hand": "Right",
+      "gain": 1,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Backhand",
+        "Backhand",
+        "Backhand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        50,
+        50,
+        49,
+        50
+      ]
+    },
+    {
+      "file": "left-mixed",
+      "hand": "Left",
+      "gain": 0.35,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Forehand",
+        "Backhand",
+        "Forehand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        100,
+        51,
+        49,
+        46
+      ]
+    },
+    {
+      "file": "left-mixed",
+      "hand": "Left",
+      "gain": 0.5,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Forehand",
+        "Backhand",
+        "Forehand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        100,
+        51,
+        49,
+        46
+      ]
+    },
+    {
+      "file": "left-mixed",
+      "hand": "Left",
+      "gain": 0.65,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Forehand",
+        "Backhand",
+        "Forehand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        100,
+        51,
+        49,
+        46
+      ]
+    },
+    {
+      "file": "left-mixed",
+      "hand": "Left",
+      "gain": 0.8,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Forehand",
+        "Backhand",
+        "Forehand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        100,
+        51,
+        49,
+        46
+      ]
+    },
+    {
+      "file": "left-mixed",
+      "hand": "Left",
+      "gain": 1,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Forehand",
+        "Backhand",
+        "Forehand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        100,
+        51,
+        49,
+        46
+      ]
+    },
+    {
+      "file": "left-four-backhands-new",
+      "hand": "Left",
+      "gain": 0.35,
+      "expected": 4,
+      "recognized": 2,
+      "labels": [
+        "Backhand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        50,
+        52
+      ]
+    },
+    {
+      "file": "left-four-backhands-new",
+      "hand": "Left",
+      "gain": 0.5,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Backhand",
+        "Backhand",
+        "Backhand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        50,
+        83,
+        51,
+        52
+      ]
+    },
+    {
+      "file": "left-four-backhands-new",
+      "hand": "Left",
+      "gain": 0.65,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Backhand",
+        "Backhand",
+        "Backhand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        50,
+        83,
+        51,
+        52
+      ]
+    },
+    {
+      "file": "left-four-backhands-new",
+      "hand": "Left",
+      "gain": 0.8,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Backhand",
+        "Backhand",
+        "Backhand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        50,
+        83,
+        51,
+        52
+      ]
+    },
+    {
+      "file": "left-four-backhands-new",
+      "hand": "Left",
+      "gain": 1,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Backhand",
+        "Backhand",
+        "Backhand",
+        "Backhand"
+      ],
+      "postPeakMs": [
+        50,
+        83,
+        51,
+        52
+      ]
+    },
+    {
+      "file": "left-four-forehands",
+      "hand": "Left",
+      "gain": 0.35,
+      "expected": 4,
+      "recognized": 2,
+      "labels": [
+        "Forehand",
+        "Forehand"
+      ],
+      "postPeakMs": [
+        51,
+        67
+      ]
+    },
+    {
+      "file": "left-four-forehands",
+      "hand": "Left",
+      "gain": 0.5,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Forehand",
+        "Forehand",
+        "Forehand",
+        "Forehand"
+      ],
+      "postPeakMs": [
+        50,
+        51,
+        51,
+        67
+      ]
+    },
+    {
+      "file": "left-four-forehands",
+      "hand": "Left",
+      "gain": 0.65,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Forehand",
+        "Forehand",
+        "Forehand",
+        "Forehand"
+      ],
+      "postPeakMs": [
+        50,
+        51,
+        51,
+        67
+      ]
+    },
+    {
+      "file": "left-four-forehands",
+      "hand": "Left",
+      "gain": 0.8,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Forehand",
+        "Forehand",
+        "Forehand",
+        "Forehand"
+      ],
+      "postPeakMs": [
+        50,
+        51,
+        51,
+        67
+      ]
+    },
+    {
+      "file": "left-four-forehands",
+      "hand": "Left",
+      "gain": 1,
+      "expected": 4,
+      "recognized": 4,
+      "labels": [
+        "Forehand",
+        "Forehand",
+        "Forehand",
+        "Forehand"
+      ],
+      "postPeakMs": [
+        50,
+        51,
+        51,
+        67
+      ]
+    }
+  ]
+}

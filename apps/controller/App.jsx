@@ -8,7 +8,8 @@ import { EVENTS, isGameOptions, normalizeCode, cleanName, NAME_MAX } from '../..
 import { createControllerCapabilities } from '../../shared/controllerCapabilities.js';
 import { ControllerSession, parseRoomLink, serverOrigin } from './src/session.js';
 import { NativeMotionController } from './src/motion.js';
-import { readPrivate, writePrivate } from './src/storage.js';
+import { profileRequest, readPrivate, writePrivate } from './src/storage.js';
+import { createGuestClaimVault } from './src/guestClaims.js';
 import { AutomaticControllerSetup } from './src/automaticSetup.js';
 
 import { NativeBowlingActions } from './src/bowlingActions.js';
@@ -18,6 +19,7 @@ import {CONTROLLER_SPORTS, controllerPlayState, matchSummary, sportChoice, sport
 
 const sportArtwork = {tennis:require('./assets/sports/tennis.png'), bowling:require('./assets/sports/bowling.png'), golf:require('./assets/sports/golf.png')};
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
+const guestClaims = createGuestClaimVault({read: () => readPrivate('guestClaims'), write: values => writePrivate('guestClaims', values)});
 function Button({ children, onPress, disabled, quiet = false }) {
   return <Pressable accessibilityRole="button" accessibilityState={{disabled:Boolean(disabled)}} disabled={disabled} onPress={onPress}
     style={({ pressed }) => [styles.button, quiet && styles.quietButton, disabled && styles.disabled, pressed && styles.pressed]}>
@@ -67,6 +69,11 @@ export default function App() {
   const [haptics, setHaptics] = useState(true);
   const [sensitivity, setSensitivity] = useState(1);
   const [strokeMode, setStrokeMode] = useState('auto');
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [account, setAccount] = useState(null);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [history, setHistory] = useState([]);
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [confirmStart, setConfirmStart] = useState(null);
@@ -128,13 +135,13 @@ export default function App() {
   }, []);
   useEffect(() => {sessionRef.current?.configure({hand}); motionRef.current?.updatePreferences({hand,sensitivity,strokeMode});}, [hand,sensitivity,strokeMode]);
   useEffect(() => {if (preferencesLoaded) writePrivate('controllerPreferences',{hand,sensitivity,haptics,name}).catch(() => {});}, [preferencesLoaded,hand,sensitivity,haptics,name]);
-  useEffect(() => {scrollRef.current?.scrollTo({y:0,animated:false});}, [optionsOpen,false,scanner]);
+  useEffect(() => {scrollRef.current?.scrollTo({y:0,animated:false});}, [optionsOpen,profileOpen,scanner]);
   useEffect(() => {
-    const active=!optionsOpen;
+    const active=!optionsOpen && !profileOpen;
     sessionRef.current?.setControlsActive(active);
 
     if(active) motionRef.current?.resetInput();
-  }, [optionsOpen]);
+  }, [optionsOpen,profileOpen]);
   useEffect(() => {setConfirmReset(false);}, [seat?.gameId,seat?.sport]);
 
   useEffect(() => {
@@ -152,18 +159,24 @@ export default function App() {
     sessionRef.current?.home();
     sessionRef.current = null;
     setSetup(null); setMotionStatus({state:'off'}); setScanner(false); setScannedRoom(null); setManualOpen(false);
-    setOptionsOpen(false);  setConfirmStart(null); setPlayEvent(null);
+    setOptionsOpen(false); setProfileOpen(false); setConfirmStart(null); setPlayEvent(null);
     setSeat(null); setStatus('Ready to join'); setNotice(''); setBusy(false);
     scrollRef.current?.scrollTo({y:0,animated:false});
   }
   async function makeSession(address) {
     const revision=taskRevision.current;
     flowRef.current?.stop(); rollActions.current.reset(); sessionRef.current?.dispose();   setSetup(null);
+    const savedProfile = await readPrivate('profile').catch(() => null);
     if (revision!==taskRevision.current) return null;
+    if (savedProfile?.origin === address && savedProfile.profile?.preferences) {
+      const saved = savedProfile.profile.preferences;
+      setHand(saved.hand); setSensitivity(saved.sensitivity); setHaptics(saved.haptics);
+      preferencesRef.current = {...preferencesRef.current, hand:saved.hand, sensitivity:saved.sensitivity};
+    }
     const session = new ControllerSession(address, {
-
+      profileToken: savedProfile?.origin === address ? savedProfile.token : null,
       save: value => sessionRef.current === session ? saveRoom(value) : Promise.resolve(),
-
+      saveClaim: (address, claim) => guestClaims.remember(address, claim),
       changed: (next, connection) => {
         if (sessionRef.current !== session) return;
         rollActions.current.observe();
@@ -173,7 +186,7 @@ export default function App() {
         const currentPlayer = next?.players?.find(value => value.slot === next.slot);
         if (currentPlayer?.setup === null) setSetup(null);
         setSeat(next); setStatus(connection);
-        if (!next) {setOptionsOpen(false);setConfirmStart(null);setPlayEvent(null);setScannedRoom(null);setManualOpen(false);setScanner(false);}
+        if (!next) {setOptionsOpen(false);setProfileOpen(false);setConfirmStart(null);setPlayEvent(null);setScannedRoom(null);setManualOpen(false);setScanner(false);}
         if (connection !== 'online') { setSetup(null);  }
         flowRef.current?.update(next, connection);
       },
@@ -181,7 +194,7 @@ export default function App() {
     });
     sessionRef.current = session;
     session.configure({hand:preferencesRef.current.hand});
-    session.setControlsActive(!optionsOpen);
+    session.setControlsActive(!optionsOpen && !profileOpen);
     flowRef.current = new AutomaticControllerSetup({session,notice:setNotice,
       changed: update => {
         setMode(update.mode); setSetup(update.setup);
@@ -206,6 +219,7 @@ export default function App() {
         return motion;
       },
     });
+    if(savedProfile?.origin===address && savedProfile.profile?.preferences?.touchControls) flowRef.current.select('touch');
     return session;
   }
 
@@ -222,7 +236,7 @@ export default function App() {
       sports: ['tennis', 'bowling'], motion: motionAvailable, orientation: motionAvailable, haptics, buttons: true }));
     if (revision!==taskRevision.current || session!==sessionRef.current) return;
     result(joined);
-    setName(playerName); setScannedRoom(null); setOrigin(address); setScanner(false); setOptionsOpen(false);  buzz('ready');
+    setName(playerName); setScannedRoom(null); setOrigin(address); setScanner(false); setOptionsOpen(false); setProfileOpen(false); buzz('ready');
   }
   async function returnToRoom() {
     const revision=taskRevision.current, saved=savedSession;
@@ -239,6 +253,21 @@ export default function App() {
     await rollActions.current.check();
   }
   const command = async (action, extra = {}) => result(await sessionRef.current.action(EVENTS.PLAYER_GAME_COMMAND, { action, ...extra }));
+
+
+  async function openProfile() {
+    const saved = await readPrivate('profile');
+    const address = origin || saved?.origin || savedSession?.origin;
+    setProfileOpen(true);
+    if (!address) {setAccount(null); return;}
+    setOrigin(address);
+    if (saved?.origin !== address) { setAccount(null); return; }
+    const current = await profileRequest(address, '', { token: saved.token });
+    await sessionRef.current?.captureGuestClaim();
+    await guestClaims.claimFor(address, claim => profileRequest(address, '/claim', {method:'POST',token:saved.token,body:{claim}}));
+    setAccount({ ...saved, profile: current.profile });
+    setHistory((await profileRequest(address, '/history', { token: saved.token })).history || []);
+  }
   async function scanTv() {
     const revision=taskRevision.current;
     const granted=permission?.granted || (await requestPermission()).granted;
@@ -246,16 +275,29 @@ export default function App() {
     if(!granted) {setManualOpen(true);throw new Error('Camera permission is off. Enter the room code, or allow Camera in Settings.');}
     if(sessionRef.current?.seat) {await sessionRef.current.leave();flowRef.current?.stop();setSetup(null);}
     if (revision!==taskRevision.current) return;
-    scanLock.current = false; setScannedRoom(null); setOptionsOpen(false);setScanner(true);
+    scanLock.current = false; setScannedRoom(null); setOptionsOpen(false);setProfileOpen(false);setScanner(true);
   }
-  function backToPlay() {setOptionsOpen(false);setConfirmReset(false);}
+  function backToPlay() {setProfileOpen(false);setOptionsOpen(false);setConfirmReset(false);}
+  async function authenticate(register) {
+    const address = serverOrigin(origin.trim(), __DEV__);
+    const auth = await profileRequest(address, register ? '/register' : '/login', { method: 'POST', body: { username, password, ...(register ? { displayName: name } : {}) } });
+    if (!auth.token) throw new Error('This server does not support native profile sessions. Continue as a guest.');
+    const saved = { origin: address, token: auth.token, profile: auth.profile };
+    await writePrivate('profile', saved); setAccount(saved); setPassword(''); setName(auth.profile.displayName);
+    await sessionRef.current?.captureGuestClaim();
+    await guestClaims.claimFor(address, claim => profileRequest(address, '/claim', {method:'POST',token:auth.token,body:{claim}}));
+    if (sessionRef.current?.origin === address) sessionRef.current.setProfileToken(auth.token);
+    const preferences = auth.profile.preferences;
+    if (preferences) { setHand(preferences.hand); setHaptics(preferences.haptics); setSensitivity(preferences.sensitivity); }
+    setHistory((await profileRequest(address, '/history', { token: auth.token })).history || []);
+  }
 
   const isLeader = seat?.slot === (seat?.leaderSlot ?? 0);
   const tvAway = waitingForTv(seat);
   const inLobby = ['lobby','ready'].includes(seat?.phase);
   const playable = seat?.phase === 'game' && !seat.paused && status === 'online';
   const canAdjustBowling = playable && !rollState && seat?.gameState?.phase === 'ready' && seat?.gameState?.currentPlayer === seat.slot + 1;
-  const canRoll = canAdjustBowling && !optionsOpen;
+  const canRoll = canAdjustBowling && !optionsOpen && !profileOpen;
   const summary = matchSummary(seat);
   const completed = seat?.gameState?.phase === 'complete';
   const playState = controllerPlayState(seat,status,setup);
@@ -280,11 +322,33 @@ export default function App() {
   }, [canRoll,mode,setup,aim]);
   return <SafeAreaView style={styles.safe}>{seat ? <KeepControllerAwake /> : null}<ScrollView ref={scrollRef} contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
     <View style={styles.header}><View><Text style={styles.brand}>wee<Text style={styles.brandAccent}> sports</Text></Text><Text style={styles.pill}>YOUR CONTROLLER</Text></View>
-      {!optionsOpen ? <Button quiet onPress={() => setOptionsOpen(true)}>Tools</Button> : null}</View>
+      {!optionsOpen && !profileOpen ? <Button quiet onPress={() => setOptionsOpen(true)}>Tools</Button> : null}</View>
     <Text accessibilityLiveRegion="polite" style={styles.status}>{status === 'online' ? tvAway ? 'Waiting for the TV…' : '● Connected to your TV' : status === 'offline' ? 'Reconnecting to your room…' : status === 'suspended' ? 'Return to the app to reconnect' : status}</Text>
     {notice ? <Text accessibilityRole="alert" style={styles.notice}>{notice}</Text> : null}
     {seat ? <Button quiet onPress={goHome}>Go home</Button> : null}
-    {optionsOpen ? <>
+    {profileOpen ? <View style={styles.card}>
+      <Text style={styles.heading}>Your profile</Text><Text style={styles.copy}>Your preferences and match history. Guest play is always available.</Text>
+      {account ? <>
+        <Text style={styles.subheading}>{account.profile.displayName}</Text>
+        <Button quiet onPress={() => setHand(hand === 'Right' ? 'Left' : 'Right')}>{hand} handed</Button>
+        <Button quiet onPress={() => setHaptics(!haptics)}>Haptics {haptics ? 'on' : 'off'}</Button>
+        <Stepper label="Sensitivity" value={sensitivity} change={setSensitivity} min={.5} max={2}/>
+        <Button disabled={busy} onPress={() => task(async () => {
+          const saved = await profileRequest(account.origin, '', { method: 'PATCH', token: account.token,
+            body: { revision: account.profile.revision, preferences: { ...account.profile.preferences, hand, haptics, sensitivity } } });
+          const updated = { ...account, profile: saved.profile }; setAccount(updated); await writePrivate('profile', updated);
+        })}>Save preferences</Button>
+        <Text style={styles.subheading}>Match history</Text>
+        {history.length ? history.slice(0, 20).map((entry, index) => <Text key={entry.matchId || index} style={styles.copy}>{title(entry.sport)} · {entry.outcome || entry.status}{Number.isFinite(entry.score) ? ` · ${entry.score}` : ''}{Number.isFinite(entry.savedAt || entry.startedAt) ? ` · ${new Date(entry.savedAt || entry.startedAt).toLocaleDateString()}` : ''}</Text>) : <Text style={styles.copy}>No saved matches yet.</Text>}
+        <Button quiet onPress={() => task(async () => { await profileRequest(account.origin, '/logout', { method: 'POST', token: account.token }); await writePrivate('profile', null); sessionRef.current?.setProfileToken(null); setAccount(null); })}>Sign out</Button>
+      </> : <>
+        {!origin ? <><Text style={styles.copy}>Connect to your TV once to use its profile and match history.</Text><Button onPress={() => task(scanTv)}>Scan TV code</Button></> : null}
+        <Field label="Username" value={username} onChangeText={setUsername} autoCapitalize="none" autoCorrect={false}/>
+        <Field label="Password (12+ characters)" value={password} onChangeText={setPassword} secureTextEntry autoCapitalize="none" autoCorrect={false}/>
+        <Button disabled={busy || !origin} onPress={() => task(() => authenticate(false))}>Sign in</Button>
+        <Button quiet disabled={busy || !origin} onPress={() => task(() => authenticate(true))}>Create optional account</Button>
+      </>}
+    </View> : optionsOpen ? <>
       <View style={styles.card}><Text style={styles.eyebrow}>{seat ? `${title(seat.sport)} · ROOM ${seat.code}` : 'YOUR PHONE'}</Text><Text style={styles.heading}>Tools</Text>
         <Text style={styles.copy}>A few adjustments, then back to play.</Text>
         {seat && isLeader && !seat.resumeGame && (['ready','lobby'].includes(seat.phase) || completed) ? <>
@@ -317,7 +381,7 @@ export default function App() {
         </> : <Text style={styles.copy}>Waiting for the TV’s game options…</Text>}
       </View> : null}
       <View style={styles.card}><Text style={styles.subheading}>Your controller</Text>
-        
+        <Button quiet onPress={() => task(openProfile)}>Profile & history</Button>
         {isLeader && ['countdown','vote','tutorial','game'].includes(seat?.phase) ? <Button quiet disabled={status!=='online'} onPress={() => task(async () => {result(await sessionRef.current.request(EVENTS.PLAYER_RETURN_TO_LOBBY,{gameId:seat.gameId}));backToPlay();})}>Return to lobby</Button> : null}
         <Button quiet disabled={busy} onPress={() => task(scanTv)}>{seat ? 'Leave & scan another TV' : 'Scan TV code'}</Button>
         {seat ? <Button quiet onPress={() => task(async () => {await sessionRef.current.leave();flowRef.current?.stop();setSetup(null);backToPlay();})}>Leave room</Button> : null}
@@ -355,7 +419,7 @@ export default function App() {
         <Button disabled={busy || !origin || code.length !== 4 || !cleanName(name)} onPress={() => task(() => join())}>Play</Button>
         <Button quiet disabled={!origin || code.length !== 4} onPress={() => task(async () => { const address = serverOrigin(origin.trim(), __DEV__); await Linking.openURL(`${address}/join?code=${encodeURIComponent(code)}`); })}>Continue in browser</Button>
       </View> : null}
-      <Text style={styles.small}>No account needed to play. Golf is coming soon.</Text>
+      <Button quiet onPress={() => task(openProfile)}>Profile & history</Button><Text style={styles.small}>No account needed to play. Golf is coming soon.</Text>
     </> : <>
       <View style={styles.card}>
         <Text style={styles.eyebrow}>ROOM {seat.code}{Number.isInteger(seat.slot) ? ` · PLAYER ${seat.slot + 1}` : ''}</Text>
@@ -392,7 +456,7 @@ export default function App() {
       {isLeader && (completed || ['countdown','vote','tutorial'].includes(seat.phase)) ? <Button quiet disabled={status!=='online'} onPress={() => task(async () => result(await sessionRef.current.request(EVENTS.PLAYER_RETURN_TO_LOBBY,{gameId:seat.gameId})))}>Back to lobby</Button> : null}
     </>}
     <Text style={styles.footer}>Watch the TV. Play with your phone.</Text>
-  </ScrollView>{optionsOpen ? <View style={styles.backDock}><Button onPress={backToPlay}>{seat ? inLobby ? 'Back to lobby' : 'Back to play' : 'Back to controller'}</Button></View> : null}
+  </ScrollView>{optionsOpen || profileOpen ? <View style={styles.backDock}><Button onPress={backToPlay}>{seat ? inLobby ? 'Back to lobby' : 'Back to play' : 'Back to controller'}</Button></View> : null}
     <Modal visible={Boolean(confirmStart && confirmStart===startKey)} transparent animationType="fade" onRequestClose={()=>setConfirmStart(null)}>
       <View style={styles.modalShade}><View style={[styles.card,styles.confirmCard]} accessibilityViewIsModal>
         <Text accessibilityRole="header" style={styles.subheading}>Start {title(seat?.sport)}?</Text>

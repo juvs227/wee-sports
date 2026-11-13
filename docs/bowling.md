@@ -1,9 +1,5 @@
 # Bowling and phone motion
 
-This proposal includes browser play and validated live-room checkpoints. Expo
-arrives in PR4; profiles and durable saved games arrive in PR5. See
-[controller ownership and proposal availability](controller-design.md).
-
 ## Browser improvements and recovery
 
 The phone throttles normal replaceable aim previews to once per 12 ms, suppressing
@@ -40,6 +36,14 @@ positive X is the expected forward pitch, and positive Y requests a curve right
 on the TV. Physical iOS/Android grip trials remain required to verify native
 sensor signs and comfort; synthetic tests establish deterministic signal mapping,
 not hardware feel. Cannon-es coefficients and forward release thresholds are unchanged.
+
+Signed-in profile preferences can supply initial hand, motion response, vibration
+and button-mode defaults. Explicit choices on this device and an active setup
+take precedence over a late profile response. The local preference record is
+separate from calibration, contains no gyro bias or account credentials, and
+cannot grant sensor permission. Motion response changes the bounded aim/power
+mapping, not the release detector; touch power stays exactly as selected. Turning
+off vibration keeps visible confirmation and contact feedback available.
 
 ## Rules implemented
 
@@ -132,7 +136,7 @@ refines bias without interrupting play. Initial setup requires continuous sample
 with gaps no longer than 250 ms. Once established, browser setup survives brief
 foreground gaps up to 1.5 seconds; fresh aim resumes immediately. This does not
 join motion across a gap: recognizers discard interrupted gestures after 100 ms,
-and quiet calibration windows cannot span missing readings. The Expo controller added in PR4 retains
+and quiet calibration windows cannot span missing readings. Native setup retains
 its 250 ms freshness limit. Backgrounding and screen rotation reset readiness.
 Provisional values are never saved as verified
 stationary calibration. Optional Reset motion in Settings retains the explicit

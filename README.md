@@ -45,6 +45,18 @@ automatic setup, room lifecycle and gesture logic with the browser controller.
 See [native setup](apps/controller/README.md) for development builds and device
 permissions. Simulator/export checks do not establish real phone sensor latency.
 
+## Optional profiles and recovery
+
+Guest play remains available. Profiles provide preferences and bowling history.
+Bowling saves stable roll boundaries to SQLite; solo saved bowling games can be
+continued after a restart. Tennis supports live room boundary recovery, but does
+not yet save profile match history. Interrupted swings and rolls are never replayed.
+
+The production database defaults to `.wee-data/profiles.sqlite`. Configure
+`WEE_PROFILE_DB` on durable storage for deployment. See [deployment](docs/railway.md)
+and [profile backup commands](server/scripts/profile-db.js). Never put credentials
+or reconnect tokens into public QR URLs.
+
 ## Check changes
 
 ```sh
