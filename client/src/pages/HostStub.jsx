@@ -14,6 +14,7 @@ import { TvReady } from '../components/TvReady.jsx';
 import { TvTutorial } from '../components/TvTutorial.jsx';
 import { TvCalibration } from '../components/TvCalibration.jsx';
 import { TvVote } from '../components/TvVote.jsx';
+import { TvAvatars } from '../components/TvAvatars.jsx';
 import { ThemeToggle } from '../components/ThemeToggle.jsx';
 import { errorText } from '../lib/errors.js';
 import { usePhoneLink } from '../lib/usePhoneLink.js';
@@ -206,6 +207,7 @@ export default function HostStub() {
   // The vote, then its reveal for a moment, then the tutorial if anyone asked.
   if (lobby.phase === PHASES.VOTE || revealing) return <TvVote lobby={lobby} />;
   if (lobby.phase === PHASES.TUTORIAL) return <TvTutorial lobby={lobby} />;
+  if (lobby.phase === PHASES.AVATARS) return <TvAvatars lobby={lobby} />;
 
   const capacity = playerCapacity(lobby.sport);
   const seats = Array.from(

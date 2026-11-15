@@ -25,6 +25,7 @@ export interface PlayerController {
     update: (delta: number) => void;
     move: (dx: number, dz: number, delta: number) => void;
     setPosition: (x: number, z: number) => void;
+    setColor: (color: number) => void;
 }
 
 export interface PlayerOptions {
@@ -64,8 +65,21 @@ export function createPlayer(
     } = options;
 
     const loader = new GLTFLoader();
+    let model: THREE.Object3D | null = null;
+    let playerColor = color;
     let handBone: THREE.Object3D | null = null;
     const appliedHandOffset = new THREE.Vector3();
+    function applyColor(): void {
+        model?.traverse((child) => {
+            if (!(child instanceof THREE.Mesh)) return;
+            const materials = Array.isArray(child.material) ? child.material : [child.material];
+            materials.forEach((material) => {
+                if ('color' in material) {
+                    (material as THREE.MeshStandardMaterial).color.setHex(playerColor);
+                }
+            });
+        });
+    }
     function clearHandOffset(): void {
         handBone?.position.sub(appliedHandOffset);
         appliedHandOffset.set(0, 0, 0);
@@ -189,12 +203,17 @@ export function createPlayer(
                 maxZ
             );
         },
+
+        setColor(newColor: number): void {
+            playerColor = newColor;
+            applyColor();
+        },
     };
 
     loader.load(
         modelPath,
         (gltf) => {
-            const model = gltf.scene;
+            model = gltf.scene;
             model.scale.set(scale, scale, scale);
             model.traverse((child) => {
                 if (!(child instanceof THREE.Mesh)) {
@@ -209,7 +228,7 @@ export function createPlayer(
 
                     if ('color' in cloned) {
                         (cloned as THREE.MeshStandardMaterial)
-                            .color.setHex(color);
+                            .color.setHex(playerColor);
                     }
 
                     return cloned;

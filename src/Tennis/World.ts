@@ -61,6 +61,11 @@ export class World {
         this.gameLogic.botEnabled = value;
     }
 
+    public setPlayerColors(player1Color?: number, player2Color?: number): void {
+        if (player1Color !== undefined) this.player1.setColor(player1Color);
+        if (player2Color !== undefined) this.player2.setColor(player2Color);
+    }
+
     public getScore(): Score {
         return this.gameLogic.getScore();
     }

@@ -5,7 +5,7 @@
  * can restyle it on its own.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { EVENTS, PHASES, isController } from '@wee/shared/protocol.js';
 import { errorText } from '../lib/errors.js';
 import { request } from '../lib/socket.js';
@@ -15,6 +15,7 @@ import { useCountdown } from '../lib/useCountdown.js';
 export function PhoneReady({ lobby, slot, disabled = false }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
+  const [color, setColor] = useState('#3b82f6');
   const counting = lobby.phase === PHASES.COUNTDOWN;
   const secondsLeft = useCountdown(counting ? lobby.countdown.msLeft : null);
 
@@ -22,6 +23,10 @@ export function PhoneReady({ lobby, slot, disabled = false }) {
   const ready = lobby.players.find((player) => player.slot === slot)?.ready ?? false;
   const needsSetup = isController(lobby.sport, slot) && !lobby.players.find(player => player.slot === slot)?.setup;
   const readyCount = lobby.players.filter((player) => player.ready).length;
+  const currentPlayer = lobby.players.find((player) => player.slot === slot);
+  useEffect(() => {
+    if (currentPlayer?.color) setColor(currentPlayer.color);
+  }, [currentPlayer?.color]);
 
   async function toggle() {
     setSending(true);
@@ -31,8 +36,30 @@ export function PhoneReady({ lobby, slot, disabled = false }) {
     if (!result.ok) setError(result.error);
   }
 
+  async function changeColor(event) {
+    const nextColor = event.target.value;
+    setColor(nextColor);
+    const result = await request(EVENTS.PLAYER_COLOR_SET, { color: nextColor });
+    if (!result.ok) setError(result.error);
+  }
+
   return (
     <section className="phone-ready">
+      {lobby.sport === 'tennis' && currentPlayer ? ( // temp only, apply it to other sports when they have avatars
+        <div className="seat" style={{ justifyContent: 'center', marginBottom: '1rem' }}>
+          <span className="seat__badge" data-slot={currentPlayer.slot}>
+            P{currentPlayer.slot + 1}
+          </span>
+          <span>{currentPlayer.name}</span>
+        </div>
+      ) : null}
+      {lobby.phase === PHASES.AVATARS && lobby.sport === 'tennis' ? (
+        <label style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+          Avatar color
+          <input type="color" value={color} onChange={changeColor} aria-label="Choose avatar color" />
+        </label>
+      ) : null}
+
       {counting ? (
         <h2 className="phone-ready__title" role="timer">
           {secondsLeft > 0 ? `Starting in ${secondsLeft}…` : 'Go!'}

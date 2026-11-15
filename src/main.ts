@@ -13,6 +13,11 @@ import './tennisHud.css';
 import './gameResults.css';
 import './theme.js';
 
+function parsePlayerColor(value: unknown): number | undefined {
+    if (typeof value !== 'string' || !/^#[0-9a-f]{6}$/i.test(value)) return undefined;
+    return Number.parseInt(value.slice(1), 16);
+}
+
 type TennisCommand = {id: string; gameId: string} & (
     {action: 'configure'; settings: Partial<Omit<TennisSettings, 'format'>> & {splitView?: boolean}} |
     {action: 'new-match'; format: 'full' | 'quick'} |
@@ -322,6 +327,7 @@ async function main(): Promise<void> {
         const players = Array.isArray(event.data.players) ? event.data.players : [];
         const p1 = players.find((player: {slot: number}) => player.slot === 0);
         const p2 = players.find((player: {slot: number}) => player.slot === 1);
+        world.setPlayerColors(parsePlayerColor(p1?.color), parsePlayerColor(p2?.color));
         humanOpponent = Boolean(p2);
         const nextGameId = typeof event.data.gameId === 'string' ? event.data.gameId : null;
         if (nextGameId !== activeGameId) { deliveredCommands.clear(); publishedOptions = ''; }

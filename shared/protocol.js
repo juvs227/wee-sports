@@ -59,7 +59,7 @@ export function hasTutorial(sport) {
  * Where a lobby is:
  *
  *   'lobby' -> 'ready' -> (everyone ready) -> 'calibration' -> (TV confirms) -> 'countdown' -> 'vote' -> 'tutorial' | 'game'
- *   'tutorial' -> (every Yes voter did every move) -> 'game'
+ *   'tutorial' -> (every Yes voter did every move) -> 'avatars' -> 'game'
  *
  * Nobody touches the TV: phones press Ready, vote, and do the tutorial moves.
  * A sport without TUTORIAL_MOVES goes from 'countdown' straight to 'game'.
@@ -73,13 +73,14 @@ export const PHASES = {
   COUNTDOWN: 'countdown',
   VOTE: 'vote',
   TUTORIAL: 'tutorial',
+  AVATARS: 'avatars',
   GAME: 'game',
 };
 
 /**
  * Every lobby snapshot below has this shape:
  *
- *   { code, sport, phase, players: [{ slot, name, ready, setup }], countdown,
+ *   { code, sport, phase, players: [{ slot, name, ready, setup, color }], countdown,
  *     vote, tutorial, paused, reconnecting: [{ name, msLeft }], setupPending: [name] }
  *
  * Create/join/resume acknowledgements additionally contain a private token
@@ -124,6 +125,8 @@ export const EVENTS = {
    * during it cancels it. Ack: { ok }.
    */
   PLAYER_READY: 'player:ready',
+  /** Phone -> server: set this player's avatar color during the avatar screen. */
+  PLAYER_COLOR_SET: 'player:color-set',
   /** TV -> server: all players have finished orientation calibration. Start the countdown. */
   HOST_CALIBRATION_DONE: 'host:calibration-done',
   /** Phone -> server: this player has finished orientation calibration. */

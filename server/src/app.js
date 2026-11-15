@@ -53,6 +53,11 @@ export function createGameServer({ store = new RoomStore(), origins = [], tickMs
       reply(ack, result);
       if (result.ok) broadcast(result.code);
     });
+    socket.on(EVENTS.PLAYER_COLOR_SET, (payload, ack) => {
+      const result = store.setPlayerColor(socket.id, payload);
+      reply(ack, result);
+      if (result.ok) broadcast(result.code);
+    });
     socket.on(EVENTS.HOST_CALIBRATION_DONE, (payload, ack) => {
       const result = store.calibrationDone(socket.id);
       reply(ack, result);
