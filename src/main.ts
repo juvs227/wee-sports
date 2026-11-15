@@ -13,6 +13,11 @@ import './tennisHud.css';
 import './gameResults.css';
 import './theme.js';
 
+function parsePlayerColor(value: unknown): number | undefined {
+    if (typeof value !== 'string' || !/^#[0-9a-f]{6}$/i.test(value)) return undefined;
+    return Number.parseInt(value.slice(1), 16);
+}
+
 type TennisCommand = {id: string; gameId: string} & (
   | {
       action: 'configure';

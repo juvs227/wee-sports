@@ -187,7 +187,9 @@ export default function JoinStub() {
           // Keyed by game, so a fresh vote forgets this phone's last pick.
           <PhoneVote key={lobby.gameId} lobby={lobby} slot={seat.slot} />
         ) : phase === PHASES.TUTORIAL ? (
-          <PhoneTutorial key={lobby.tutorial.step} lobby={lobby} slot={seat.slot} attempt={tutorialAttempt} />
+          <PhoneTutorial key={lobby.tutorial.step} lobby={lobby} slot={seat.slot} />
+        ) : phase === PHASES.AVATARS ? (
+          <PhoneReady lobby={lobby} slot={seat.slot} disabled={reconnecting || lobby.paused} />
         ) : (
           <PhoneReady lobby={lobby} slot={seat.slot} disabled={reconnecting || lobby.paused} />
         )}

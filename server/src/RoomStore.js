@@ -25,10 +25,11 @@ import {CODE_ALPHABET, CODE_LENGTH, COUNTDOWN_SECONDS, ERRORS, MAX_PLAYERS, NAME
 const MAX_CODE_ATTEMPTS = 50;
 const COUNTDOWN_MS = COUNTDOWN_SECONDS * 1000;
 const VOTE_MS = VOTE_SECONDS * 1000;
+const PLAYER_COLORS = ['#3b82f6', '#ef4444', '#2b9a66', '#e0a100'];
 
 const BEFORE_PLAY = new Set([PHASES.LOBBY, PHASES.READY]);
 /** After the countdown and before the game: the vote and the tutorial. */
-const PREGAME = new Set([PHASES.VOTE, PHASES.TUTORIAL]);
+const PREGAME = new Set([PHASES.VOTE, PHASES.TUTORIAL, PHASES.AVATARS]);
 /** Phases where a controller without setup pauses everyone. */
 const NEEDS_SETUP = new Set([PHASES.VOTE, PHASES.TUTORIAL, PHASES.GAME]);
 
@@ -37,6 +38,7 @@ export function randomCode(random = Math.random) {
   for (let i = 0; i < CODE_LENGTH; i += 1) {
     code += CODE_ALPHABET[Math.floor(random() * CODE_ALPHABET.length)];
   }
+
   return code;
 }
 
@@ -173,6 +175,25 @@ export class RoomStore {
       room.inputGeneration++;
       return { ok: true, code: room.code, countdownCancelled: true };
     }
+    if (room.phase === PHASES.AVATARS && [...room.players.values()].every((seat) => seat.ready)) {
+      room.phase = PHASES.GAME;
+      room.deadline = null;
+      return { ok: true, code: room.code, gameStarted: true };
+    }
+    return { ok: true, code: room.code };
+  }
+
+  setPlayerColor(socketId, payload) {
+    const playerId = this.#sockets.get(socketId);
+    const member = this.#members.get(playerId);
+    const room = member && this.#rooms.get(member.code);
+    const player = room?.players.get(playerId);
+    if (member?.role !== 'player' || !room || !player) return { ok: false, error: ERRORS.NOT_PLAYER };
+    if (room.phase !== PHASES.AVATARS) return { ok: false, error: ERRORS.NO_READY_CHECK };
+    if (typeof payload?.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(payload.color)) {
+      return { ok: false, error: 'bad-color' };
+    }
+    player.color = payload.color.toLowerCase();
     return { ok: true, code: room.code };
   }
 
@@ -754,7 +775,7 @@ export class RoomStore {
     const room = this.#rooms.get(code);
     if (!room) return null;
     const players = [...room.players.values()]
-      .map(({ slot, name, ready, setup }) => ({ slot, name, ready, setup }))
+      .map(({ slot, name, ready, setup, color }) => ({ slot, name, ready, setup, color }))
       .sort((a, b) => a.slot - b.slot);
     const countdown =
       room.phase === PHASES.COUNTDOWN ? { msLeft: Math.max(0, room.deadline - (room.pausedAt ?? this.#now())) } : null;
@@ -992,7 +1013,8 @@ export class RoomStore {
     room.vote = { picks: frozen };
     room.deadline = null;
     if (learners.size === 0) {
-      room.phase = PHASES.GAME;
+      room.phase = PHASES.AVATARS;
+      room.deadline = null;
       return;
     }
     room.phase = PHASES.TUTORIAL;
@@ -1011,7 +1033,8 @@ export class RoomStore {
     tutorial.step += 1;
     tutorial.done.clear();
     if (tutorial.learners.size === 0 || tutorial.step >= TUTORIAL_MOVES[room.sport].length) {
-      room.phase = PHASES.GAME;
+      room.phase = PHASES.AVATARS;
+      room.deadline = null;
       room.tutorial = null;
     }
     return true;
