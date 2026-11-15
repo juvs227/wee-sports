@@ -55,9 +55,16 @@ test('players take the lowest seat and every join returns the lobby', () => {
   assert.equal(first.slot, 0);
   assert.equal(second.slot, 1);
   assert.deepEqual(second.players, [
-    { slot: 0, name: 'Ada', ready: false, setup: null },
-    { slot: 1, name: 'Bo', ready: false, setup: null },
+    { slot: 0, name: 'Ada', ready: false, setup: null, color: '#3b82f6' },
+    { slot: 1, name: 'Bo', ready: false, setup: null, color: '#ef4444' },
   ]);
+});
+
+test('players can change avatar color during the avatar screen', () => {
+  const { store, code } = openTutorial([false, true]);
+  for (const step of MOVES) store.tutorialMove('p1', { step: MOVES.indexOf(step) });
+  assert.deepEqual(store.setPlayerColor('p1', { color: '#12AB34' }), { ok: true, code });
+  assert.equal(store.lobby(code).players.find((player) => player.slot === 1).color, '#12ab34');
 });
 
 for (const sport of ['tennis', 'bowling']) test(`${sport} rejects joins beyond its playing seats, including reserved seats`, () => {
@@ -399,15 +406,18 @@ test('one Yes means the tutorial, and the resolved vote reveals every pick', () 
   assert.deepEqual(lobby.tutorial, { step: 0, moves: TUTORIAL_MOVES.tennis, learners: [1], done: [] });
 });
 
-test('all No skips to the game', () => {
-  const { store, code } = openVote();
+test('all No skips the tutorial and shows avatars', () => {
+  const { store, code, clock } = openVote();
   store.vote('p0', { watch: false });
   store.vote('p1', { watch: false });
-  assert.equal(store.lobby(code).phase, PHASES.GAME);
+  assert.equal(store.lobby(code).phase, PHASES.AVATARS);
   assert.equal(store.lobby(code).tutorial, null);
+  store.setReady('p0', { ready: true });
+  assert.deepEqual(store.setReady('p1', { ready: true }), { ok: true, code, gameStarted: true });
+  assert.equal(store.lobby(code).phase, PHASES.GAME);
 });
 
-test('on timeout, non-voters count as No, and not a moment early', () => {
+test('on timeout, non-voters count as No and show avatars', () => {
   const { store, code, clock } = openVote();
   store.vote('p0', { watch: false });
   clock.t += VOTE_MS - 1;
@@ -415,8 +425,11 @@ test('on timeout, non-voters count as No, and not a moment early', () => {
   clock.t += 1;
   assert.deepEqual(store.expireVote(code), { code });
   const lobby = store.lobby(code);
-  assert.equal(lobby.phase, PHASES.GAME);
+  assert.equal(lobby.phase, PHASES.AVATARS);
   assert.deepEqual(lobby.vote.picks, [{ slot: 0, pick: PICKS.NO }, { slot: 1, pick: PICKS.NONE }]);
+  store.setReady('p0', { ready: true });
+  assert.deepEqual(store.setReady('p1', { ready: true }), { ok: true, code, gameStarted: true });
+  assert.equal(store.lobby(code).phase, PHASES.GAME);
   // A stale tick after the vote resolved is harmless.
   assert.equal(store.expireVote(code), null);
 });
@@ -503,11 +516,14 @@ test('a step waits for every learner, then the next one starts', () => {
 });
 
 test('after the last step the game starts', () => {
-  const { store, code } = openTutorial([false, true]);
+  const { store, code, clock } = openTutorial([false, true]);
   for (let step = 0; step < MOVES.length; step += 1) {
     assert.equal(store.lobby(code).phase, PHASES.TUTORIAL);
     assert.equal(store.tutorialMove('p1', { step }).advanced, true);
   }
+  assert.equal(store.lobby(code).phase, PHASES.AVATARS);
+  store.setReady('p0', { ready: true });
+  assert.deepEqual(store.setReady('p1', { ready: true }), { ok: true, code, gameStarted: true });
   const lobby = store.lobby(code);
   assert.equal(lobby.phase, PHASES.GAME);
   assert.equal(lobby.tutorial, null);
@@ -588,6 +604,7 @@ test('an active tennis game rejects mid-game joining', () => {
   store.finishCountdown(code);
   clock.t += VOTE_MS;
   store.expireVote(code);
+  store.setReady('p0', { ready: true });
   assert.equal(store.lobby(code).phase, PHASES.GAME);
   assert.deepEqual(store.join('late', { v, code, name: 'Late' }), { ok: false, error: ERRORS.IN_PROGRESS });
 });
@@ -616,6 +633,7 @@ test('one phone can ready, start tennis, and reconnect without extra players', (
   clock.t += COUNTDOWN_MS;
   store.finishCountdown(code);
   assert.equal(store.vote('solo', { watch: false }).resolved, true);
+  store.setReady('solo', { ready: true });
   store.disconnect('solo');
   assert.equal(store.lobby(code).paused, true);
   assert.equal(store.resume('back', { v, code, role: 'player', token: seat.token }).phase, PHASES.GAME);
@@ -654,6 +672,7 @@ test('setup gates readiness, cancels a countdown, and pauses a running match unt
   store.setReady('p0', { ready: true }); store.setReady('p1', { ready: true }); store.startGame('p0');
   now += 5000; store.finishCountdown(code);
   now += VOTE_MS; store.expireVote(code);
+  store.setReady('p0', { ready: true }); store.setReady('p1', { ready: true });
   store.setSetup('p1', { setup: null });
   assert.equal(store.lobby(code).paused, true);
   assert.deepEqual(store.lobby(code).setupPending, ['Red']);

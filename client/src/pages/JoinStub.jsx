@@ -177,6 +177,8 @@ export default function JoinStub() {
           <PhoneVote key={lobby.gameId} lobby={lobby} slot={seat.slot} automatic />
         ) : phase === PHASES.TUTORIAL ? (
           <PhoneTutorial key={lobby.tutorial.step} lobby={lobby} slot={seat.slot} />
+        ) : phase === PHASES.AVATARS ? (
+          <PhoneReady lobby={lobby} slot={seat.slot} disabled={reconnecting || lobby.paused} />
         ) : (
           <PhoneReady lobby={lobby} slot={seat.slot} disabled={reconnecting || lobby.paused} />
         )}

@@ -77,13 +77,14 @@ export const PHASES = {
   COUNTDOWN: 'countdown',
   VOTE: 'vote',
   TUTORIAL: 'tutorial',
+  AVATARS: 'avatars',
   GAME: 'game',
 };
 
 /**
  * Every lobby snapshot below has this shape:
  *
- *   { code, sport, phase, players: [{ slot, name, ready, setup }], countdown,
+ *   { code, sport, phase, players: [{ slot, name, ready, setup, color }], countdown,
  *     vote, tutorial, paused, reconnecting: [{ name, msLeft }], setupPending: [name] }
  *
  * Create/join/resume acknowledgements additionally contain a private token

@@ -9,6 +9,7 @@ import { TvGame } from '../components/TvGame.jsx';
 import { TvReady } from '../components/TvReady.jsx';
 import { TvTutorial } from '../components/TvTutorial.jsx';
 import { TvVote } from '../components/TvVote.jsx';
+import { TvAvatars } from '../components/TvAvatars.jsx';
 import { ThemeToggle } from '../components/ThemeToggle.jsx';
 import { LobbyBackdrop } from '../components/LobbyBackdrop.jsx';
 import { errorText } from '../lib/errors.js';
