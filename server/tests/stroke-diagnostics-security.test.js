@@ -15,6 +15,7 @@ function fixture() {
     store.finishCountdown(host.code);
     now += VOTE_SECONDS * 1000;
     store.expireVote(host.code);
+    store.setReady(`${prefix}-phone`, { ready: true });
     const gameId = store.lobby(host.code).gameId;
     return { host, phone, gameId,
       input: id => store.swingTarget(`${prefix}-phone`, { type: 'swing', id, gameId, label: 'Forehand', hand: 'Right' }),

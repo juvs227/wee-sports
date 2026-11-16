@@ -29,6 +29,7 @@ async function fixture(t, transport = 'websocket') {
     await send(tv, EVENTS.HOST_CALIBRATION_DONE, {});
     now += 5000; store.finishCountdown(room.code);
     now += VOTE_SECONDS * 1000; store.expireVote(room.code);
+    await send(phone, EVENTS.PLAYER_READY, { ready: true });
     return store.lobby(room.code).gameId;
   };
   const gameId = await start();

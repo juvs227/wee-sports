@@ -21,6 +21,7 @@ function fixture(sport = 'tennis', count = 1) {
   }
   store.calibrationDone('tv');
   now += 5000; store.finishCountdown(room.code); now += VOTE_SECONDS * 1000; store.expireVote(room.code);
+  if (sport === 'tennis') for (let index = 0; index < count; index++) store.setReady(`p${index + 1}`, { ready: true });
   const gameId = store.lobby(room.code).gameId;
   const options = sport === 'tennis' ? tennisOptions(gameId) : { gameId, sport };
   const command = (id = 'command-1', extra = {}) => ({ id, gameId, action: 'new-match', ...(sport === 'tennis' ? { format: 'full' } : {}), ...extra });
@@ -147,6 +148,7 @@ test('real sockets deliver actual game results, publish applied settings and iso
     await send(phone, EVENTS.PLAYER_READY, { ready: true });
     await send(tv, EVENTS.HOST_CALIBRATION_DONE, {});
     now += 5000; store.finishCountdown(room.code); now += VOTE_SECONDS * 1000; store.expireVote(room.code);
+    await send(phone, EVENTS.PLAYER_READY, { ready: true });
     const gameId = store.lobby(room.code).gameId;
     await send(tv, EVENTS.HOST_GAME_OPTIONS, tennisOptions(gameId));
     return { tv, phone, room, gameId };

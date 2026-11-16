@@ -22,6 +22,7 @@ function game(sport = 'tennis') {
   store.finishCountdown(host.code);
   now += VOTE_SECONDS * 1000;
   store.expireVote(host.code);
+  if (sport === 'tennis') store.setReady('phone', { ready: true });
   const hit = { id: 'contact-one', gameId: store.lobby(host.code).gameId, player: 1 };
   return { store, host, phone, hit, advance: milliseconds => { now += milliseconds; } };
 }
@@ -115,6 +116,7 @@ for (const sport of ['tennis', 'bowling']) test(`${sport}: real socket feedback 
   await send(host, EVENTS.HOST_CALIBRATION_DONE, {});
   now = 5000; store.finishCountdown(room.code);
   now += VOTE_SECONDS * 1000; store.expireVote(room.code);
+  if (sport === 'tennis') await send(phone, EVENTS.PLAYER_READY, { ready: true });
   const hit = { id: 'actual-contact', gameId: store.lobby(room.code).gameId, player: 1 };
   if (sport === 'bowling') await send(host, EVENTS.HOST_GAME_STATE,
     { gameId: hit.gameId, phase: 'rolling', frame: 1, currentPlayer: 1 });

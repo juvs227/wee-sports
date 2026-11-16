@@ -14,6 +14,7 @@ test('only the current host can publish validated tennis serve/match status', ()
   store.finishCountdown(code);
   now += VOTE_SECONDS * 1000;
   store.expireVote(code);
+  store.setReady('phone', { ready: true });
   const { gameId } = store.lobby(code);
   const status = { gameId, phase: 'serve', server: 1, winner: null };
   expect(store.setGameState('phone', status).ok).toBe(false);

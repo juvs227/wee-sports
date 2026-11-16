@@ -21,6 +21,7 @@ function fixture(sport = 'tennis', count = 2) {
     if (!countdown) {
       clock.now += 5000; store.finishCountdown(room.code);
       clock.now += VOTE_SECONDS * 1000; store.expireVote(room.code);
+      if (sport === 'tennis') for (let i = 0; i < count; i++) store.setReady(`p${i + 1}`, { ready: true });
     }
     return store.lobby(room.code).gameId;
   }
@@ -31,7 +32,7 @@ for (const sport of ['tennis', 'bowling']) for (const role of ['host', 'player']
   test(`${sport}: ${role} returns everyone with their seats/setup intact and requires a fresh ready check`, () => {
     const { store, room, start } = fixture(sport, sport === 'bowling' ? 4 : 2);
     const gameId = start();
-    const players = store.lobby(room.code).players;
+    const players = store.lobby(room.code).players.map(player => ({ ...player, ready: false }));
     store.setSound('tv', { muted: true });
     const result = sport === 'tennis' ? { gameId, phase: 'complete', server: 1, winner: 2 }
       : { gameId, phase: 'complete', currentPlayer: null, frame: 10, winners: [1, 2], winnerScore: 120 };
@@ -167,6 +168,8 @@ test('real sockets: both return events broadcast to their room, survive TV recon
     await send(host, EVENTS.HOST_CALIBRATION_DONE, {});
     now += 5000; store.finishCountdown(room.code);
     now += VOTE_SECONDS * 1000; store.expireVote(room.code);
+    await send(p1, EVENTS.PLAYER_READY, { ready: true });
+    await send(p2, EVENTS.PLAYER_READY, { ready: true });
     return store.lobby(room.code).gameId;
   }
   const gameId = await start();

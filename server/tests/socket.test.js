@@ -83,6 +83,8 @@ test('lobby swings reach only their TV, reject extra phones and stale sessions, 
   await send(host, EVENTS.HOST_CALIBRATION_DONE, {});
   now += 5000; store.finishCountdown(room.code);
   now += VOTE_SECONDS * 1000; store.expireVote(room.code);
+  await send(phone, EVENTS.PLAYER_READY, { ready: true });
+  await send(second, EVENTS.PLAYER_READY, { ready: true });
   assert.equal(store.lobby(room.code).phase, PHASES.GAME);
   event.gameId = store.lobby(room.code).gameId;
   assert.equal((await send(outsider, EVENTS.PLAYER_SWING, event)).error, 'not-controller');

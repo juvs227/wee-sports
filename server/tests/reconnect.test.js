@@ -114,6 +114,7 @@ test('reconnecting during the game preserves the current flow', () => {
   store.calibrationDone('host');
   clock.now += 5000; store.finishCountdown(code);
   clock.now += VOTE_SECONDS * 1000; store.expireVote(code);
+  store.setReady('p0', { ready: true }); store.setReady('p1', { ready: true });
   store.disconnect('p1');
   assert.equal(store.lobby(code).paused, true);
   assert.equal(restore(store, 'back', players[1]).phase, PHASES.GAME);
