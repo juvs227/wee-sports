@@ -1,6 +1,6 @@
 # wee-sports
 
-A browser-based tennis game controlled by keyboard input or phone motion.
+A browser-based game controlled by keyboard input or phone motion.
 
 ## Controls
 
@@ -115,6 +115,7 @@ overhead, but does not alter motion detection thresholds or network latency.
 For phone sensors, keep using a trusted HTTPS tunnel or deployment and provide
 its origin through `PUBLIC_GAME_URL` when needed. The bottom tennis swing-status
 pill is hidden; scores and the serving marker remain in the top scoreboard.
+For Bowling, swing works differently; aim the ball using your phone and swing to hit the pins. 
 
 ## Use Case: Join and play a motion-controlled game
 
