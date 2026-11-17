@@ -2,6 +2,10 @@ import * as THREE from 'three';
 import {BowlingMatch, BowlingPlayer, BowlingState} from './match';
 import {BALL_RADIUS, BowlingPhysics, LANE, PIN_COM, pinSpot, RollControls, RollSettlement, validRoll} from './physics';
 
+import { Line2 } from 'three/addons/lines/Line2.js';
+import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+
 export type {BowlingPlayer, BowlingState} from './match';
 export interface BowlingRoll extends RollControls {player: number}
 export type BowlingSoundEvent = 'release' | 'roll' | 'roll-end' | 'pin' | 'gutter' | 'strike' | 'spare' | 'result' | 'match';
@@ -19,7 +23,7 @@ export class BowlingWorld {
   private renderer: THREE.WebGLRenderer;
   private pins = new Map<number, THREE.Group>();
   private ball = new THREE.Group();
-  private aimLine: THREE.Line;
+  private aimLine: Line2;
   private trail: THREE.Line;
   private trailPositions = new Float32Array(512 * 3);
   private trailCount = 0;
@@ -67,9 +71,21 @@ export class BowlingWorld {
     this.buildAlley();
     this.buildPins();
     this.buildBall();
-    this.aimLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({
-      color: 0x496c25, dashSize: 0.15, gapSize: 0.13, transparent: true, opacity: 0.65,
-    }));
+    const geometry = new LineGeometry();
+    const material = new LineMaterial({
+      color: 0x496c25,
+      linewidth: 4,          // <-- Set your thickness here (in pixels)
+      dashed: true,          // <-- Required for dashes in LineMaterial
+      dashSize: 0.15,
+      gapSize: 0.13,
+      transparent: true,
+      opacity: 0.65
+    });
+
+    // 3. LineMaterial requires screen resolution to calculate thickness
+    material.resolution.set(window.innerWidth, window.innerHeight);
+
+    this.aimLine = new Line2(geometry, material);
     this.scene.add(this.aimLine);
     const trailGeometry = new THREE.BufferGeometry();
     trailGeometry.setAttribute('position', new THREE.BufferAttribute(this.trailPositions, 3).setUsage(THREE.DynamicDrawUsage));
@@ -131,7 +147,8 @@ export class BowlingWorld {
     this.aim = THREE.MathUtils.clamp(aim, -1, 1);
     this.aimLine?.geometry.dispose();
     if (this.aimLine) {
-      this.aimLine.geometry = new THREE.BufferGeometry().setFromPoints([
+      this.aimLine.geometry = new LineGeometry();
+      this.aimLine.geometry.setFromPoints([
         new THREE.Vector3(0, 0.012, 0.35), new THREE.Vector3(-Math.tan(this.aim * 0.06) * 7, 0.012, 7.35),
       ]);
       this.aimLine.computeLineDistances();
