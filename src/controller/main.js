@@ -71,6 +71,7 @@ let wasConnected = false;
 let canRoll = false;
 let currentPlayer = null;
 let bowlingPhase = 'waiting';
+let bowlingGameId = null;
 let tennisState = null;
 let tennisGameId = null;
 let bowlingDetector = null;
@@ -83,6 +84,7 @@ let setupError = '';
 let feedbackUntil = 0;
 let lastTiltReading = null;
 let liveAim = 0;
+let lastAimPreviewAt = 0;
 let bowlingReadout = null;
 let pageActive = true;
 let orientationCalibration = null;
@@ -365,12 +367,21 @@ function showBowlingReadout(readout) {
   element('motion-curve').textContent = Math.abs(readout.spin) < .04 ? 'Straight'
     : `${readout.spin < 0 ? 'Left' : 'Right'} ${Math.round(Math.abs(readout.spin) * 100)}%`;
 }
+function sendAimPreview(aim, force = false) {
+  if (!bowling || !bowlingGameId || !connected || !gameActive || lobbyPaused ||
+      currentPlayer !== player || !canRoll || pendingRoll) return;
+  const now = performance.now();
+  if (!force && now - lastAimPreviewAt < 50) return;
+  lastAimPreviewAt = now;
+  post({type: 'wee:aim-preview', gameId: bowlingGameId, aim});
+}
 for (const id of ['aim', 'spin', 'power']) {
   element(id).oninput = () => {
     const value = Number(element(id).value);
     element(`${id}-value`).textContent = id === 'power' ? `${Math.round(value * 100)}%`
       : value === 0 ? id === 'aim' ? 'Center' : 'Straight'
       : `${value < 0 ? 'Left' : 'Right'} ${Math.round(Math.abs(value) * 100)}%`;
+    if (id === 'aim') sendAimPreview(value, true);
   };
 }
 function stop(message = 'Motion paused. Tap Resume motion when you are ready.', user = false) {
@@ -503,6 +514,7 @@ window.addEventListener('message', event => {
     for (const stats of Object.values(timingStats)) stats.clear();
     element('timing-result').textContent = ''; renderTiming();
   }
+  if (bowling) bowlingGameId = typeof data.gameId === 'string' ? data.gameId : null;
   if (data.connected && !wasConnected) lastSetup = undefined;
   connected = data.connected === true;
   if (!connected && rehearsal) finishRehearsal('Rehearsal stopped while reconnecting. Try again when connected, or keep the default strength.');
@@ -554,6 +566,7 @@ function motion(event) {
         liveAim += (tilt - liveAim) * .18;
         element('aim').value = String(Math.round(liveAim * 100) / 100);
         element('aim').oninput();
+        sendAimPreview(liveAim);
       }
     }
     const result = bowlingDetector?.push(sample);
