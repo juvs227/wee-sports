@@ -3,9 +3,11 @@
   "compilerOptions": {
     "rootDir": ".",
     "outDir": "build",
+    "module": "ESNext",
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
     "types": ["node"],
     "skipLibCheck": true,
+    "moduleResolution": "bundler",
     "allowImportingTsExtensions": true, 
     "noEmit": true                      
   },
