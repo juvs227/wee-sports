@@ -42,9 +42,9 @@ export function TvCalibration({ lobby, calibrationProgress }) {
         </div>
       </div>
 
-      <h2 className="cal-tv__title">Face the net</h2>
+      <h2 className="cal-tv__title">Face the screen</h2>
       <p className="cal-tv__help">
-        Hold your phone with the screen pointing toward the net and keep still.
+        Hold your phone with the phone screen pointing toward the screen and keep still.
       </p>
 
       <ul className="cal-tv__players">
