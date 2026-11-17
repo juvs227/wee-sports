@@ -154,6 +154,12 @@ export function createGameServer({ store = new RoomStore(), origins = [], tickMs
           : { ok: false, error: received?.error || 'game-loading' });
       });
     });
+    socket.on(EVENTS.PLAYER_AIM_PREVIEW, event => {
+      const result = store.aimPreviewTarget(socket.id, event);
+      if (!result.ok) return;
+      const host = io.sockets.sockets.get(result.hostSocketId);
+      if (host?.connected) host.volatile.emit(EVENTS.GAME_AIM_PREVIEW, result.event);
+    });
     socket.on(EVENTS.HOST_STROKE_RESULT, (event, ack) => {
       const result = store.strokeResultTarget(socket.id, event);
       if (!result.ok) return reply(ack, result);

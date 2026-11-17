@@ -37,6 +37,7 @@ import {
   isRoomCode,
   isSwing,
   isRoll,
+  isBowlingAimPreview,
   isGameHit,
   isTennisState,
   isBowlingState,
@@ -547,6 +548,26 @@ export class RoomStore {
     return { ok: true, code: room.code, hostSocketId: this.#members.get(room.hostId)?.socketId,
       event: { type: 'roll', id: event.id, power: event.power, spin: event.spin, aim: event.aim,
         player: player.slot + 1, gameId: room.gameId } };
+  }
+
+  aimPreviewTarget(socketId, event) {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    const room = member && this.#rooms.get(member.code);
+    const player = room?.players.get(member.id);
+    if (!player || room.sport !== 'bowling') return { ok: false, error: 'not-controller' };
+    if (!isBowlingAimPreview(event)) return { ok: false, error: 'bad-aim-preview' };
+    if (room.pausedAt !== null) return { ok: false, error: ERRORS.PAUSED };
+    if (room.phase !== PHASES.GAME || event.gameId !== room.gameId) {
+      return { ok: false, error: 'not-playing' };
+    }
+    if (room.gameState?.phase !== 'ready' || room.gameState.currentPlayer !== player.slot + 1) {
+      return { ok: false, error: 'not-your-turn' };
+    }
+    return {
+      ok: true,
+      hostSocketId: this.#members.get(room.hostId)?.socketId,
+      event: { gameId: room.gameId, aim: event.aim, player: player.slot + 1 },
+    };
   }
 
   finishRollDelivery(code, id, gameId) {

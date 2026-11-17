@@ -81,6 +81,10 @@ export function PrototypeFrame({ code, controller = false, player = 1, players =
             () => currentGame.current === inputGame && inputGeneration.current === generation);
         // A late acknowledgement belongs to the old controller game, not its replacement.
         if (currentGame.current === gameId) post({ type: 'wee:swing-ack', gameId: inputGame, result: { ...result, id: data.event.id } });
+      } else if (controller && data?.type === 'wee:aim-preview' && sport === 'bowling' &&
+          ready.current && playing && !paused && connection === 'online' && socket.connected &&
+          data.gameId === gameId && Number.isFinite(data.aim) && Math.abs(data.aim) <= 1) {
+        socket.volatile.emit(EVENTS.PLAYER_AIM_PREVIEW, { gameId, aim: data.aim });
       } else if (controller && data?.type === 'wee:player-roll' && isRoll(data.event)) {
         const result = paused || connection !== 'online' ? { ok: false, error: 'paused' }
           : await request(EVENTS.PLAYER_ROLL, data.event);
@@ -135,6 +139,11 @@ export function PrototypeFrame({ code, controller = false, player = 1, players =
       pending.current.set(event.id, { ack, timer });
       post({ type: 'wee:game-roll', event });
     };
+    const aimPreview = event => {
+      if (controller || sport !== 'bowling' || event?.gameId !== gameId ||
+          !Number.isFinite(event?.aim) || Math.abs(event.aim) > 1) return;
+      post({ type: 'wee:aim-preview', gameId, aim: event.aim });
+    };
     const command = (event, callback) => {
       const ack = typeof callback === 'function' ? callback : () => {};
       if (controller || !ready.current || !playing || paused || connection !== 'online' ||
@@ -162,13 +171,17 @@ export function PrototypeFrame({ code, controller = false, player = 1, players =
       }
     };
     window.addEventListener('message', receive);
-    if (!controller) { socket.on(EVENTS.GAME_SWING, swing); socket.on(EVENTS.GAME_ROLL, roll); socket.on(EVENTS.GAME_COMMAND, command); }
+    if (!controller) {
+      socket.on(EVENTS.GAME_SWING, swing); socket.on(EVENTS.GAME_ROLL, roll);
+      socket.on(EVENTS.GAME_COMMAND, command); socket.on(EVENTS.GAME_AIM_PREVIEW, aimPreview);
+    }
     else { socket.on(EVENTS.GAME_HIT, hit); socket.on(EVENTS.GAME_STROKE_RESULT, strokeResult); }
     publishState();
     return () => {
       window.removeEventListener('message', receive);
       socket.off(EVENTS.GAME_SWING, swing); socket.off(EVENTS.GAME_ROLL, roll);
       socket.off(EVENTS.GAME_COMMAND, command);
+      socket.off(EVENTS.GAME_AIM_PREVIEW, aimPreview);
       socket.off(EVENTS.GAME_HIT, hit);
       socket.off(EVENTS.GAME_STROKE_RESULT, strokeResult);
     };

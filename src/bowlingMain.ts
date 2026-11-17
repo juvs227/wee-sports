@@ -185,6 +185,9 @@ function receive(event: MessageEvent): void {
       newMatch(); result = {ok: true};
     }
     post({type: 'wee:game-command-result', id: command.id, gameId, result});
+  } else if (data?.type === 'wee:aim-preview' && data.gameId === gameId &&
+      Number.isFinite(data.aim) && Math.abs(data.aim) <= 1 && world && !paused) {
+    world.setAim(data.aim);
   } else if (data?.type === 'wee:game-roll') {
     const roll = data.event;
     if (!roll || typeof roll.id !== 'string') return;

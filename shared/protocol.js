@@ -150,7 +150,9 @@ export const EVENTS = {
   PLAYER_SWING: 'player:swing',
   GAME_SWING: 'game:swing',
   PLAYER_ROLL: 'player:roll',
+  PLAYER_AIM_PREVIEW: 'player:aim-preview',
   GAME_ROLL: 'game:roll',
+  GAME_AIM_PREVIEW: 'game:aim-preview',
   HOST_GAME_STATE: 'host:game-state',
   /** TV -> server -> the contacted player's phone. Transient collision feedback. */
   HOST_GAME_HIT: 'host:game-hit',
@@ -258,6 +260,11 @@ export function isRoll(event) {
   return event?.type === 'roll' && typeof event.id === 'string' && event.id.length > 0 &&
     event.id.length <= 100 && Number.isFinite(event.power) && event.power >= 0 && event.power <= 1 &&
     Number.isFinite(event.spin) && Math.abs(event.spin) <= 1 &&
+    Number.isFinite(event.aim) && Math.abs(event.aim) <= 1;
+}
+
+export function isBowlingAimPreview(event) {
+  return typeof event?.gameId === 'string' && event.gameId.length > 0 && event.gameId.length <= 100 &&
     Number.isFinite(event.aim) && Math.abs(event.aim) <= 1;
 }
 
