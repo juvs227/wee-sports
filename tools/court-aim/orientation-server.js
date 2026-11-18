@@ -22,6 +22,9 @@ const http = createServer((req, res) => {
   if (url === '/phone') {
     res.writeHead(200, { 'Content-Type': 'text/html' });
     res.end(readFileSync(join(__dir, 'orientation-phone.html')));
+  } else if (url === '/ios-fusion.js') {
+    res.writeHead(200, { 'Content-Type': 'text/javascript' });
+    res.end(readFileSync(join(__dir, 'ios-fusion.js')));
   } else {
     res.writeHead(200, { 'Content-Type': 'text/html' });
     res.end(readFileSync(join(__dir, 'orientation-viewer.html')));

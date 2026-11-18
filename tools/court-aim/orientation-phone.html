@@ -49,6 +49,9 @@ h2 { font-size: 14px; color: #555; text-transform: uppercase; letter-spacing: 1p
 <div id="status">waiting…</div>
 
 <button id="cal-btn" style="display:none; padding:12px 28px; font-size:16px; border-radius:10px; border:2px solid #4cf; background:transparent; color:#4cf; font-weight:bold; cursor:pointer;">Calibrate — face the net</button>
+<label style="display:none; align-items:center; gap:8px; font-size:13px; color:#555;">
+  <input type="checkbox" id="fake-ios"> fake iOS (Mahony fusion)
+</label>
 
 <div id="mode-toggle">
   <button id="mode-live" class="active">Live</button>
@@ -98,14 +101,6 @@ function qrot(q, v) {
   ];
 }
 
-function eulerToNormal(alpha, beta, gamma) {
-  const a = alpha * Math.PI/180, b = beta * Math.PI/180, g = gamma * Math.PI/180;
-  return [
-    -Math.cos(a)*Math.sin(g) + Math.cos(g)*Math.sin(a)*Math.sin(b),
-     Math.sin(a)*Math.sin(g) + Math.cos(a)*Math.cos(g)*Math.sin(b),
-     Math.cos(b)*Math.cos(g),
-  ];
-}
 
 // ── Camera ────────────────────────────────────────────────────────────────────
 const CAM   = normalize([1, -1.2, 1.4]);
@@ -458,7 +453,20 @@ async function startSensors() {
     onMotion(vec, mag);
   });
 
-  if ('RelativeOrientationSensor' in window) {
+  let nativeSensor = null;
+  let iosFusion    = null;
+
+  const statusEl = document.getElementById('status');
+  function setStatus(msg, err) {
+    statusEl.textContent = msg;
+    statusEl.className = err ? 'err' : 'ok';
+  }
+
+  async function startNative() {
+    if (!('RelativeOrientationSensor' in window)) {
+      setStatus('RelativeOrientationSensor not available', true);
+      return;
+    }
     try {
       if (navigator.permissions) {
         await Promise.all([
@@ -466,40 +474,48 @@ async function startSensors() {
           navigator.permissions.query({ name: 'gyroscope' }),
         ]);
       }
-      console.log("Using relative orientation sensor");
-      const sensor = new RelativeOrientationSensor({ frequency: 10 });
-      sensor.addEventListener('reading', () => {
-        const q = sensor.quaternion;
+      nativeSensor = new RelativeOrientationSensor({ frequency: 10 });
+      nativeSensor.addEventListener('reading', () => {
+        const q = nativeSensor.quaternion;
         onOrientation(qrot(q, [0,0,1]), [...q]);
       });
-      sensor.addEventListener('error', e => setStatus('Sensor error: ' + e.error.message, true));
-      sensor.start();
-      setStatus('Sensors active', false);
+      nativeSensor.addEventListener('error', e => setStatus('Sensor error: ' + e.error.message, true));
+      nativeSensor.start();
+      setStatus('Sensors active (native)', false);
     } catch (e) {
-      console.log("something went wrong w/using relative orientation");
+      setStatus('Sensor error: ' + e.message, true);
     }
-  } else {
-    console.log("RelativeOrientationSensor not available");
   }
+
+  async function startFusion() {
+    const { createIOSFusion } = await import('./ios-fusion.js');
+    iosFusion = createIOSFusion({
+      onReading(quat, normal) { onOrientation(normal, quat); },
+    });
+    iosFusion.start();
+    setStatus('Sensors active (iOS fusion)', false);
+  }
+
+  const fakeIosBox = document.getElementById('fake-ios');
+  fakeIosBox.addEventListener('change', async () => {
+    if (fakeIosBox.checked) {
+      nativeSensor?.stop(); nativeSensor = null;
+      await startFusion();
+    } else {
+      iosFusion?.stop(); iosFusion = null;
+      await startNative();
+    }
+  });
+
+  await startNative();
 }
 
-function orientHandler(e) {
-  if (e.alpha == null) return;
-  const normal = eulerToNormal(e.alpha, e.beta, e.gamma);
-  const a = e.alpha*Math.PI/180, b = e.beta*Math.PI/180, g = e.gamma*Math.PI/180;
-  const quat = [
-    Math.sin(b/2)*Math.cos(g/2)*Math.cos(a/2) - Math.cos(b/2)*Math.sin(g/2)*Math.sin(a/2),
-    Math.cos(b/2)*Math.sin(g/2)*Math.cos(a/2) + Math.sin(b/2)*Math.cos(g/2)*Math.sin(a/2),
-    Math.cos(b/2)*Math.cos(g/2)*Math.sin(a/2) - Math.sin(b/2)*Math.sin(g/2)*Math.cos(a/2),
-    Math.cos(b/2)*Math.cos(g/2)*Math.cos(a/2) + Math.sin(b/2)*Math.sin(g/2)*Math.sin(a/2),
-  ];
-  onOrientation(normal, quat);
-}
 
 document.getElementById('enable').addEventListener('click', async () => {
   await startSensors();
   document.getElementById('cal-btn').style.display = 'inline-block';
   document.getElementById('mode-toggle').style.display = 'flex';
+  document.getElementById('fake-ios').parentElement.style.display = 'flex';
 });
 
 document.getElementById('cal-btn').addEventListener('click', () => {
