@@ -1,5 +1,5 @@
 export declare const classifierVersion: string;
-export declare const SWING_LIMITS: Readonly<{ start: number }>;
+export declare const SWING_LIMITS: Readonly<{start: number}>;
 
 export interface SwingResult {
   label: string;

@@ -21,7 +21,10 @@ function qrot(q, v) {
   ];
 }
 
-function qnorm(q) { const l = Math.hypot(...q); return q.map(v => v / l); }
+// function qnorm(q) {
+//   const l = Math.hypot(...q);
+//   return q.map(v => v / l);
+// }
 
 // ── Source factory ────────────────────────────────────────────────────────────
 
@@ -31,9 +34,9 @@ function qnorm(q) { const l = Math.hypot(...q); return q.map(v => v / l); }
  * @returns {{ onReading: null|function, start: function, stop: function, getNormal: function, getQuaternion: function }}
  */
 export function createAndroidOrientationSource() {
-  let currentQuat   = null;
+  let currentQuat = null;
   let currentNormal = null;
-  let sensor        = null;
+  let sensor = null;
 
   const source = {
     onReading: null,
@@ -41,18 +44,18 @@ export function createAndroidOrientationSource() {
     async start() {
       if (navigator.permissions) {
         await Promise.all([
-          navigator.permissions.query({ name: 'accelerometer' }),
-          navigator.permissions.query({ name: 'gyroscope' }),
-          navigator.permissions.query({ name: 'magnetometer' }),
+          navigator.permissions.query({name: 'accelerometer'}),
+          navigator.permissions.query({name: 'gyroscope'}),
+          navigator.permissions.query({name: 'magnetometer'}),
         ]);
       }
 
-      sensor = new window.AbsoluteOrientationSensor({ frequency: 30 });
+      sensor = new window.AbsoluteOrientationSensor({frequency: 30});
 
       sensor.addEventListener('reading', () => {
-        const quat   = [...sensor.quaternion];
+        const quat = [...sensor.quaternion];
         const normal = qrot(quat, [0, 0, 1]);
-        currentQuat   = quat;
+        currentQuat = quat;
         currentNormal = normal;
         if (source.onReading) source.onReading(quat, normal);
       });
@@ -71,8 +74,12 @@ export function createAndroidOrientationSource() {
       }
     },
 
-    getNormal()     { return currentNormal ? [...currentNormal] : null; },
-    getQuaternion() { return currentQuat   ? [...currentQuat]   : null; },
+    getNormal() {
+      return currentNormal ? [...currentNormal] : null;
+    },
+    getQuaternion() {
+      return currentQuat ? [...currentQuat] : null;
+    },
   };
 
   return source;
