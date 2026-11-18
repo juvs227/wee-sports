@@ -1,12 +1,20 @@
 /** Ten-pin scoring follows USBC Rule 2, including tenth-frame fill deliveries. */
-export interface BowlingPlayer { player: number; name: string }
+export interface BowlingPlayer {
+  player: number;
+  name: string;
+}
 export interface BowlingScore extends BowlingPlayer {
   frames: number[][];
   /** Cumulative scores. A mark remains null until its bonus deliveries exist. */
   frameScores: Array<number | null>;
   total: number;
 }
-export interface BowlingResult { player: number; pins: number; strike: boolean; spare: boolean }
+export interface BowlingResult {
+  player: number;
+  pins: number;
+  strike: boolean;
+  spare: boolean;
+}
 export interface BowlingMatchCheckpoint {
   version: 1;
   players: BowlingPlayer[];
@@ -24,17 +32,26 @@ export interface BowlingState {
   ranking: Array<BowlingPlayer & {total: number; rank: number}>;
   practice?: boolean;
 }
-export const FULL_RACK = Object.freeze(Array.from({length: 10}, (_, index) => index + 1));
+export const FULL_RACK = Object.freeze(
+  Array.from({length: 10}, (_, index) => index + 1),
+);
 
 /** Scorecard marks; frame is zero-based, and the tenth can contain a fill spare. */
 export function formatFrame(rolls: number[], frame: number): string {
-  return rolls.map((pins, index) => {
-    const spare = (index === 1 && rolls[0] !== 10 && rolls[0] + pins === 10) ||
-      (frame === 9 && index === 2 && rolls[0] === 10 && rolls[1] !== 10 && rolls[1] + pins === 10);
-    if (spare) return '/';
-    if (pins === 10) return 'X';
-    return pins === 0 ? '–' : String(pins);
-  }).join('  ');
+  return rolls
+    .map((pins, index) => {
+      const spare =
+        (index === 1 && rolls[0] !== 10 && rolls[0] + pins === 10) ||
+        (frame === 9 &&
+          index === 2 &&
+          rolls[0] === 10 &&
+          rolls[1] !== 10 &&
+          rolls[1] + pins === 10);
+      if (spare) return '/';
+      if (pins === 10) return 'X';
+      return pins === 0 ? '–' : String(pins);
+    })
+    .join('  ');
 }
 
 export function scoreFrames(frames: number[][]): Array<number | null> {
@@ -46,7 +63,8 @@ export function scoreFrames(frames: number[][]): Array<number | null> {
     let points: number | null = null;
     if (index === 9) {
       const deliveries = frame[0] === 10 || frame[0] + frame[1] === 10 ? 3 : 2;
-      if (frame.length === deliveries) points = frame.reduce((a, b) => a + b, 0);
+      if (frame.length === deliveries)
+        points = frame.reduce((a, b) => a + b, 0);
     } else if (frame[0] === 10) {
       if (future.length >= 2) points = 10 + future[0] + future[1];
     } else if (frame.length === 2) {
@@ -73,9 +91,14 @@ export class BowlingMatch {
   private deliveries: number[][] = [];
 
   constructor(players: BowlingPlayer[]) {
-    if (players.length < 1 || players.length > 8 ||
-        new Set(players.map(p => p.player)).size !== players.length ||
-        players.some(p => !Number.isInteger(p.player) || p.player < 1 || p.player > 8)) {
+    if (
+      players.length < 1 ||
+      players.length > 8 ||
+      new Set(players.map(p => p.player)).size !== players.length ||
+      players.some(
+        p => !Number.isInteger(p.player) || p.player < 1 || p.player > 8,
+      )
+    ) {
       throw new Error('Bowling needs one to eight unique players.');
     }
     this.participants = players.map(p => ({...p}));
@@ -83,19 +106,38 @@ export class BowlingMatch {
   }
 
   exportCheckpoint(): BowlingMatchCheckpoint {
-    return {version: 1, players: this.participants.map(player => ({...player})),
-      deliveries: this.deliveries.map(remaining => [...remaining])};
+    return {
+      version: 1,
+      players: this.participants.map(player => ({...player})),
+      deliveries: this.deliveries.map(remaining => [...remaining]),
+    };
   }
 
   /** Replay the settled deliveries so forged totals/turns cannot bypass rules. */
   static fromCheckpoint(value: unknown): BowlingMatch {
     const data = value as BowlingMatchCheckpoint;
-    if (!data || data.version !== 1 || !Array.isArray(data.players) ||
-        data.players.some(player => !player || typeof player.name !== 'string' || !player.name.trim() || player.name.length > 80) ||
-        !Array.isArray(data.deliveries) || data.deliveries.length > 168) throw new Error('Invalid bowling checkpoint.');
+    if (
+      !data ||
+      data.version !== 1 ||
+      !Array.isArray(data.players) ||
+      data.players.some(
+        player =>
+          !player ||
+          typeof player.name !== 'string' ||
+          !player.name.trim() ||
+          player.name.length > 80,
+      ) ||
+      !Array.isArray(data.deliveries) ||
+      data.deliveries.length > 168
+    )
+      throw new Error('Invalid bowling checkpoint.');
     const match = new BowlingMatch(data.players);
     for (const remaining of data.deliveries) {
-      if (!Array.isArray(remaining) || remaining.some(id => !Number.isInteger(id))) throw new Error('Invalid saved delivery.');
+      if (
+        !Array.isArray(remaining) ||
+        remaining.some(id => !Number.isInteger(id))
+      )
+        throw new Error('Invalid saved delivery.');
       match.record(remaining);
     }
     return match;
@@ -105,38 +147,60 @@ export class BowlingMatch {
     const players = this.participants.map((player, index) => {
       const frames = this.frames[index].map(frame => [...frame]);
       const frameScores = scoreFrames(frames);
-      const totals = frameScores.filter((score): score is number => score !== null);
+      const totals = frameScores.filter(
+        (score): score is number => score !== null,
+      );
       return {...player, frames, frameScores, total: totals.at(-1) || 0};
     });
-    const ordered = [...players].sort((a, b) => b.total - a.total || a.player - b.player);
+    const ordered = [...players].sort(
+      (a, b) => b.total - a.total || a.player - b.player,
+    );
     const ranking = ordered.map(player => ({
-      player: player.player, name: player.name, total: player.total,
+      player: player.player,
+      name: player.name,
+      total: player.total,
       rank: ordered.findIndex(other => other.total === player.total) + 1,
     }));
     return {
       phase: this.complete ? 'complete' : rolling ? 'rolling' : 'ready',
       currentPlayer: this.complete ? null : this.participants[this.turn].player,
       frame: this.frame + 1,
-      ball: this.complete ? this.frames[this.turn][9].length : this.frames[this.turn][this.frame].length + 1,
-      pinsStanding: [...this.standing], players, complete: this.complete,
-      lastRoll: this.lastRoll ? {...this.lastRoll} : null, ranking,
+      ball: this.complete
+        ? this.frames[this.turn][9].length
+        : this.frames[this.turn][this.frame].length + 1,
+      pinsStanding: [...this.standing],
+      players,
+      complete: this.complete,
+      lastRoll: this.lastRoll ? {...this.lastRoll} : null,
+      ranking,
     };
   }
 
   /** Remaining IDs must be a subset of the rack before this delivery. */
   record(remaining: number[]): {resetRack: boolean; result: BowlingResult} {
     if (this.complete) throw new Error('This match is complete.');
-    if (new Set(remaining).size !== remaining.length || remaining.some(id => !this.standing.includes(id))) {
-      throw new Error('Invalid pinfall: a delivery cannot add pins to the rack.');
+    if (
+      new Set(remaining).size !== remaining.length ||
+      remaining.some(id => !this.standing.includes(id))
+    ) {
+      throw new Error(
+        'Invalid pinfall: a delivery cannot add pins to the rack.',
+      );
     }
     this.deliveries.push([...remaining]);
     const pins = this.standing.length - remaining.length;
     const frame = this.frames[this.turn][this.frame];
     const before = [...frame];
-    const spare = remaining.length === 0 && ((before.length === 1 && before[0] !== 10) ||
-      (this.frame === 9 && before.length === 2 && before[0] === 10 && before[1] !== 10));
+    const spare =
+      remaining.length === 0 &&
+      ((before.length === 1 && before[0] !== 10) ||
+        (this.frame === 9 &&
+          before.length === 2 &&
+          before[0] === 10 &&
+          before[1] !== 10));
     const result = {
-      player: this.participants[this.turn].player, pins,
+      player: this.participants[this.turn].player,
+      pins,
       // A fresh tenth-frame fill rack can earn X too. A gutter then ten remains /.
       strike: pins === 10 && !spare,
       spare,
@@ -149,9 +213,14 @@ export class BowlingMatch {
     if (this.frame < 9) {
       finished = frame[0] === 10 || frame.length === 2;
     } else {
-      finished = frame.length === 3 || (frame.length === 2 && frame[0] + frame[1] < 10);
+      finished =
+        frame.length === 3 || (frame.length === 2 && frame[0] + frame[1] < 10);
       // First strike, double, or first-two-ball spare earns a fresh rack.
-      if (!finished && (pins === 10 || (frame.length === 2 && before[0] !== 10 && remaining.length === 0))) {
+      if (
+        !finished &&
+        (pins === 10 ||
+          (frame.length === 2 && before[0] !== 10 && remaining.length === 0))
+      ) {
         resetRack = true;
       }
     }
