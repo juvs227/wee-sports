@@ -293,7 +293,7 @@ test('un-readying during the countdown cancels it, and everyone else stays ready
   assert.equal(store.setReady('p2', { ready: true }).calibrationStarted, true);
 });
 
-test('a bowling countdown ends in the game, and not a moment early', () => {
+test('a bowling countdown opens the tutorial vote, and not a moment early', () => {
   const { store, code, clock } = startReadyCheck();
   everyoneReady(store);
   store.calibrationDone('tv');
@@ -301,16 +301,36 @@ test('a bowling countdown ends in the game, and not a moment early', () => {
   assert.equal(store.finishCountdown(code), null);
   assert.equal(store.lobby(code).phase, PHASES.COUNTDOWN);
   clock.t += 1;
-  assert.deepEqual(store.finishCountdown(code), { code });
+  assert.deepEqual(store.finishCountdown(code), { code, msLeft: VOTE_MS });
   const lobby = store.lobby(code);
-  // Bowling has no tutorial, so there is no vote either.
-  assert.equal(lobby.phase, PHASES.GAME);
+  assert.equal(lobby.phase, PHASES.VOTE);
   assert.equal(lobby.countdown, null);
-  assert.equal(lobby.vote, null);
+  assert.deepEqual(lobby.vote, { msLeft: VOTE_MS, voted: [] });
   assert.deepEqual(readyFlags(store, code), [false, false, false, false]);
   // A second, stale tick changes nothing.
   assert.equal(store.finishCountdown(code), null);
   assert.equal(store.finishCountdown('ZZZZ'), null);
+});
+
+test('a bowling Yes teaches aim, a straight roll, and both curves before the game', () => {
+  const { store, code, clock } = startReadyCheck();
+  everyoneReady(store);
+  store.calibrationDone('tv');
+  clock.t += COUNTDOWN_MS;
+  store.finishCountdown(code);
+  store.vote('p0', { watch: true });
+  for (const id of ['p1', 'p2', 'p3']) store.vote(id, { watch: false });
+  assert.deepEqual(store.lobby(code).tutorial, {
+    step: 0,
+    moves: ['aim', 'straight', 'curveRight', 'curveLeft'],
+    learners: [0],
+    done: [],
+  });
+  for (let step = 0; step < TUTORIAL_MOVES.bowling.length; step++) {
+    assert.equal(store.lobby(code).phase, PHASES.TUTORIAL);
+    assert.equal(store.tutorialMove('p0', { step }).ok, true);
+  }
+  assert.equal(store.lobby(code).phase, PHASES.GAME);
 });
 
 test('a player leaving during the countdown cancels it and clears the ready flags', () => {

@@ -11,7 +11,7 @@
  */
 
 import { sportName } from '../lib/sports.js';
-import { GRIP_TIP, tutorialMove } from '../lib/tutorials.js';
+import { gripTip, tutorialMove } from '../lib/tutorials.js';
 import { CheckIcon } from './icons.jsx';
 import { MoveDemo } from './MoveDemo.jsx';
 
@@ -75,7 +75,10 @@ export function TvTutorial({ lobby }) {
 
       <section key={step} className="tutorial__body">
         <div className="tutorial__demo">
-          <MoveDemo move={moves[step]} label={`How to do a ${move.name.toLowerCase()}: ${move.cue}`} />
+          <MoveDemo
+            sport={lobby.sport}
+            move={moves[step]}
+            label={`How to do it: ${move.name}. ${move.cue}`} />
         </div>
         <div className="tutorial__text">
           <ol className="tutorial__how">
@@ -83,7 +86,7 @@ export function TvTutorial({ lobby }) {
               <li key={line}>{line}</li>
             ))}
           </ol>
-          <p className="tutorial__tip">{GRIP_TIP}</p>
+          <p className="tutorial__tip">{gripTip(lobby.sport)}</p>
         </div>
       </section>
 

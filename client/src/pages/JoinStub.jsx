@@ -73,6 +73,10 @@ export default function JoinStub() {
   const [calibrationProgress, setCalibrationProgress] = useState(0);
   const [calibrationState, setCalibrationState] = useState('settling');
   const [calibrationStarted, setCalibrationStarted] = useState(false);
+  // The latest move the controller saw during the tutorial. A fresh object per
+  // attempt, so repeating the same wrong move still shows its feedback.
+  const [tutorialAttempt, setTutorialAttempt] = useState(null);
+  const handleTutorialAttempt = useCallback((attempt) => setTutorialAttempt({ ...attempt }), []);
   const lastProgressEmit = useRef(0);
   // Reset if calibration phase is re-entered (e.g. someone un-readied).
   useEffect(() => {
@@ -123,6 +127,12 @@ export default function JoinStub() {
     const players = lobby?.players ?? [];
     const phase = lobby?.phase ?? PHASES.LOBBY;
     const playing = phase === PHASES.GAME && !revealing;
+    const tutorial = phase === PHASES.TUTORIAL && !revealing ? lobby.tutorial : null;
+    // Only a learner who hasn't done this step yet needs their moves watched.
+    const learningMove =
+      tutorial && tutorial.learners.includes(seat.slot) && !tutorial.done.includes(seat.slot)
+        ? tutorial.moves[tutorial.step]
+        : null;
     const lobbyOptions = (
       <>
         <h2>In this lobby</h2>
@@ -192,7 +202,7 @@ export default function JoinStub() {
           // Keyed by game, so a fresh vote forgets this phone's last pick.
           <PhoneVote key={lobby.gameId} lobby={lobby} slot={seat.slot} />
         ) : phase === PHASES.TUTORIAL ? (
-          <PhoneTutorial key={lobby.tutorial.step} lobby={lobby} slot={seat.slot} />
+          <PhoneTutorial key={lobby.tutorial.step} lobby={lobby} slot={seat.slot} attempt={tutorialAttempt} />
         ) : (
           <PhoneReady lobby={lobby} slot={seat.slot} disabled={reconnecting || lobby.paused} />
         )}
@@ -202,7 +212,10 @@ export default function JoinStub() {
           <>
             <PrototypeFrame code={seat.code} controller player={seat.slot + 1} sport={seat.sport} gameId={seat.gameId} gameState={seat.gameState}
               playing={phase === PHASES.GAME}
-              paused={(phase !== PHASES.GAME && !(phase === PHASES.CALIBRATION && calibrationStarted)) || reconnecting || seat.paused}
+              paused={(phase !== PHASES.GAME && phase !== PHASES.TUTORIAL && !(phase === PHASES.CALIBRATION && calibrationStarted)) || reconnecting || seat.paused}
+              tutorialStep={tutorial ? tutorial.step : null}
+              tutorialMove={learningMove}
+              onTutorialAttempt={handleTutorialAttempt}
               manuallyPaused={Boolean(lobby.manuallyPaused && !reconnecting && !lobby.reconnecting?.length && !lobby.setupPending?.length)}
               showPause={reconnecting}
               phase={phase === PHASES.CALIBRATION && !calibrationStarted ? PHASES.READY : phase}

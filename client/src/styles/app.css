@@ -1336,6 +1336,27 @@
   fill: var(--accent-soft);
 }
 
+.move-demo__lane {
+  fill: var(--surface-sunk);
+  stroke: var(--border-strong);
+  stroke-width: 3;
+}
+
+.move-demo__pin {
+  fill: var(--surface);
+  stroke: var(--text);
+  stroke-width: 2;
+}
+
+.move-demo__bowling-ball {
+  fill: var(--text);
+}
+
+.move-demo__caption {
+  fill: var(--text-muted);
+  font: 600 15px var(--font);
+}
+
 .tutorial__how {
   display: grid;
   gap: clamp(0.75rem, 2.2vh, 1.4rem);
