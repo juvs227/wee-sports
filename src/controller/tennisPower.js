@@ -4,8 +4,13 @@
  */
 export function tennisPower(peakRotation, profile = null, label = 'Forehand') {
   if (!Number.isFinite(peakRotation)) return 0.5;
-  const multiplier = Number.isFinite(profile?.[label]) ? Math.max(0.75, Math.min(1.75, profile[label])) : 1;
-  const amount = Math.max(0, Math.min(1, (peakRotation * multiplier - 280) / 920));
+  const multiplier = Number.isFinite(profile?.[label])
+    ? Math.max(0.75, Math.min(1.75, profile[label]))
+    : 1;
+  const amount = Math.max(
+    0,
+    Math.min(1, (peakRotation * multiplier - 280) / 920),
+  );
   return 0.2 + 0.8 * amount * amount * (3 - 2 * amount);
 }
 
