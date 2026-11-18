@@ -178,7 +178,7 @@ export default function JoinStub() {
               <PhoneCalibration progress={calibrationProgress} calState={calibrationState} />
             ) : (
               <div className="phone-cal-prompt">
-                <p className="phone-cal-prompt__title">Face the net</p>
+                <p className="phone-cal-prompt__title">Face the screen</p>
                 <p className="phone-cal-prompt__help">When ready, hold your phone with the screen pointing toward the net, then tap Calibrate.</p>
                 <button type="button" className="btn btn--primary phone-cal-prompt__btn" onClick={() => setCalibrationStarted(true)}>
                   Calibrate
