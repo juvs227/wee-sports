@@ -73,16 +73,7 @@ export function connectLobbySwings({
   onStatus('Connecting to homepage lobby…');
   post({type: 'wee:bridge-ready'});
   return {
-<<<<<<< Updated upstream
     sendSwing(label, hand, power = 0.5, netNormal, swingNormal) {
-      const event = { type: 'swing', id: createInputId(), label, hand, power, gameId, netNormal, swingNormal };
-      if (role !== 'phone' || !connected || paused || !gameId || !isSwing(event)) return false;
-      sentAt.set(event.id, performance.now());
-      if (sentAt.size > 40) sentAt.delete(sentAt.keys().next().value);
-      console.log('[lobbyConnection step 3] netNormal:', netNormal, 'swingNormal:', swingNormal);
-      post({ type: 'wee:player-swing', event });
-=======
-    sendSwing(label, hand, power = 0.5) {
       const event = {
         type: 'swing',
         id: createInputId(),
@@ -90,6 +81,8 @@ export function connectLobbySwings({
         hand,
         power,
         gameId,
+        netNormal,
+        swingNormal,
       };
       if (
         role !== 'phone' ||
@@ -102,7 +95,6 @@ export function connectLobbySwings({
       sentAt.set(event.id, performance.now());
       if (sentAt.size > 40) sentAt.delete(sentAt.keys().next().value);
       post({type: 'wee:player-swing', event});
->>>>>>> Stashed changes
       onSent(event);
       return true;
     },

@@ -1,17 +1,3 @@
-<<<<<<< Updated upstream
-import { createSwingDetector } from './classifySwing.js';
-import { createBowlingMotionDetector, bowlingTiltAim } from './motionGestures.js';
-import { tennisPower, tennisStrength } from './tennisPower.js';
-import { createStrengthRehearsal } from './strengthRehearsal.js';
-import { connectSwings } from '../network/swingConnection.js';
-import { createInputId } from '../network/inputId.js';
-import { createCalibrationSession } from './calibration.js';
-import { createCalibrationMemory, createCalibrationResume } from './calibrationMemory.js';
-import { createPhoneFeedback, createScreenAwake } from './phoneExperience.js';
-import { isTennisState, isStrokeResult, PHASES } from '../../shared/protocol.js';
-import { createOrientationCalibration, createOrientationSource } from './orientationCalibration.js';
-import { createTimingStats } from '../network/timingStats.js';
-=======
 import {createSwingDetector} from './classifySwing.js';
 import {createBowlingMotionDetector, bowlingTiltAim} from './motionGestures.js';
 import {tennisPower, tennisStrength} from './tennisPower.js';
@@ -27,10 +13,9 @@ import {createPhoneFeedback, createScreenAwake} from './phoneExperience.js';
 import {isTennisState, isStrokeResult, PHASES} from '../../shared/protocol.js';
 import {
   createOrientationCalibration,
-  eulerToNormal,
+  createOrientationSource,
 } from './orientationCalibration.js';
 import {createTimingStats} from '../network/timingStats.js';
->>>>>>> Stashed changes
 import '../theme.js';
 import '../../client/src/styles/tokens.css';
 import '../play.css';
@@ -168,14 +153,9 @@ function renderSport() {
 }
 renderSport();
 function startOrientationCalibration() {
-<<<<<<< Updated upstream
   if (orientationCalibration || !orientationSource) return;
-  element('motion').textContent = 'Hold your phone with the screen facing the net and keep still.';
-=======
-  if (orientationCalibration) return;
   element('motion').textContent =
     'Hold your phone with the screen facing the net and keep still.';
->>>>>>> Stashed changes
   orientationCalibration = createOrientationCalibration({
     source: orientationSource,
     onProgress(progress, state) {
@@ -196,19 +176,17 @@ function startOrientationCalibration() {
     },
     onDone(normal, quat) {
       orientationCalibration = null;
-<<<<<<< Updated upstream
       // Restore live currentNormal updates now that calibration is done
-      if (orientationSource) orientationSource.onReading = (_, n) => { currentNormal = n; };
-      netOrientation = { normal };
-      post({ type: 'wee:calibration-done', slot: player - 1, netOrientation: { normal, quat } });
-=======
+      if (orientationSource)
+        orientationSource.onReading = (_, n) => {
+          currentNormal = n;
+        };
       netOrientation = {normal};
       post({
         type: 'wee:calibration-done',
         slot: player - 1,
         netOrientation: {normal, quat},
       });
->>>>>>> Stashed changes
       element('motion').textContent = 'Calibrated ✓ Net direction saved.';
     },
   });
@@ -566,11 +544,7 @@ const connection = connectSwings({
     deliveryResult(event);
   },
 });
-<<<<<<< Updated upstream
 function send(label, power = 0.5, recognitionMs, netNormal, swingNormal) {
-  if (bowling || lobbyPaused || !gameActive || !connected || settingsOpen || rehearsal || document.hidden || tennisState?.phase === 'complete') return;
-=======
-function send(label, power = 0.5, recognitionMs) {
   if (
     bowling ||
     lobbyPaused ||
@@ -582,10 +556,15 @@ function send(label, power = 0.5, recognitionMs) {
     tennisState?.phase === 'complete'
   )
     return;
->>>>>>> Stashed changes
   strokeNoticeUntil = 0;
   nextRecognitionMs = recognitionMs;
-  const sent = connection.sendSwing(label, element('hand').value, power, netNormal, swingNormal);
+  const sent = connection.sendSwing(
+    label,
+    element('hand').value,
+    power,
+    netNormal,
+    swingNormal,
+  );
   nextRecognitionMs = undefined;
   if (sent) phoneFeedback.swing(label);
   element('delivery').textContent = sent
@@ -839,11 +818,6 @@ window.addEventListener('message', event => {
   }
   // are we star
   if (data?.type === 'wee:tennis-state' && !bowling && isTennisState(data)) {
-<<<<<<< Updated upstream
-    tennisState = { phase: data.phase, server: data.server, winner: data.winner, practice: data.practice, serveAttempt: data.serveAttempt };
-    if (data.phase === 'complete') stop('Match complete. See the TV for results.');
-    // why are we calling startMotion again
-=======
     tennisState = {
       phase: data.phase,
       server: data.server,
@@ -853,7 +827,7 @@ window.addEventListener('message', event => {
     };
     if (data.phase === 'complete')
       stop('Match complete. See the TV for results.');
->>>>>>> Stashed changes
+    // why are we calling startMotion again
     else startMotion();
     controls();
     return;
@@ -1014,9 +988,15 @@ function motion(event) {
         `${swing.label} · ${tennisStrength(power)}`;
       feedbackUntil = performance.now() + 1500;
       // this would send on my phone, not my computer
-      console.log("sending net orientation normal: ", netOrientation?.normal); 
-      console.log("sending the current normal: ", currentNormal); 
-      send(swing.label, power, undefined, netOrientation?.normal, currentNormal);
+      // console.log('sending net orientation normal: ', netOrientation?.normal);
+      // console.log('sending the current normal: ', currentNormal);
+      send(
+        swing.label,
+        power,
+        undefined,
+        netOrientation?.normal,
+        currentNormal,
+      );
     }
   }
 }
@@ -1091,7 +1071,8 @@ function beginCalibration(restore = false) {
   stop();
   buttonMode = false;
   bias = null;
-  orientationSource?.stop(); orientationSource = null;
+  orientationSource?.stop();
+  orientationSource = null;
   currentNormal = null;
   if (restore) savedSetup = calibrationMemory.read();
   calibrationIsRestore = restore && savedSetup?.hand === element('hand').value;
@@ -1216,8 +1197,10 @@ setInterval(() => {
       if (bias) {
         // Start orientation source now that gyro bias is known
         if (!orientationSource) {
-          orientationSource = createOrientationSource({ bias });
-          orientationSource.onReading = (_, n) => { currentNormal = n; };
+          orientationSource = createOrientationSource({bias});
+          orientationSource.onReading = (_, n) => {
+            currentNormal = n;
+          };
           orientationSource.start();
         }
         if (restored) strengthProfile = savedSetup?.strength ?? null;
@@ -1295,14 +1278,12 @@ document.addEventListener('visibilitychange', () => {
       'Rehearsal stopped because the page was hidden. Keep it open and try again.',
     );
   if (calibration) {
-<<<<<<< Updated upstream
-    calibration = null; bias = null; strengthProfile = null;
-    orientationSource?.stop(); orientationSource = null; currentNormal = null;
-=======
     calibration = null;
     bias = null;
     strengthProfile = null;
->>>>>>> Stashed changes
+    orientationSource?.stop();
+    orientationSource = null;
+    currentNormal = null;
     calibrationIsRestore = false;
     element('calibration-progress').hidden = true;
     element('motion').textContent =
@@ -1339,17 +1320,8 @@ window.addEventListener('pageshow', () => {
     // only by the explicit Resume motion / Enable motion tap handlers.
     window.addEventListener('devicemotion', motion);
   }
-<<<<<<< Updated upstream
   // currentNormal is now updated via orientationSource.onReading (set in the
   // interval callback after gyro bias calibration completes)
-=======
-  function orientationFrame(e) {
-    if (e.alpha === null) return;
-    currentNormal = eulerToNormal(e.alpha, e.beta, e.gamma);
-  }
-  window.addEventListener('deviceorientationabsolute', orientationFrame, true);
-  window.addEventListener('deviceorientation', orientationFrame, true);
->>>>>>> Stashed changes
 }
 controls();
 sensorStatus(performance.now() + 250);
