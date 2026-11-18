@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Phone Orientation</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #0d0d0d; color: #eee; font-family: system-ui, sans-serif; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 16px; min-height: 100dvh; }
+#enable { padding: 14px 32px; font-size: 18px; border-radius: 10px; border: none; background: #f90; color: #000; font-weight: bold; cursor: pointer; }
+#status { font-size: 12px; color: #555; }
+#status.ok { color: #4f4; }
+#status.err { color: #f44; }
+canvas { border-radius: 8px; background: #111; display: block; }
+.panel { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; }
+h2 { font-size: 14px; color: #555; text-transform: uppercase; letter-spacing: 1px; align-self: flex-start; }
+.vals { font-size: 12px; color: #666; font-variant-numeric: tabular-nums; line-height: 1.8; text-align: center; }
+.vals b { color: #aaa; }
+
+#mode-toggle {
+  background: #1a1a1a; border-radius: 10px; padding: 4px;
+  display: none; gap: 4px; width: 100%; max-width: 320px;
+}
+#mode-toggle button {
+  flex: 1; padding: 10px; font-size: 15px; font-weight: bold;
+  border: none; border-radius: 8px; cursor: pointer;
+  background: transparent; color: #555; transition: all 0.15s;
+}
+#mode-toggle button.active { background: #222; color: #eee; }
+#mode-live.active  { color: #4cf; }
+#mode-swing.active { color: #ff6b35; }
+
+#swing-state { display: none; font-size: 15px; color: #555; text-align: center; letter-spacing: 0.5px; }
+#swing-state.waiting  { color: #555; }
+#swing-state.detected { color: #ff6b35; font-weight: bold; }
+
+#accel-bar-wrap {
+  display: none; width: 100%; max-width: 320px; gap: 8px; align-items: center;
+}
+#accel-bar-wrap label { font-size: 11px; color: #444; white-space: nowrap; }
+#accel-bar-bg { flex: 1; height: 6px; background: #1a1a1a; border-radius: 3px; overflow: hidden; }
+#accel-bar { height: 100%; width: 0%; background: #ff6b35; border-radius: 3px; transition: width 0.05s; }
+#accel-val { font-size: 11px; color: #555; font-variant-numeric: tabular-nums; width: 42px; text-align: right; }
+
+</style>
+</head>
+<body>
+<button id="enable">Enable Sensors</button>
+<div id="status">waiting…</div>
+
+<button id="cal-btn" style="display:none; padding:12px 28px; font-size:16px; border-radius:10px; border:2px solid #4cf; background:transparent; color:#4cf; font-weight:bold; cursor:pointer;">Calibrate — face the net</button>
+
+<div id="mode-toggle">
+  <button id="mode-live" class="active">Live</button>
+  <button id="mode-swing">Swing</button>
+</div>
+
+<div id="swing-state" class="waiting">waiting for swing…</div>
+
+<div id="accel-bar-wrap">
+  <label>accel</label>
+  <div id="accel-bar-bg"><div id="accel-bar"></div></div>
+  <div id="accel-val">0</div>
+</div>
+
+<div class="panel">
+  <h2>Launch Parabola</h2>
+  <canvas id="parabola" width="320" height="200"></canvas>
+</div>
+
+<div class="panel">
+  <h2>Screen Normal</h2>
+  <canvas id="phone3d" width="320" height="200"></canvas>
+  <div class="vals">
+    <div>azimuth: <b id="azval">—</b> &nbsp; elevation: <b id="elval">—</b></div>
+  </div>
+</div>
+
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script>
+// ── Math helpers ──────────────────────────────────────────────────────────────
+function dot(a, b) { return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]; }
+function cross(a, b) { return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
+function normalize(v) { const l = Math.hypot(...v); return l ? v.map(x => x/l) : v; }
+function vadd(a, b) { return [a[0]+b[0], a[1]+b[1], a[2]+b[2]]; }
+function vscale(v, s) { return [v[0]*s, v[1]*s, v[2]*s]; }
+
+function qrot(q, v) {
+  const [qx,qy,qz,qw] = q;
+  const [vx,vy,vz] = v;
+  const tx = 2*(qy*vz - qz*vy);
+  const ty = 2*(qz*vx - qx*vz);
+  const tz = 2*(qx*vy - qy*vx);
+  return [
+    vx + qw*tx + qy*tz - qz*ty,
+    vy + qw*ty + qz*tx - qx*tz,
+    vz + qw*tz + qx*ty - qy*tx,
+  ];
+}
+
+function eulerToNormal(alpha, beta, gamma) {
+  const a = alpha * Math.PI/180, b = beta * Math.PI/180, g = gamma * Math.PI/180;
+  return [
+    -Math.cos(a)*Math.sin(g) + Math.cos(g)*Math.sin(a)*Math.sin(b),
+     Math.sin(a)*Math.sin(g) + Math.cos(a)*Math.cos(g)*Math.sin(b),
+     Math.cos(b)*Math.cos(g),
+  ];
+}
+
+// ── Camera ────────────────────────────────────────────────────────────────────
+const CAM   = normalize([1, -1.2, 1.4]);
+const CAM_R = normalize(cross(CAM, [0,0,1]));
+const CAM_U = normalize(cross(CAM_R, CAM));
+function project(v, scale, cx, cy) {
+  return { x: dot(v, CAM_R)*scale + cx, y: -dot(v, CAM_U)*scale + cy };
+}
+
+// ── Draw 3D phone ─────────────────────────────────────────────────────────────
+function drawPhone(canvas, normal) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  const scale = 60, cx = W/2, cy = H/2;
+
+  const pw = 0.45, ph = 0.9, pd = 0.07;
+  const dv = [[-pw,-ph,0],[pw,-ph,0],[pw,ph,0],[-pw,ph,0],[-pw,-ph,-pd],[pw,-ph,-pd],[pw,ph,-pd],[-pw,ph,-pd]];
+  const verts = dv.map(v => project(v, scale, cx, cy));
+
+  ctx.beginPath(); ctx.moveTo(verts[4].x, verts[4].y);
+  for (let i = 5; i < 8; i++) ctx.lineTo(verts[i].x, verts[i].y);
+  ctx.closePath(); ctx.fillStyle = '#1a1a1a'; ctx.fill();
+  ctx.strokeStyle = '#333'; ctx.lineWidth = 1; ctx.stroke();
+  for (let i = 0; i < 4; i++) {
+    ctx.beginPath(); ctx.moveTo(verts[i].x, verts[i].y); ctx.lineTo(verts[i+4].x, verts[i+4].y);
+    ctx.strokeStyle = '#333'; ctx.stroke();
+  }
+  ctx.beginPath(); ctx.moveTo(verts[0].x, verts[0].y);
+  for (let i = 1; i < 4; i++) ctx.lineTo(verts[i].x, verts[i].y);
+  ctx.closePath(); ctx.fillStyle = '#1e3a5f'; ctx.fill(); ctx.strokeStyle = '#4af'; ctx.lineWidth = 1.5; ctx.stroke();
+
+  const inner = dv.slice(0,4).map(v => project([v[0]*0.8, v[1]*0.85, v[2]], scale, cx, cy));
+  ctx.beginPath(); ctx.moveTo(inner[0].x, inner[0].y);
+  for (let i = 1; i < 4; i++) ctx.lineTo(inner[i].x, inner[i].y);
+  ctx.closePath(); ctx.fillStyle = '#0d2a45'; ctx.fill();
+
+  const tip = project(normal.map(n => n*0.75), scale, cx, cy);
+  const tail = project([0,0,0], scale, cx, cy);
+  ctx.beginPath(); ctx.moveTo(tail.x, tail.y); ctx.lineTo(tip.x, tip.y);
+  ctx.strokeStyle = '#ff6b35'; ctx.lineWidth = 3; ctx.stroke();
+  const dx = tip.x-tail.x, dy = tip.y-tail.y, len = Math.hypot(dx,dy);
+  if (len > 1) {
+    const ux = dx/len, uy = dy/len, hx = tip.x-ux*14, hy = tip.y-uy*14;
+    ctx.beginPath(); ctx.moveTo(tip.x,tip.y); ctx.lineTo(hx-uy*7,hy+ux*7); ctx.lineTo(hx+uy*7,hy-ux*7);
+    ctx.closePath(); ctx.fillStyle = '#ff6b35'; ctx.fill();
+  }
+
+  const compR = 24, compX = W-34, compY = 30;
+  ctx.beginPath(); ctx.arc(compX, compY, compR, 0, Math.PI*2);
+  ctx.fillStyle = '#111'; ctx.fill(); ctx.strokeStyle = '#333'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.fillStyle = '#555'; ctx.font = '9px system-ui'; ctx.textAlign = 'center';
+  ctx.fillText('N', compX, compY-compR+10);
+  const az = Math.atan2(normal[0], normal[1]);
+  ctx.beginPath(); ctx.moveTo(compX, compY);
+  ctx.lineTo(compX+Math.sin(az)*compR*0.8, compY-Math.cos(az)*compR*0.8);
+  ctx.strokeStyle = '#ff6b35'; ctx.lineWidth = 2; ctx.stroke();
+
+  const elX = W-34, elY = H-34, elR = 20;
+  const el = Math.asin(Math.max(-1, Math.min(1, normal[2])));
+  ctx.beginPath(); ctx.arc(elX, elY, elR, Math.PI, 0, false);
+  ctx.strokeStyle = '#333'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(elX, elY);
+  ctx.lineTo(elX+Math.cos(el-Math.PI/2)*elR*0.9, elY-Math.sin(el-Math.PI/2)*elR*0.9);
+  ctx.strokeStyle = '#4cf'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = '#555'; ctx.font = '9px system-ui'; ctx.textAlign = 'center';
+  ctx.fillText('el', elX, elY+10); ctx.textAlign = 'left';
+}
+
+// ── Draw parabola ─────────────────────────────────────────────────────────────
+function drawParabola(canvas, normal, frozen) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const g = 9.8, v0 = 12;
+  const el = Math.asin(Math.max(-1, Math.min(1, normal[2])));
+  const elDeg = el * 180 / Math.PI;
+  const PAD = { l: 32, r: 16, t: 20, b: 36 };
+  const pw = W-PAD.l-PAD.r, ph = H-PAD.t-PAD.b;
+
+  const angle = Math.max(0, el);
+  const range = angle > 0.01 ? v0*v0*Math.sin(2*angle)/g : v0*0.3;
+  const maxH  = v0*v0*Math.sin(angle)**2/(2*g);
+  const tFlight = 2*v0*Math.sin(angle)/g || 0.5;
+
+  const pts = [];
+  for (let i = 0; i <= 80; i++) {
+    const t = (i/80)*tFlight;
+    pts.push([v0*Math.cos(angle)*t, Math.max(0, v0*Math.sin(angle)*t-0.5*g*t*t)]);
+  }
+
+  const xMax = Math.max(range*1.05, 1), yMax = Math.max(maxH*1.3, 1);
+  function toCanvas(x, y) { return [PAD.l+(x/xMax)*pw, PAD.t+ph-(y/yMax)*ph]; }
+
+  ctx.beginPath(); ctx.moveTo(PAD.l, PAD.t+ph); ctx.lineTo(PAD.l+pw, PAD.t+ph);
+  ctx.strokeStyle = '#333'; ctx.lineWidth = 1; ctx.stroke();
+
+  if (angle < Math.PI/4-0.05 || angle > Math.PI/4+0.05) {
+    const tOpt = v0*Math.SQRT2/g;
+    ctx.beginPath();
+    for (let i = 0; i <= 40; i++) {
+      const t = (i/40)*tOpt;
+      const [cx2,cy2] = toCanvas(v0/Math.SQRT2*t, Math.max(0, v0/Math.SQRT2*t-0.5*g*t*t));
+      i===0 ? ctx.moveTo(cx2,cy2) : ctx.lineTo(cx2,cy2);
+    }
+    ctx.strokeStyle = '#2a4a2a'; ctx.lineWidth = 1; ctx.setLineDash([4,4]); ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  ctx.beginPath();
+  const [sx,sy] = toCanvas(pts[0][0], pts[0][1]); ctx.moveTo(sx,sy);
+  for (const [x,y] of pts.slice(1)) { const [cx2,cy2] = toCanvas(x,y); ctx.lineTo(cx2,cy2); }
+  const grad = ctx.createLinearGradient(PAD.l, 0, PAD.l+pw, 0);
+  if (frozen) { grad.addColorStop(0,'#ff9955'); grad.addColorStop(1,'#ff995555'); }
+  else        { grad.addColorStop(0,'#ff6b35'); grad.addColorStop(1,'#ff6b3566'); }
+  ctx.strokeStyle = grad; ctx.lineWidth = frozen ? 3 : 2; ctx.stroke();
+
+  const [lx,ly] = toCanvas(0,0);
+  ctx.beginPath(); ctx.arc(lx,ly, frozen?6:4, 0, Math.PI*2);
+  ctx.fillStyle = frozen?'#ff9955':'#ff6b35'; ctx.fill();
+  ctx.fillStyle = el<0?'#f44':(frozen?'#ff9955':'#aaa');
+  ctx.font = `${frozen?14:12}px system-ui`;
+  ctx.fillText(`${elDeg.toFixed(1)}°`, lx+8, ly-8);
+
+  if (range > 0.1) {
+    const [rx,ry] = toCanvas(range, 0);
+    ctx.fillStyle = frozen?'#888':'#555'; ctx.font='10px system-ui'; ctx.textAlign='center';
+    ctx.fillText(`${range.toFixed(1)}m`, rx, ry+14);
+  }
+
+  const aimR=22, aimX=PAD.l+26, aimY=PAD.t+26;
+  ctx.beginPath(); ctx.arc(aimX,aimY,aimR,0,Math.PI*2);
+  ctx.fillStyle='#111'; ctx.fill(); ctx.strokeStyle=frozen?'#555':'#333'; ctx.lineWidth=1; ctx.stroke();
+  const azA = Math.atan2(normal[0], normal[1]);
+  ctx.beginPath(); ctx.moveTo(aimX,aimY);
+  ctx.lineTo(aimX+Math.sin(azA)*aimR*0.85, aimY-Math.cos(azA)*aimR*0.85);
+  ctx.strokeStyle=frozen?'#ff9955':'#4cf'; ctx.lineWidth=2; ctx.stroke();
+  ctx.fillStyle='#555'; ctx.font='8px system-ui'; ctx.textAlign='center';
+  ctx.fillText('aim', aimX, aimY+aimR+10);
+
+  ctx.fillStyle='#333'; ctx.font='10px system-ui'; ctx.textAlign='left';
+  ctx.fillText('↑ height (m)', 2, PAD.t+10);
+  ctx.fillText('distance (m) →', PAD.l, H-6);
+}
+
+
+// ── Quaternion helpers ────────────────────────────────────────────────────────
+function qdot(a, b) { return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]+a[3]*b[3]; }
+function qdeg(a, b) { return 2 * Math.acos(Math.min(1, Math.abs(qdot(a,b)))) * 180/Math.PI; }
+function qnorm(q) { const l = Math.hypot(...q); return q.map(v=>v/l); }
+
+// ── Calibration state machine ─────────────────────────────────────────────────
+let calPhase    = 1;
+let calState    = 'idle';
+let calRefQuat  = null;
+let calSamples  = [];
+let calStart    = null;
+let stillSince  = null;
+let lastCalQuat = null;
+const CAL_DURATION   = 3000;
+const STILL_REQUIRED = 500;
+const STILL_THRESH   = 1.5;
+
+function calTick(quat) {
+  if (calState === 'idle') return;
+  const now = performance.now();
+  const pfx = calPhase === 1 ? 'cal' : 'cal2';
+  const moving = lastCalQuat ? qdeg(lastCalQuat, quat) > STILL_THRESH : false;
+  lastCalQuat = quat;
+
+  if (calState === 'waiting_still') {
+    if (moving) { stillSince = null; }
+    else {
+      if (!stillSince) stillSince = now;
+      if (now - stillSince >= STILL_REQUIRED) {
+        calState = 'calibrating'; calStart = now; calSamples = [quat];
+        socket.emit(`${pfx}_start`);
+      }
+    }
+    return;
+  }
+
+  if (calState === 'calibrating') {
+    if (moving) {
+      calState = 'waiting_still'; stillSince = null; calSamples = [];
+      socket.emit(`${pfx}_restart`); return;
+    }
+    const q0 = calSamples[0];
+    calSamples.push(qdot(q0, quat) >= 0 ? quat : quat.map(v => -v));
+    const pct = Math.min(1, (now - calStart) / CAL_DURATION);
+    socket.emit(`${pfx}_progress`, { pct });
+    if (pct >= 1) {
+      const avg = [0,0,0,0];
+      for (const q of calSamples) { avg[0]+=q[0]; avg[1]+=q[1]; avg[2]+=q[2]; avg[3]+=q[3]; }
+      calRefQuat = qnorm(avg);
+      calState = 'done';
+      socket.emit(`${pfx}_done`, { qref: calRefQuat });
+      advanceCalPhase();
+    }
+  }
+}
+
+function advanceCalPhase() {
+  if (calPhase === 1) {
+    calPhase = 2; calState = 'waiting_still'; stillSince = null;
+    calSamples = []; lastCalQuat = currentQuat;
+    socket.emit('cal2_waiting');
+  }
+  // phase 2 done — complete
+}
+
+// ── Mode / swing state ────────────────────────────────────────────────────────
+let mode = 'live';
+let trajectoryMode = false;
+let swingNormal = null;
+let hasSwing = false;
+
+// Simple detection state
+let inSwing = false;
+const SWING_THRESHOLD = 25;
+const SWING_RESET_THRESHOLD = 12;
+const CONFIRM_THRESH = 35;
+
+let winState       = 'idle'; // 'idle' | 'pending' | 'confirmed'
+let winSamples     = [];     // { timeMs, pos }
+let winPos         = [0,0,0];
+let winVel         = [0,0,0];
+let winPendingStart = null;
+let winLastMs      = null;
+let confirmed      = false;
+
+// ── Sensor state ──────────────────────────────────────────────────────────────
+let currentNormal = [0, 0, 1];
+let currentQuat   = [0, 0, 0, 1];
+
+const socket = io();
+socket.on('connect', () => setStatus('Connected ✓', false));
+socket.on('disconnect', () => setStatus('Disconnected', true));
+
+function emitOrientation(normal, quat) {
+  const az = Math.atan2(normal[0], normal[1]) * 180/Math.PI;
+  const el = Math.asin(Math.max(-1, Math.min(1, normal[2]))) * 180/Math.PI;
+  socket.emit('orientation', { normal, quat, az, el });
+}
+
+function render(normal, frozen) {
+  const azDeg = Math.atan2(normal[0], normal[1]) * 180/Math.PI;
+  const elDeg = Math.asin(Math.max(-1, Math.min(1, normal[2]))) * 180/Math.PI;
+  document.getElementById('azval').textContent = azDeg.toFixed(1) + '°';
+  document.getElementById('elval').textContent = elDeg.toFixed(1) + '°';
+  drawPhone(document.getElementById('phone3d'), normal);
+  drawParabola(document.getElementById('parabola'), normal, frozen);
+}
+
+function onOrientation(normal, quat) {
+  currentNormal = normal;
+  currentQuat   = quat;
+  calTick(quat);
+  if (mode === 'live') {
+    render(normal, false);
+    emitOrientation(normal, quat);
+  }
+}
+
+// Called on every devicemotion — accelVec is in phone space, mag is its magnitude
+function onMotion(accelVec, mag) {
+  if (mode !== 'swing') return;
+
+  // Update accel bar
+  const bar = document.getElementById('accel-bar');
+  const pct = Math.min(100, (mag / 50) * 100);
+  bar.style.width = pct + '%';
+  bar.style.background = mag > CONFIRM_THRESH ? '#ff9955' : '#ff6b35';
+  document.getElementById('accel-val').textContent = mag.toFixed(0);
+
+  if (trajectoryMode) {
+    runTrajectoryWindow(accelVec, mag);
+  } else {
+    runSimpleDetection(mag);
+  }
+}
+
+// ── Simple swing detection ────────────────────────────────────────────────────
+function runSimpleDetection(mag) {
+  if (!inSwing && mag > SWING_THRESHOLD) {
+    inSwing = true;
+    swingNormal = [...currentNormal];
+    hasSwing = true;
+    flashSwing();
+    render(swingNormal, true);
+    emitOrientation(swingNormal, [...currentQuat]);
+  } else if (inSwing && mag < SWING_RESET_THRESHOLD) {
+    inSwing = false;
+  }
+}
+
+
+function flashSwing() {
+  const el = document.getElementById('swing-state');
+  el.textContent = 'SWING!';
+  el.className = 'detected';
+  setTimeout(() => {
+    el.textContent = hasSwing ? 'last swing frozen — waiting for next…' : 'waiting for swing…';
+    el.className = 'waiting';
+  }, 800);
+}
+
+// ── Mode toggle ───────────────────────────────────────────────────────────────
+document.getElementById('mode-live').addEventListener('click',  () => setMode('live'));
+document.getElementById('mode-swing').addEventListener('click', () => setMode('swing'));
+function setMode(m) {
+  mode = m;
+  document.getElementById('mode-live').className  = m === 'live'  ? 'active' : '';
+  document.getElementById('mode-swing').className = m === 'swing' ? 'active' : '';
+
+  const swingState = document.getElementById('swing-state');
+  const accelWrap  = document.getElementById('accel-bar-wrap');
+  const trajToggle = document.getElementById('traj-toggle');
+
+  if (m === 'swing') {
+    swingState.style.display = 'block';
+    swingState.textContent = hasSwing ? 'last swing frozen — waiting for next…' : 'waiting for swing…';
+    swingState.className = 'waiting';
+    accelWrap.style.display = 'flex';
+    if (hasSwing) render(swingNormal, true);
+  } else {
+    swingState.style.display = 'none';
+    accelWrap.style.display = 'none';
+    render(currentNormal, false);
+  }
+}
+
+// ── Sensor start ──────────────────────────────────────────────────────────────
+async function startSensors() {
+  document.getElementById('enable').style.display = 'none';
+
+  if (typeof DeviceOrientationEvent?.requestPermission === 'function') {
+    try { await DeviceOrientationEvent.requestPermission(); }
+    catch { return setStatus('Permission denied', true); }
+  }
+  if (typeof DeviceMotionEvent?.requestPermission === 'function') {
+    try { await DeviceMotionEvent.requestPermission(); } catch {}
+  }
+
+  window.addEventListener('devicemotion', e => {
+    const a = e.accelerationIncludingGravity;
+    if (!a) return;
+    const vec = [a.x ?? 0, a.y ?? 0, a.z ?? 0];
+    const mag = Math.hypot(...vec);
+    onMotion(vec, mag);
+  });
+
+  if ('RelativeOrientationSensor' in window) {
+    try {
+      if (navigator.permissions) {
+        await Promise.all([
+          navigator.permissions.query({ name: 'accelerometer' }),
+          navigator.permissions.query({ name: 'gyroscope' }),
+        ]);
+      }
+      console.log("Using relative orientation sensor");
+      const sensor = new RelativeOrientationSensor({ frequency: 10 });
+      sensor.addEventListener('reading', () => {
+        const q = sensor.quaternion;
+        onOrientation(qrot(q, [0,0,1]), [...q]);
+      });
+      sensor.addEventListener('error', e => setStatus('Sensor error: ' + e.error.message, true));
+      sensor.start();
+      setStatus('Sensors active', false);
+    } catch (e) {
+      console.log("something went wrong w/using relative orientation");
+    }
+  } else {
+    console.log("RelativeOrientationSensor not available");
+  }
+}
+
+function orientHandler(e) {
+  if (e.alpha == null) return;
+  const normal = eulerToNormal(e.alpha, e.beta, e.gamma);
+  const a = e.alpha*Math.PI/180, b = e.beta*Math.PI/180, g = e.gamma*Math.PI/180;
+  const quat = [
+    Math.sin(b/2)*Math.cos(g/2)*Math.cos(a/2) - Math.cos(b/2)*Math.sin(g/2)*Math.sin(a/2),
+    Math.cos(b/2)*Math.sin(g/2)*Math.cos(a/2) + Math.sin(b/2)*Math.cos(g/2)*Math.sin(a/2),
+    Math.cos(b/2)*Math.cos(g/2)*Math.sin(a/2) - Math.sin(b/2)*Math.sin(g/2)*Math.cos(a/2),
+    Math.cos(b/2)*Math.cos(g/2)*Math.cos(a/2) + Math.sin(b/2)*Math.sin(g/2)*Math.sin(a/2),
+  ];
+  onOrientation(normal, quat);
+}
+
+document.getElementById('enable').addEventListener('click', async () => {
+  await startSensors();
+  document.getElementById('cal-btn').style.display = 'inline-block';
+  document.getElementById('mode-toggle').style.display = 'flex';
+});
+
+document.getElementById('cal-btn').addEventListener('click', () => {
+  calState = 'waiting_still'; stillSince = null; calSamples = []; lastCalQuat = currentQuat;
+  document.getElementById('cal-btn').style.display = 'none';
+  socket.emit('cal_waiting');
+});
+
+drawPhone(document.getElementById('phone3d'), [0,0,1]);
+drawParabola(document.getElementById('parabola'), [0,0,1], false);
+</script>
+</body>
+</html>

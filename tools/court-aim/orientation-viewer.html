@@ -1,0 +1,805 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orientation Viewer</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #0d0d0d; color: #eee; font-family: system-ui, sans-serif;
+       display: flex; flex-direction: column; align-items: center; gap: 20px;
+       padding: 24px 20px; min-height: 100dvh; }
+h1 { font-size: 16px; color: #555; letter-spacing: 2px; text-transform: uppercase; }
+#status { font-size: 13px; color: #555; padding: 6px 14px; border: 1px solid #222; border-radius: 20px; }
+#status.ok { color: #4f4; border-color: #2a4a2a; }
+#status.err { color: #f44; border-color: #4a2a2a; }
+.row { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; justify-content: center; }
+.panel { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+h2 { font-size: 11px; color: #444; text-transform: uppercase; letter-spacing: 1px; }
+canvas { border-radius: 10px; background: #111; display: block; }
+.vals { font-size: 12px; color: #555; font-variant-numeric: tabular-nums; line-height: 2; text-align: center; }
+.vals b { color: #888; }
+#waiting { font-size: 32px; color: #222; padding: 60px 0; }
+
+/* Calibration overlay */
+#cal-overlay {
+  display: none; position: fixed; inset: 0; background: #000c;
+  z-index: 10; align-items: center; justify-content: center;
+}
+#cal-overlay.active { display: flex; }
+#cal-card {
+  background: #0a1520; border: 2px solid #1a4a6a; border-radius: 16px;
+  padding: 40px 48px; text-align: center; min-width: 320px;
+}
+#cal-card h3 { font-size: 13px; color: #4cf; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 20px; }
+#cal-card-state { font-size: 18px; color: #aaa; margin-bottom: 24px; }
+#cal-card-pct { font-size: 88px; font-weight: bold; color: #4cf; line-height: 1; margin-bottom: 20px; display: none; }
+#cal-card-bar-wrap { width: 100%; height: 12px; background: #0d1e2e; border-radius: 6px; overflow: hidden; display: none; }
+#cal-card-bar { height: 100%; width: 0%; background: linear-gradient(90deg,#4cf,#0ff); border-radius: 6px; transition: width 0.08s linear; }
+#cal-card-done { font-size: 22px; color: #4f4; display: none; margin-top: 8px; }
+#cal-badge { font-size: 11px; color: #4cf; border: 1px solid #1a4a6a; border-radius: 12px; padding: 3px 10px; }
+</style>
+</head>
+<body>
+<h1>Phone Orientation</h1>
+<div style="display:flex;align-items:center;gap:12px">
+  <div id="status">Waiting for phone…</div>
+  <div id="cal-badge" style="display:none">not calibrated</div>
+</div>
+
+<!-- Calibration overlay -->
+<div id="cal-overlay">
+  <div id="cal-card">
+    <h3>Calibrating</h3>
+    <div id="cal-card-state">Waiting for phone to be still…</div>
+    <div id="cal-card-pct">0%</div>
+    <div id="cal-card-bar-wrap"><div id="cal-card-bar"></div></div>
+    <div id="cal-card-done">✓ Calibrated — facing the net</div>
+  </div>
+</div>
+
+<div id="waiting">📱 →</div>
+
+<div id="main" style="display:none; flex-direction:column; align-items:center; gap:20px; width:100%">
+  <div class="row">
+    <div class="panel">
+      <h2>Screen Normal — 3D View</h2>
+      <canvas id="phone3d" width="420" height="320"></canvas>
+      <div class="vals" id="vals">
+        <div>quaternion: <b id="qval">—</b></div>
+        <div>normal: <b id="nval">—</b></div>
+        <div>azimuth: <b id="azval">—</b> &nbsp;&nbsp; elevation: <b id="elval">—</b></div>
+        <div>yaw: <b id="yawval">—</b> &nbsp;&nbsp; pitch: <b id="pitchval">—</b> &nbsp;&nbsp; roll: <b id="rollval">—</b></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Launch Parabola</h2>
+      <canvas id="parabola" width="420" height="280"></canvas>
+    </div>
+  </div>
+
+  <div class="panel" style="width:100%">
+    <h2>Tennis Court</h2>
+    <canvas id="court" width="860" height="400" style="width:100%;max-width:860px;height:auto"></canvas>
+  </div>
+</div>
+
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script>
+// ── Math helpers ──────────────────────────────────────────────────────────────
+function dot(a, b) { return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]; }
+function cross(a, b) { return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
+function normalize(v) { const l = Math.hypot(...v); return l ? v.map(x => x/l) : v; }
+function vadd(a, b) { return [a[0]+b[0], a[1]+b[1], a[2]+b[2]]; }
+function vscale(v, s) { return [v[0]*s, v[1]*s, v[2]*s]; }
+
+function qrot(q, v) {
+  const [qx,qy,qz,qw] = q, [vx,vy,vz] = v;
+  const tx = 2*(qy*vz-qz*vy), ty = 2*(qz*vx-qx*vz), tz = 2*(qx*vy-qy*vx);
+  return [vx+qw*tx+qy*tz-qz*ty, vy+qw*ty+qz*tx-qx*tz, vz+qw*tz+qx*ty-qy*tx];
+}
+function qinv([x,y,z,w]) { return [-x,-y,-z,w]; }
+function qmul([x1,y1,z1,w1],[x2,y2,z2,w2]) {
+  return [w1*x2+x1*w2+y1*z2-z1*y2, w1*y2-x1*z2+y1*w2+z1*x2, w1*z2+x1*y2-y1*x2+z1*w2, w1*w2-x1*x2-y1*y2-z1*z2];
+}
+
+// ── Calibration reference ─────────────────────────────────────────────────────
+let qref     = null; // phase 1: facing net
+let leftInRef = null; // phase 2: "left" direction expressed in phase-1 frame
+
+// Compute normal in court frame from raw phone quaternion.
+// Phase 1 only: ref frame z-axis = forward. Left/right are arbitrary.
+// Phase 1+2: full court frame — x=right, y=forward, z=up.
+function computeCourtNormal(rawQuat) {
+  if (!qref) return qrot(rawQuat, [0, 0, 1]);
+
+  const qrel       = qmul(qinv(qref), rawQuat);
+  const normalInRef = qrot(qrel, [0, 0, 1]);
+
+  if (!leftInRef) return normalInRef; // phase 1 only
+
+  // Build orthonormal court frame in ref-space
+  const fwd   = [0, 0, 1];         // forward = ref z-axis (guaranteed by phase 1)
+  const left  = leftInRef;          // from phase 2
+  const up    = normalize(cross(fwd, left));
+  const right = left.map(v => -v);  // right = -left
+
+  return [
+    dot(normalInRef, right),  // x = right on court
+    dot(normalInRef, fwd),    // y = toward net
+    dot(normalInRef, up),     // z = up
+  ];
+}
+
+// Maps any ENU world-space direction vector into court frame using the same
+// calibration references as computeCourtNormal.
+function toCourtFrame(v) {
+  if (!qref) return v;
+  const vInRef = qrot(qinv(qref), v); // rotate from ENU into ref frame
+  if (!leftInRef) return vInRef;
+  const fwd   = [0, 0, 1];
+  const left  = leftInRef;
+  const up    = normalize(cross(fwd, left));
+  const right = left.map(x => -x);
+  return [dot(vInRef, right), dot(vInRef, fwd), dot(vInRef, up)];
+}
+
+// ── Calibration overlay UI ───────────────────────────────────────────────────
+let calHideTimer = null;
+
+function calOverlay(state, pct = 0, heading = 'Phase 1 — Face the Net', doneMsg = '✓ Forward calibrated') {
+  if (calHideTimer) { clearTimeout(calHideTimer); calHideTimer = null; }
+  const overlay = document.getElementById('cal-overlay');
+  const h3      = document.querySelector('#cal-card h3');
+  const stateEl = document.getElementById('cal-card-state');
+  const pctEl   = document.getElementById('cal-card-pct');
+  const barWrap = document.getElementById('cal-card-bar-wrap');
+  const bar     = document.getElementById('cal-card-bar');
+  const doneEl  = document.getElementById('cal-card-done');
+
+  if (state === 'hidden') { overlay.classList.remove('active'); return; }
+  overlay.classList.add('active');
+  h3.textContent = heading;
+  doneEl.style.display = 'none';
+
+  if (state === 'waiting') {
+    stateEl.textContent = 'Waiting for phone to be still…';
+    stateEl.style.color = '#fa0';
+    pctEl.style.display = 'none';
+    barWrap.style.display = 'none';
+  } else if (state === 'calibrating') {
+    stateEl.textContent = 'Hold still — calibrating';
+    stateEl.style.color = '#4cf';
+    pctEl.style.display = 'block';
+    pctEl.textContent = Math.round(pct * 100) + '%';
+    barWrap.style.display = 'block';
+    bar.style.width = (pct * 100) + '%';
+  } else if (state === 'done') {
+    stateEl.textContent = '';
+    pctEl.style.display = 'none';
+    barWrap.style.display = 'none';
+    doneEl.textContent = doneMsg;
+    doneEl.style.display = 'block';
+    calHideTimer = setTimeout(() => calOverlay('hidden'), 1800);
+    const badge = document.getElementById('cal-badge');
+    badge.style.display = 'inline-block';
+    badge.textContent = doneMsg.replace('✓ ', '') + ' ✓';
+    badge.style.color = '#4f4';
+    badge.style.borderColor = '#2a4a2a';
+  }
+}
+
+// ── Camera projection ─────────────────────────────────────────────────────────
+const CAM   = normalize([1, -1.2, 1.4]);
+const CAM_R = normalize(cross(CAM, [0,0,1]));
+const CAM_U = normalize(cross(CAM_R, CAM));
+
+function project(v, scale, cx, cy) {
+  return { x: dot(v, CAM_R)*scale + cx, y: -dot(v, CAM_U)*scale + cy };
+}
+
+// ── Draw 3D phone ─────────────────────────────────────────────────────────────
+function drawPhone(canvas, normal, quat) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const scale = 90, cx = W/2 - 20, cy = H/2;
+  const pw = 0.45, ph = 0.9, pd = 0.07;
+
+  const deviceVerts = [
+    [-pw,-ph,0],[pw,-ph,0],[pw,ph,0],[-pw,ph,0],
+    [-pw,-ph,-pd],[pw,-ph,-pd],[pw,ph,-pd],[-pw,ph,-pd],
+  ];
+
+  const verts = deviceVerts.map(v => project(v, scale, cx, cy));
+
+  // Back face
+  ctx.beginPath();
+  ctx.moveTo(verts[4].x, verts[4].y);
+  for (let i = 5; i < 8; i++) ctx.lineTo(verts[i].x, verts[i].y);
+  ctx.closePath();
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fill();
+  ctx.strokeStyle = '#2a2a2a';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Side edges
+  for (let i = 0; i < 4; i++) {
+    ctx.beginPath();
+    ctx.moveTo(verts[i].x, verts[i].y);
+    ctx.lineTo(verts[i+4].x, verts[i+4].y);
+    ctx.strokeStyle = '#2a2a2a';
+    ctx.stroke();
+  }
+
+  // Screen face
+  ctx.beginPath();
+  ctx.moveTo(verts[0].x, verts[0].y);
+  for (let i = 1; i < 4; i++) ctx.lineTo(verts[i].x, verts[i].y);
+  ctx.closePath();
+  ctx.fillStyle = '#1e3a5f';
+  ctx.fill();
+  ctx.strokeStyle = '#4af';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Screen inner
+  const inner = deviceVerts.slice(0,4).map(v => project([v[0]*0.8, v[1]*0.85, v[2]], scale, cx, cy));
+  ctx.beginPath();
+  ctx.moveTo(inner[0].x, inner[0].y);
+  for (let i = 1; i < 4; i++) ctx.lineTo(inner[i].x, inner[i].y);
+  ctx.closePath();
+  ctx.fillStyle = '#0d2a45';
+  ctx.fill();
+
+  // Normal arrow
+  const arrowLen = 1.0;
+  const tip  = project(normal.map(n => n*arrowLen), scale, cx, cy);
+  const tail = project([0,0,0], scale, cx, cy);
+
+  ctx.beginPath();
+  ctx.moveTo(tail.x, tail.y);
+  ctx.lineTo(tip.x, tip.y);
+  ctx.strokeStyle = '#ff6b35';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  const dx = tip.x - tail.x, dy = tip.y - tail.y;
+  const len = Math.hypot(dx, dy);
+  if (len > 1) {
+    const ux = dx/len, uy = dy/len;
+    const hx = tip.x - ux*16, hy = tip.y - uy*16;
+    ctx.beginPath();
+    ctx.moveTo(tip.x, tip.y);
+    ctx.lineTo(hx - uy*8, hy + ux*8);
+    ctx.lineTo(hx + uy*8, hy - ux*8);
+    ctx.closePath();
+    ctx.fillStyle = '#ff6b35';
+    ctx.fill();
+  }
+
+  ctx.fillStyle = '#ff6b35';
+  ctx.font = '13px system-ui';
+  ctx.fillText('normal', tip.x + 8, tip.y - 4);
+
+  // ENU axis labels (world reference)
+  const axisScale = 0.5;
+  const axes = [[1,0,0,'E #f66'],[0,1,0,'N #6f6'],[0,0,1,'Up #88f']];
+  for (const [ax,ay,az,label] of axes) {
+    const ap = project([ax*axisScale, ay*axisScale, az*axisScale], scale, cx, cy);
+    const op = project([0,0,0], scale, cx, cy);
+    const [color, name] = label.split(' ');
+    ctx.beginPath();
+    ctx.moveTo(op.x, op.y);
+    ctx.lineTo(ap.x, ap.y);
+    ctx.strokeStyle = name;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([3,3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = name;
+    ctx.font = '11px system-ui';
+    ctx.fillText(color, ap.x + 4, ap.y);
+  }
+
+  // Compass (top-right)
+  const compR = 36, compX = W - 50, compY = 44;
+  ctx.beginPath();
+  ctx.arc(compX, compY, compR, 0, Math.PI*2);
+  ctx.fillStyle = '#111';
+  ctx.fill();
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  for (const [lbl, ldx, ldy] of [['N',0,-1],['E',1,0],['S',0,1],['W',-1,0]]) {
+    ctx.fillStyle = '#444';
+    ctx.font = '10px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText(lbl, compX + ldx*(compR-10), compY + ldy*(compR-10) + 4);
+  }
+  const az = Math.atan2(normal[0], normal[1]);
+  ctx.beginPath();
+  ctx.moveTo(compX, compY);
+  ctx.lineTo(compX + Math.sin(az)*compR*0.8, compY - Math.cos(az)*compR*0.8);
+  ctx.strokeStyle = '#ff6b35';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  // Elevation gauge (bottom-right)
+  const elX = W - 50, elY = H - 50;
+  const elR = 32;
+  const el = Math.asin(Math.max(-1, Math.min(1, normal[2])));
+  ctx.beginPath();
+  ctx.arc(elX, elY, elR, Math.PI, 0, false);
+  ctx.strokeStyle = '#222';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  // Needle
+  const needleAngle = Math.PI/2 - el; // 0° = right, 90° = up
+  ctx.beginPath();
+  ctx.moveTo(elX, elY);
+  ctx.lineTo(elX + Math.cos(Math.PI - needleAngle)*elR*0.9, elY - Math.sin(Math.PI - needleAngle)*elR*0.9);
+  ctx.strokeStyle = '#4cf';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+  ctx.fillStyle = '#555';
+  ctx.font = '10px system-ui';
+  ctx.textAlign = 'center';
+  ctx.fillText('elevation', elX, elY + 16);
+
+  ctx.textAlign = 'left';
+}
+
+// ── Draw parabola ─────────────────────────────────────────────────────────────
+function drawParabola(canvas, normal) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const g = 9.8, v0 = 12;
+  const el = Math.asin(Math.max(-1, Math.min(1, normal[2])));
+  const elDeg = el * 180/Math.PI;
+
+  const PAD = { l: 40, r: 20, t: 24, b: 40 };
+  const pw = W - PAD.l - PAD.r;
+  const ph = H - PAD.t - PAD.b;
+
+  const angle = Math.max(0, el);
+  const range = angle > 0.01 ? v0*v0*Math.sin(2*angle)/g : v0*0.3;
+  const maxH  = v0*v0*Math.sin(angle)**2/(2*g);
+  const tFlight = angle > 0.01 ? 2*v0*Math.sin(angle)/g : 0.6;
+
+  const xMax = Math.max(range*1.1, 2);
+  const yMax = Math.max(maxH*1.4, 1);
+
+  function toCanvas(x, y) {
+    return [PAD.l + (x/xMax)*pw, PAD.t + ph - (y/yMax)*ph];
+  }
+
+  // Grid
+  ctx.strokeStyle = '#1a1a1a';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = (i/4) * yMax;
+    const [, cy] = toCanvas(0, y);
+    ctx.beginPath(); ctx.moveTo(PAD.l, cy); ctx.lineTo(PAD.l+pw, cy); ctx.stroke();
+    ctx.fillStyle = '#333';
+    ctx.font = '9px system-ui';
+    ctx.textAlign = 'right';
+    ctx.fillText(y.toFixed(1), PAD.l - 4, cy + 3);
+  }
+
+  // Ground
+  const [, groundY] = toCanvas(0, 0);
+  ctx.beginPath();
+  ctx.moveTo(PAD.l, groundY);
+  ctx.lineTo(PAD.l + pw, groundY);
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // 45° optimal (dashed)
+  const tOpt = v0*Math.SQRT2/g;
+  ctx.beginPath();
+  let first45 = true;
+  for (let i = 0; i <= 50; i++) {
+    const t = (i/50)*tOpt;
+    const x = v0/Math.SQRT2*t;
+    const y = Math.max(0, v0/Math.SQRT2*t - 0.5*g*t*t);
+    const [cx, cy] = toCanvas(x, y);
+    if (cx > PAD.l + pw) break;
+    first45 ? ctx.moveTo(cx, cy) : ctx.lineTo(cx, cy);
+    first45 = false;
+  }
+  ctx.strokeStyle = '#2a4a2a';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([5, 5]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Main arc
+  const N = 100;
+  ctx.beginPath();
+  let firstPt = true;
+  for (let i = 0; i <= N; i++) {
+    const t = (i/N)*tFlight;
+    const x = v0*Math.cos(angle)*t;
+    const y = Math.max(0, v0*Math.sin(angle)*t - 0.5*g*t*t);
+    const [cx, cy] = toCanvas(x, y);
+    firstPt ? ctx.moveTo(cx, cy) : ctx.lineTo(cx, cy);
+    firstPt = false;
+  }
+  const grad = ctx.createLinearGradient(PAD.l, 0, PAD.l + pw, 0);
+  grad.addColorStop(0, '#ff6b35');
+  grad.addColorStop(1, '#ff6b3540');
+  ctx.strokeStyle = grad;
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // Launch dot
+  const [lx, ly] = toCanvas(0, 0);
+  ctx.beginPath();
+  ctx.arc(lx, ly, 6, 0, Math.PI*2);
+  ctx.fillStyle = '#ff6b35';
+  ctx.fill();
+
+  // Angle arc
+  const arcR = 28;
+  ctx.beginPath();
+  ctx.arc(lx, ly, arcR, -Math.PI/2 - angle, -Math.PI/2, false);
+  ctx.strokeStyle = '#ff6b3566';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Angle label
+  ctx.fillStyle = el < -5*Math.PI/180 ? '#f66' : el < 10*Math.PI/180 ? '#fa0' : '#4f4';
+  ctx.font = 'bold 14px system-ui';
+  ctx.textAlign = 'left';
+  ctx.fillText(`${elDeg.toFixed(1)}°`, lx + arcR + 6, ly - 8);
+
+  // Apex marker
+  if (angle > 0.05) {
+    const tApex = v0*Math.sin(angle)/g;
+    const xApex = v0*Math.cos(angle)*tApex;
+    const yApex = maxH;
+    const [ax, ay] = toCanvas(xApex, yApex);
+    ctx.beginPath();
+    ctx.arc(ax, ay, 3, 0, Math.PI*2);
+    ctx.fillStyle = '#4cf';
+    ctx.fill();
+    ctx.fillStyle = '#4cf';
+    ctx.font = '10px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${yApex.toFixed(1)}m`, ax, ay - 8);
+  }
+
+  // Range label
+  if (range > 0.5) {
+    const [rx, ry] = toCanvas(range, 0);
+    ctx.fillStyle = '#555';
+    ctx.font = '11px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${range.toFixed(1)}m`, rx, ry + 18);
+  }
+
+  // Aim circle (top-left)
+  const aimR = 30, aimX = PAD.l + 38, aimY = PAD.t + 38;
+  ctx.beginPath();
+  ctx.arc(aimX, aimY, aimR, 0, Math.PI*2);
+  ctx.fillStyle = '#111';
+  ctx.fill();
+  ctx.strokeStyle = '#2a2a2a';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  // Cross hairs
+  ctx.strokeStyle = '#222';
+  ctx.beginPath(); ctx.moveTo(aimX - aimR, aimY); ctx.lineTo(aimX + aimR, aimY); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(aimX, aimY - aimR); ctx.lineTo(aimX, aimY + aimR); ctx.stroke();
+  const az = Math.atan2(normal[0], normal[1]);
+  const azDeg = az * 180/Math.PI;
+  ctx.beginPath();
+  ctx.moveTo(aimX, aimY);
+  ctx.lineTo(aimX + Math.sin(az)*aimR*0.85, aimY - Math.cos(az)*aimR*0.85);
+  ctx.strokeStyle = '#4cf';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(aimX + Math.sin(az)*aimR*0.85, aimY - Math.cos(az)*aimR*0.85, 3, 0, Math.PI*2);
+  ctx.fillStyle = '#4cf';
+  ctx.fill();
+  ctx.fillStyle = '#555';
+  ctx.font = '10px system-ui';
+  ctx.textAlign = 'center';
+  ctx.fillText(`${azDeg.toFixed(0)}°`, aimX, aimY + aimR + 14);
+  ctx.fillText('aim', aimX, aimY + aimR + 26);
+
+  // Axis labels
+  ctx.fillStyle = '#333';
+  ctx.font = '10px system-ui';
+  ctx.textAlign = 'left';
+  ctx.fillText('↑ height (m)', 2, PAD.t + 10);
+  ctx.fillText('distance (m) →', PAD.l, H - 8);
+  // 45° label
+  ctx.fillStyle = '#2a4a2a';
+  ctx.font = '9px system-ui';
+  ctx.textAlign = 'right';
+  ctx.fillText('45° optimal', W - PAD.r - 2, PAD.t + 14);
+
+  ctx.textAlign = 'left';
+}
+
+// ── Tennis court ─────────────────────────────────────────────────────────────
+// Coordinate system: x = right across court, y = toward far end, z = up (meters)
+// Player stands at center of near baseline (0, 0, 0), racket at z=1.1m
+const COURT_L  = 23.77;   // total length
+const COURT_SW = 4.115;   // singles half-width
+const COURT_DW = 5.485;   // doubles half-width
+const NET_Y    = 11.885;  // net position (midcourt)
+const NET_H    = 0.914;   // net center height
+const SVC_NEAR = 5.485;   // near service line (from baseline)
+const SVC_FAR  = COURT_L - SVC_NEAR; // far service line
+
+function drawCourt(canvas, normal) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  // ── Camera ──
+  const eye    = [3, -11, 9];
+  const target = [0, 15, 0];
+  const fwdRaw = [target[0]-eye[0], target[1]-eye[1], target[2]-eye[2]];
+  const fwd    = normalize(fwdRaw);
+  const right  = normalize(cross(fwd, [0,0,1]));
+  const camUp  = normalize(cross(right, fwd));
+  const FOV = 370, cx = W*0.5, cy = H*0.58;
+
+  function proj(p) {
+    const r = [p[0]-eye[0], p[1]-eye[1], p[2]-eye[2]];
+    const px = dot(r, right), py = dot(r, camUp), pz = dot(r, fwd);
+    if (pz < 0.5) return null;
+    return [px/pz*FOV + cx, -py/pz*FOV + cy];
+  }
+
+  function l3(a, b, color, lw, dash=[]) {
+    const pa = proj(a), pb = proj(b);
+    if (!pa || !pb) return;
+    ctx.beginPath(); ctx.moveTo(pa[0], pa[1]); ctx.lineTo(pb[0], pb[1]);
+    ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.setLineDash(dash); ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  function poly3(pts, fill, stroke) {
+    const sp = pts.map(proj).filter(Boolean);
+    if (sp.length < 3) return;
+    ctx.beginPath(); ctx.moveTo(sp[0][0], sp[0][1]);
+    for (const p of sp.slice(1)) ctx.lineTo(p[0], p[1]);
+    ctx.closePath();
+    if (fill)   { ctx.fillStyle = fill; ctx.fill(); }
+    if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke(); }
+  }
+
+  // ── Court surface ──
+  poly3([[-COURT_DW,0,0],[COURT_DW,0,0],[COURT_DW,COURT_L,0],[-COURT_DW,COURT_L,0]], '#1b3d6e', null);
+
+  // Near half slightly lighter
+  poly3([[-COURT_DW,0,0],[COURT_DW,0,0],[COURT_DW,NET_Y,0],[-COURT_DW,NET_Y,0]], '#1e4278', null);
+
+  // ── Lines ──
+  // Baselines
+  l3([-COURT_DW,0,0],[COURT_DW,0,0],'#fff',2.5);
+  l3([-COURT_DW,COURT_L,0],[COURT_DW,COURT_L,0],'#fff',2.5);
+  // Doubles sidelines
+  l3([-COURT_DW,0,0],[-COURT_DW,COURT_L,0],'#fff',1.5);
+  l3([COURT_DW,0,0],[COURT_DW,COURT_L,0],'#fff',1.5);
+  // Singles sidelines
+  l3([-COURT_SW,0,0],[-COURT_SW,COURT_L,0],'#fff',1.5);
+  l3([COURT_SW,0,0],[COURT_SW,COURT_L,0],'#fff',1.5);
+  // Service lines
+  l3([-COURT_SW,SVC_NEAR,0],[COURT_SW,SVC_NEAR,0],'#fff',1.5);
+  l3([-COURT_SW,SVC_FAR,0],[COURT_SW,SVC_FAR,0],'#fff',1.5);
+  // Center service line
+  l3([0,SVC_NEAR,0],[0,SVC_FAR,0],'#fff',1.5);
+  // Center marks on baselines
+  l3([0,0,0],[0,0.3,0],'#fff',1.5);
+  l3([0,COURT_L,0],[0,COURT_L-0.3,0],'#fff',1.5);
+
+  // ── Net ──
+  const NH = NET_H * 1.07; // slightly taller at posts
+  l3([-COURT_DW,NET_Y,0],[-COURT_DW,NET_Y,NH],'#aaa',2.5); // left post
+  l3([COURT_DW,NET_Y,0],[COURT_DW,NET_Y,NH],'#aaa',2.5);   // right post
+  l3([-COURT_DW,NET_Y,NH],[COURT_DW,NET_Y,NH],'#fff',3);   // top tape
+  // Net mesh — a few horizontal and vertical lines
+  for (let i = 1; i <= 4; i++) {
+    const h = NH * i/5;
+    l3([-COURT_DW,NET_Y,h],[COURT_DW,NET_Y,h],'#44466680',0.8);
+  }
+  for (let x = -COURT_DW; x <= COURT_DW+0.1; x += COURT_DW/5) {
+    l3([x,NET_Y,0],[x,NET_Y,NH],'#44466680',0.8);
+  }
+
+  // ── Player marker (near baseline center) ──
+  const pp = proj([0, 0.5, 0]);
+  if (pp) {
+    ctx.beginPath(); ctx.arc(pp[0], pp[1], 7, 0, Math.PI*2);
+    ctx.fillStyle = '#ff6b35'; ctx.fill();
+  }
+
+  // ── Trajectory ──
+  const v0 = 20; // m/s (swing speed)
+  const g  = 9.8;
+  const launch = [0, 0.5, 1.1]; // slightly inside baseline, racket height
+  const isForehand = normal[1] >= 0;
+  const shotNormal = isForehand ? normal : normal.map(v => -v);
+  const vel = [shotNormal[0]*v0, shotNormal[1]*v0, shotNormal[2]*v0];
+
+  // Time to z=0: launch.z + vel.z*t - 0.5*g*t² = 0
+  const A = -0.5*g, B = vel[2], C = launch[2];
+  const disc = B*B - 4*A*C; // = B²+2*g*C
+  if (disc < 0) { drawCourtLabel(ctx, W, 'NO ARC', '#888'); return; }
+  const tLand = (-B - Math.sqrt(disc)) / (2*A);
+  if (tLand <= 0.01) { drawCourtLabel(ctx, W, '—', '#555'); return; }
+
+  // Net collision check
+  let hitsNet = false, tNet = Infinity;
+  if (vel[1] > 0.001) {
+    tNet = (NET_Y - launch[1]) / vel[1];
+    if (tNet > 0 && tNet < tLand) {
+      const zAtNet = launch[2] + vel[2]*tNet - 0.5*g*tNet*tNet;
+      if (zAtNet < NET_H) hitsNet = true;
+    }
+  }
+
+  const tEnd = hitsNet ? tNet * 1.02 : tLand;
+  const xLand = launch[0] + vel[0]*tLand;
+  const yLand = launch[1] + vel[1]*tLand;
+
+  const inSingles = Math.abs(xLand) <= COURT_SW;
+  const inLength  = yLand >= NET_Y && yLand <= COURT_L;
+  const inBounds  = !hitsNet && inSingles && inLength;
+  const inDoubles = !hitsNet && Math.abs(xLand) <= COURT_DW && inLength;
+
+  // Shadow on ground (dotted line from launch to landing)
+  if (!hitsNet) {
+    const lsp = proj([launch[0], launch[1], 0]);
+    const ldp = proj([xLand, yLand, 0]);
+    if (lsp && ldp) {
+      ctx.beginPath(); ctx.moveTo(lsp[0], lsp[1]); ctx.lineTo(ldp[0], ldp[1]);
+      ctx.strokeStyle = inBounds ? '#4f4440' : '#f44440'; ctx.lineWidth = 1;
+      ctx.setLineDash([4,4]); ctx.stroke(); ctx.setLineDash([]);
+    }
+  }
+
+  // Arc
+  const N = 80;
+  const arcColor = hitsNet ? '#f06060' : '#ffcc00';
+  for (let i = 1; i <= N; i++) {
+    const t0 = (i-1)/N * tEnd, t1 = i/N * tEnd;
+    const p0 = [launch[0]+vel[0]*t0, launch[1]+vel[1]*t0, launch[2]+vel[2]*t0-0.5*g*t0*t0];
+    const p1 = [launch[0]+vel[0]*t1, launch[1]+vel[1]*t1, launch[2]+vel[2]*t1-0.5*g*t1*t1];
+    if (p0[2] < 0 || p1[2] < 0) break;
+    const sp0 = proj(p0), sp1 = proj(p1);
+    if (!sp0 || !sp1) continue;
+    const alpha = 1 - (i/N)*0.5;
+    ctx.beginPath(); ctx.moveTo(sp0[0], sp0[1]); ctx.lineTo(sp1[0], sp1[1]);
+    ctx.strokeStyle = arcColor + Math.round(alpha*255).toString(16).padStart(2,'0');
+    ctx.lineWidth = 3.5;
+    ctx.stroke();
+  }
+
+  // Ball dot at end
+  const tBall = hitsNet ? tNet : tLand * 0.98;
+  const ballPos = [launch[0]+vel[0]*tBall, launch[1]+vel[1]*tBall, Math.max(0, launch[2]+vel[2]*tBall-0.5*g*tBall*tBall)];
+  const bp = proj(ballPos);
+  if (bp) {
+    ctx.beginPath(); ctx.arc(bp[0], bp[1], 6, 0, Math.PI*2);
+    ctx.fillStyle = arcColor; ctx.fill();
+    ctx.strokeStyle = '#fff4'; ctx.lineWidth = 1; ctx.stroke();
+  }
+
+  // Landing circle
+  if (!hitsNet) {
+    const lp = proj([xLand, yLand, 0.02]);
+    if (lp) {
+      ctx.beginPath(); ctx.arc(lp[0], lp[1], 9, 0, Math.PI*2);
+      ctx.strokeStyle = inBounds ? '#4f4' : inDoubles ? '#fa0' : '#f44';
+      ctx.lineWidth = 2; ctx.stroke();
+    }
+  }
+
+  // Court labels (far side)
+  const labels = [['N', [-COURT_SW*0.5, NET_Y*1.4, 0]], ['N', [COURT_SW*0.5, NET_Y*1.4, 0]]];
+  // Add "IN" / "OUT" region highlights done via label only
+
+  const statusLabel = hitsNet ? 'NET' : inBounds ? 'IN' : inDoubles ? 'OUT (doubles)' : 'OUT';
+  const statusColor = hitsNet ? '#f88' : inBounds ? '#4f4' : '#f66';
+  drawCourtLabel(ctx, W, statusLabel, statusColor, hitsNet ? null : `${Math.hypot(xLand, yLand).toFixed(1)}m`);
+
+  // Forehand / backhand — screen facing toward net (y > 0) or away (y < 0)
+  ctx.font = 'bold 28px system-ui';
+  ctx.fillStyle = isForehand ? '#4af' : '#f94';
+  ctx.textAlign = 'left';
+  ctx.fillText(isForehand ? 'FOREHAND' : 'BACKHAND', 20, 44);
+}
+
+function drawCourtLabel(ctx, W, label, color, sub) {
+  ctx.font = 'bold 32px system-ui';
+  ctx.fillStyle = color;
+  ctx.textAlign = 'right';
+  ctx.fillText(label, W - 20, 44);
+  if (sub) {
+    ctx.font = '13px system-ui';
+    ctx.fillStyle = '#666';
+    ctx.fillText(sub, W - 20, 64);
+  }
+  ctx.textAlign = 'left';
+}
+
+// ── Quaternion → Yaw/Pitch/Roll (intrinsic ZYX / Tait-Bryan) ─────────────────
+// quat is [x, y, z, w] (Generic Sensor API convention)
+function quatToEuler([x, y, z, w]) {
+  const sinP = 2*(w*y - z*x);
+  const pitch = Math.abs(sinP) >= 1 ? Math.sign(sinP)*90 : Math.asin(sinP)*180/Math.PI;
+  const yaw   = Math.atan2(2*(w*z + x*y), 1 - 2*(y*y + z*z)) * 180/Math.PI;
+  const roll  = Math.atan2(2*(w*x + y*z), 1 - 2*(x*x + y*y)) * 180/Math.PI;
+  return { yaw, pitch, roll };
+}
+
+// ── Socket ────────────────────────────────────────────────────────────────────
+const socket = io();
+let hasData = false;
+
+socket.on('connect', () => {
+  document.getElementById('status').textContent = 'Server connected — waiting for phone…';
+  document.getElementById('status').className = 'ok';
+});
+
+socket.on('disconnect', () => {
+  document.getElementById('status').textContent = 'Disconnected from server';
+  document.getElementById('status').className = 'err';
+});
+
+socket.on('orientation', ({ normal, quat, az, el }) => {
+  if (!hasData) {
+    hasData = true;
+    document.getElementById('waiting').style.display = 'none';
+    document.getElementById('main').style.display = 'flex';
+  }
+  document.getElementById('status').textContent = `Live — az ${az.toFixed(1)}° el ${el.toFixed(1)}°`;
+  document.getElementById('qval').textContent = `[${quat.map(v => v.toFixed(3)).join(', ')}]`;
+  document.getElementById('nval').textContent = `[${normal.map(v => v.toFixed(3)).join(', ')}]`;
+  document.getElementById('azval').textContent = az.toFixed(1) + '°';
+  document.getElementById('elval').textContent = el.toFixed(1) + '°';
+  const euler = quatToEuler(quat);
+  document.getElementById('yawval').textContent   = euler.yaw.toFixed(1)   + '°';
+  document.getElementById('pitchval').textContent = euler.pitch.toFixed(1) + '°';
+  document.getElementById('rollval').textContent  = euler.roll.toFixed(1)  + '°';
+
+  const courtNormal = computeCourtNormal(quat);
+  drawPhone(document.getElementById('phone3d'), normal, quat);
+  drawParabola(document.getElementById('parabola'), normal);
+  drawCourt(document.getElementById('court'), courtNormal);
+});
+
+socket.on('cal_waiting',  ()        => calOverlay('waiting',     0,   'Phase 1 — Face the Net'));
+socket.on('cal_start',    ()        => calOverlay('calibrating', 0,   'Phase 1 — Face the Net'));
+socket.on('cal_restart',  ()        => calOverlay('waiting',     0,   'Phase 1 — Face the Net'));
+socket.on('cal_progress', ({ pct }) => calOverlay('calibrating', pct, 'Phase 1 — Face the Net'));
+socket.on('cal_done', ({ qref: q }) => {
+  qref = q;
+  calOverlay('done', 1, 'Phase 1 — Face the Net', '✓ Forward set — now do Phase 2');
+});
+
+socket.on('cal2_waiting',  ()        => calOverlay('waiting',     0,   'Phase 2 — Face Left'));
+socket.on('cal2_start',    ()        => calOverlay('calibrating', 0,   'Phase 2 — Face Left'));
+socket.on('cal2_restart',  ()        => calOverlay('waiting',     0,   'Phase 2 — Face Left'));
+socket.on('cal2_progress', ({ pct }) => calOverlay('calibrating', pct, 'Phase 2 — Face Left'));
+socket.on('cal2_done', ({ qref: qleft }) => {
+  const qrelLeft = qmul(qinv(qref), qleft);
+  leftInRef = normalize(qrot(qrelLeft, [0, 0, 1]));
+  calOverlay('done', 1, 'Phase 2 — Face Left', '✓ Court frame ready');
+});
+</script>
+</body>
+</html>
