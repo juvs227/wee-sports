@@ -187,3 +187,7 @@ Host first chooses to create the room
 Any step- User ends session
 a. The system notifies the players and closes the room.
 b. Game ends without completion, active players returned to lobby.
+
+### Adding a Test Case
+
+[Testing guide](TESTING.md)
