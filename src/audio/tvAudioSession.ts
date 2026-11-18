@@ -26,11 +26,7 @@ export function createTvAudioSession(sound: AudioOutput) {
     }
     sound.setActive(!next.paused);
     if (next.phase === 'countdown' && next.gameId) countedGame = next.gameId;
-    if (
-      next.phase === 'game' &&
-      next.gameId &&
-      startedGame !== next.gameId
-    ) {
+    if (next.phase === 'game' && next.gameId && startedGame !== next.gameId) {
       // Observe completion even while paused/muted; reconnect must not replay it.
       startedGame = next.gameId;
       if (!next.paused && countedGame === next.gameId) sound.play('start');

@@ -14,7 +14,9 @@
     ],
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
-    "noEmit": true
+    "noEmit": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler"
   },
   "include": [
     "src/**/*.ts",
@@ -22,5 +24,13 @@
     "components/**/*.ts",
     "*.ts",
     "shared/**/*.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build",
+    ".phone-build",
+    ".local-preview",
+    "apps/controller/.expo"
   ]
 }

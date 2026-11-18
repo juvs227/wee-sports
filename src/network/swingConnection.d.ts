@@ -21,7 +21,14 @@ export interface SwingConnectionOptions {
     role: 'phone' | 'game';
     onSwing?: (event: SwingEvent) => void;
     onStatus?: (text: string) => void;
-    onAck?: (event: { id?: string; ok?: boolean; error?: string; receivers?: number; roundTripMs?: number; timingScope?: 'game' | 'server' }) => void;
+  onAck?: (event: {
+    id?: string;
+    ok?: boolean;
+    error?: string;
+    receivers?: number;
+    roundTripMs?: number;
+    timingScope?: 'game' | 'server';
+  }) => void;
     onSent?: (event: SwingEvent) => void;
 }
 
@@ -30,6 +37,4 @@ export interface SwingConnection {
     close(): void;
 }
 
-export function connectSwings(
-    options: SwingConnectionOptions
-): SwingConnection;
+export function connectSwings(options: SwingConnectionOptions): SwingConnection;
