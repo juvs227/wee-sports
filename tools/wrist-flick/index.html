@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Wrist Flick</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #0d0d0d; color: #eee; font-family: system-ui, sans-serif;
+  padding: 20px 16px; display: flex; flex-direction: column;
+  align-items: center; gap: 18px; min-height: 100dvh;
+}
+h1 { font-size: 13px; color: #444; letter-spacing: 2px; text-transform: uppercase; }
+#status { font-size: 12px; color: #555; }
+#status.ok  { color: #4f4; }
+#status.err { color: #f44; }
+
+#enable {
+  padding: 14px 32px; font-size: 18px; font-weight: bold;
+  border-radius: 10px; border: none; background: #f90; color: #000; cursor: pointer;
+}
+
+#record-btn {
+  width: 100%; max-width: 320px; padding: 16px; font-size: 17px; font-weight: bold;
+  font-family: system-ui; border-radius: 10px; border: none; cursor: pointer;
+  background: #4cf; color: #000; transition: background 0.15s;
+}
+#record-btn.recording { background: #f44; color: #fff; }
+#record-btn { display: none; }
+
+#live-wrap {
+  display: none; width: 100%; max-width: 320px;
+  flex-direction: column; gap: 6px;
+}
+#live-bar-bg { width: 100%; height: 8px; background: #1a1a1a; border-radius: 4px; overflow: hidden; }
+#live-bar    { height: 100%; width: 0%; background: #4cf; border-radius: 4px; transition: width 0.03s; }
+#live-val    { font-size: 12px; color: #555; font-variant-numeric: tabular-nums; text-align: right; }
+
+canvas { display: none; border-radius: 10px; background: #111; }
+
+#peak-info {
+  display: none; text-align: center; font-size: 13px; color: #555; line-height: 2;
+}
+#peak-info b { color: #ff6b35; font-size: 18px; }
+</style>
+</head>
+<body>
+<h1>Wrist Flick</h1>
+<div id="status">tap to start</div>
+
+<button id="enable">Enable Sensors</button>
+<button id="record-btn">Record Swing</button>
+
+<div id="live-wrap">
+  <div id="live-bar-bg"><div id="live-bar"></div></div>
+  <div id="live-val">0 °/s</div>
+</div>
+
+<canvas id="graph" width="320" height="220"></canvas>
+
+<div id="peak-info">
+  peak: <b id="peak-val">—</b> °/s &nbsp; at <span id="peak-time">—</span>s
+</div>
+
+<script>
+const statusEl   = document.getElementById('status');
+const recordBtn  = document.getElementById('record-btn');
+const liveWrap   = document.getElementById('live-wrap');
+const liveBar    = document.getElementById('live-bar');
+const liveValEl  = document.getElementById('live-val');
+const graphCanvas = document.getElementById('graph');
+const peakInfo   = document.getElementById('peak-info');
+
+function setStatus(msg, err) {
+  statusEl.textContent = msg;
+  statusEl.className = err ? 'err' : (msg === 'tap to start' ? '' : 'ok');
+}
+
+// ── Recording ──────────────────────────────────────────────────────────────────
+let isRecording = false;
+let frames = [];   // { t, mag, alpha, beta, gamma }
+let recordStart = null;
+const MAX_DURATION_MS = 5000; // auto-stop after 5s
+
+function startRecording() {
+  isRecording = true;
+  frames = [];
+  recordStart = performance.now();
+  recordBtn.textContent = 'Stop';
+  recordBtn.className = 'recording';
+  graphCanvas.style.display = 'none';
+  peakInfo.style.display = 'none';
+  setStatus('recording…');
+}
+
+function stopRecording() {
+  isRecording = false;
+  recordBtn.textContent = 'Record Again';
+  recordBtn.className = '';
+  if (!frames.length) { setStatus('nothing recorded', true); return; }
+  setStatus(`${frames.length} frames · ${((frames[frames.length-1].t - recordStart)/1000).toFixed(2)}s`, false);
+  drawGraph();
+}
+
+recordBtn.addEventListener('click', () => {
+  isRecording ? stopRecording() : startRecording();
+});
+
+// ── Sensor ─────────────────────────────────────────────────────────────────────
+function onMotion(e) {
+  const r = e.rotationRate;
+  if (!r) return;
+
+  const alpha = r.alpha ?? 0, beta = r.beta ?? 0, gamma = r.gamma ?? 0;
+  const mag = Math.hypot(alpha, beta, gamma);
+
+  // Live bar
+  liveBar.style.width = Math.min(100, mag / 7) + '%';
+  liveBar.style.background = mag > 300 ? '#ff6b35' : mag > 150 ? '#ffe44d' : '#4cf';
+  liveValEl.textContent = mag.toFixed(0) + ' °/s';
+
+  if (isRecording) {
+    const t = performance.now();
+    frames.push({ t, mag, alpha, beta, gamma });
+    if (t - recordStart >= MAX_DURATION_MS) stopRecording();
+  }
+}
+
+// ── Graph ──────────────────────────────────────────────────────────────────────
+function drawGraph() {
+  const ctx = graphCanvas.getContext('2d');
+  const W = graphCanvas.width, H = graphCanvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const PAD = { l: 44, r: 16, t: 20, b: 36 };
+  const pw = W - PAD.l - PAD.r;
+  const ph = H - PAD.t - PAD.b;
+
+  const t0   = frames[0].t;
+  const tEnd = frames[frames.length - 1].t - t0;
+  const mags = frames.map(f => f.mag);
+  const maxMag = Math.max(...mags, 50);
+
+  function toCanvas(t, m) {
+    return [PAD.l + (t / tEnd) * pw, PAD.t + ph - (m / maxMag) * ph];
+  }
+
+  // Grid lines
+  ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const m = (i / 4) * maxMag;
+    const [, y] = toCanvas(0, m);
+    ctx.beginPath(); ctx.moveTo(PAD.l, y); ctx.lineTo(PAD.l + pw, y); ctx.stroke();
+    ctx.fillStyle = '#333'; ctx.font = '9px system-ui'; ctx.textAlign = 'right';
+    ctx.fillText(Math.round(m), PAD.l - 4, y + 3);
+  }
+
+  // Time axis ticks
+  const nTicks = Math.min(5, Math.floor(tEnd / 200));
+  for (let i = 1; i <= nTicks; i++) {
+    const t = (i / nTicks) * tEnd;
+    const [x] = toCanvas(t, 0);
+    const [, y0] = toCanvas(t, 0);
+    ctx.beginPath(); ctx.moveTo(x, PAD.t); ctx.lineTo(x, PAD.t + ph);
+    ctx.strokeStyle = '#1a1a1a'; ctx.stroke();
+    ctx.fillStyle = '#333'; ctx.font = '9px system-ui'; ctx.textAlign = 'center';
+    ctx.fillText((t / 1000).toFixed(1) + 's', x, PAD.t + ph + 14);
+  }
+
+  // Baseline
+  const [, baseY] = toCanvas(0, 0);
+  ctx.beginPath(); ctx.moveTo(PAD.l, baseY); ctx.lineTo(PAD.l + pw, baseY);
+  ctx.strokeStyle = '#2a2a2a'; ctx.lineWidth = 1.5; ctx.stroke();
+
+  // Rotation rate curve
+  ctx.beginPath();
+  for (let i = 0; i < frames.length; i++) {
+    const [x, y] = toCanvas(frames[i].t - t0, frames[i].mag);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  const grad = ctx.createLinearGradient(PAD.l, PAD.t, PAD.l, PAD.t + ph);
+  grad.addColorStop(0, '#ff6b35');
+  grad.addColorStop(1, '#4cf');
+  ctx.strokeStyle = grad; ctx.lineWidth = 2.5; ctx.stroke();
+
+  // Fill under curve
+  ctx.lineTo(...toCanvas(frames[frames.length-1].t - t0, 0));
+  ctx.lineTo(...toCanvas(0, 0));
+  ctx.closePath();
+  const fillGrad = ctx.createLinearGradient(PAD.l, PAD.t, PAD.l, PAD.t + ph);
+  fillGrad.addColorStop(0, '#ff6b3522');
+  fillGrad.addColorStop(1, '#44ccff11');
+  ctx.fillStyle = fillGrad; ctx.fill();
+
+  // Peak
+  let peakIdx = 0;
+  for (let i = 1; i < frames.length; i++)
+    if (frames[i].mag > frames[peakIdx].mag) peakIdx = i;
+
+  const pf = frames[peakIdx];
+  const [px, py] = toCanvas(pf.t - t0, pf.mag);
+
+  // Peak vertical line
+  ctx.beginPath(); ctx.moveTo(px, PAD.t); ctx.lineTo(px, PAD.t + ph);
+  ctx.strokeStyle = '#ff6b3566'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]); ctx.stroke(); ctx.setLineDash([]);
+
+  // Peak dot
+  ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI * 2);
+  ctx.fillStyle = '#ff6b35'; ctx.fill();
+  ctx.strokeStyle = '#fff4'; ctx.lineWidth = 1.5; ctx.stroke();
+
+  // Peak label
+  const labelX = px > W - 80 ? px - 8 : px + 8;
+  ctx.fillStyle = '#ff6b35';
+  ctx.font = 'bold 13px system-ui';
+  ctx.textAlign = px > W - 80 ? 'right' : 'left';
+  ctx.fillText(pf.mag.toFixed(0) + ' °/s', labelX, py - 10);
+
+  // Axis labels
+  ctx.fillStyle = '#333'; ctx.font = '10px system-ui'; ctx.textAlign = 'left';
+  ctx.fillText('↑ °/s', 2, PAD.t + 10);
+  ctx.fillText('time →', PAD.l, H - 4);
+
+  graphCanvas.style.display = 'block';
+
+  // Peak info below graph
+  document.getElementById('peak-val').textContent = pf.mag.toFixed(1);
+  document.getElementById('peak-time').textContent = ((pf.t - t0) / 1000).toFixed(3);
+  peakInfo.style.display = 'block';
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+document.getElementById('enable').addEventListener('click', async () => {
+  document.getElementById('enable').style.display = 'none';
+
+  if (typeof DeviceMotionEvent?.requestPermission === 'function') {
+    try { await DeviceMotionEvent.requestPermission(); }
+    catch { setStatus('Permission denied', true); return; }
+  }
+
+  window.addEventListener('devicemotion', onMotion);
+  recordBtn.style.display = 'block';
+  liveWrap.style.display = 'flex';
+  setStatus('ready', false);
+});
+</script>
+</body>
+</html>

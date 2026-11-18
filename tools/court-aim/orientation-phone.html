@@ -30,9 +30,6 @@ h2 { font-size: 14px; color: #555; text-transform: uppercase; letter-spacing: 1p
 #mode-live.active  { color: #4cf; }
 #mode-swing.active { color: #ff6b35; }
 
-#swing-state { display: none; font-size: 15px; color: #555; text-align: center; letter-spacing: 0.5px; }
-#swing-state.waiting  { color: #555; }
-#swing-state.detected { color: #ff6b35; font-weight: bold; }
 
 #accel-bar-wrap {
   display: none; width: 100%; max-width: 320px; gap: 8px; align-items: center;
@@ -41,6 +38,19 @@ h2 { font-size: 14px; color: #555; text-transform: uppercase; letter-spacing: 1p
 #accel-bar-bg { flex: 1; height: 6px; background: #1a1a1a; border-radius: 3px; overflow: hidden; }
 #accel-bar { height: 100%; width: 0%; background: #ff6b35; border-radius: 3px; transition: width 0.05s; }
 #accel-val { font-size: 11px; color: #555; font-variant-numeric: tabular-nums; width: 42px; text-align: right; }
+
+#record-wrap { display: none; width: 100%; max-width: 320px; flex-direction: column; align-items: center; gap: 10px; }
+#record-btn {
+  width: 100%; padding: 14px; font-size: 16px; font-weight: bold; font-family: system-ui;
+  border-radius: 10px; border: none; cursor: pointer;
+  background: #ff6b35; color: #000; transition: background 0.15s;
+}
+#record-btn.recording { background: #f44; color: #fff; }
+#record-state { font-size: 13px; color: #555; }
+
+#playback-wrap { display: none; width: 100%; max-width: 320px; flex-direction: column; gap: 8px; }
+#swing-slider { width: 100%; accent-color: #ff6b35; }
+#slider-info { display: flex; justify-content: space-between; font-size: 11px; color: #555; font-variant-numeric: tabular-nums; }
 
 </style>
 </head>
@@ -58,7 +68,19 @@ h2 { font-size: 14px; color: #555; text-transform: uppercase; letter-spacing: 1p
   <button id="mode-swing">Swing</button>
 </div>
 
-<div id="swing-state" class="waiting">waiting for swing…</div>
+<div id="record-wrap">
+  <button id="record-btn">Record Swing</button>
+  <div id="record-state"></div>
+</div>
+
+<div id="playback-wrap">
+  <canvas id="swing-graphs" width="320" height="200" style="width:100%;max-width:320px"></canvas>
+  <input type="range" id="swing-slider" min="0" max="0" value="0">
+  <div id="slider-info">
+    <span id="slider-time">0.0s</span>
+    <span id="slider-accel">accel: — &nbsp; rot: —</span>
+  </div>
+</div>
 
 <div id="accel-bar-wrap">
   <label>accel</label>
@@ -332,6 +354,133 @@ let winPendingStart = null;
 let winLastMs      = null;
 let confirmed      = false;
 
+// ── Recording ─────────────────────────────────────────────────────────────────
+let isRecording   = false;
+let recordFrames  = [];   // { t, normal, quat, accelMag, rotMag }
+let recordStart   = null;
+let currentAccelMag = 0;
+let currentRotMag   = 0;
+
+function startRecording() {
+  isRecording  = true;
+  recordFrames = [];
+  recordStart  = performance.now();
+  document.getElementById('record-btn').textContent = 'Stop Recording';
+  document.getElementById('record-btn').className = 'recording';
+  document.getElementById('record-state').textContent = 'recording…';
+  document.getElementById('playback-wrap').style.display = 'none';
+}
+
+function stopRecording() {
+  isRecording = false;
+  document.getElementById('record-btn').textContent = 'Record Swing';
+  document.getElementById('record-btn').className = '';
+  const n = recordFrames.length;
+  document.getElementById('record-state').textContent = n ? `${n} frames` : 'nothing recorded';
+  if (!n) return;
+  const slider = document.getElementById('swing-slider');
+  slider.min = 0;
+  slider.max = n - 1;
+  slider.value = 0;
+  document.getElementById('playback-wrap').style.display = 'flex';
+  drawSwingGraphs(0);
+  showFrame(0);
+}
+
+function showFrame(i) {
+  const f = recordFrames[i];
+  if (!f) return;
+  const tSec = ((f.t - recordStart) / 1000).toFixed(2);
+  document.getElementById('slider-time').textContent = `${tSec}s`;
+  document.getElementById('slider-accel').textContent =
+    `accel: ${f.accelMag.toFixed(0)}  rot: ${f.rotMag.toFixed(0)}°/s`;
+  const bar = document.getElementById('accel-bar');
+  bar.style.width = Math.min(100, (f.accelMag / 50) * 100) + '%';
+  bar.style.background = f.accelMag > CONFIRM_THRESH ? '#ff9955' : '#ff6b35';
+  document.getElementById('accel-val').textContent = f.accelMag.toFixed(0);
+  render(f.normal, true);
+  emitOrientation(f.normal, f.quat);
+  drawSwingGraphs(i);
+}
+
+function drawSwingGraphs(markerIdx) {
+  const canvas = document.getElementById('swing-graphs');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const n = recordFrames.length;
+  if (!n) return;
+  const t0 = recordFrames[0].t;
+  const tEnd = recordFrames[n - 1].t - t0 || 1;
+
+  const PAD = { l: 36, r: 10, t: 8, b: 8 };
+  const midY = H / 2;
+  const graphH = midY - PAD.t - PAD.b - 6; // height of each sub-graph
+  const pw = W - PAD.l - PAD.r;
+
+  const accelMax = Math.max(...recordFrames.map(f => f.accelMag), 1);
+  const rotMax   = Math.max(...recordFrames.map(f => f.rotMag), 1);
+
+  function toX(t) { return PAD.l + ((t - t0) / tEnd) * pw; }
+
+  function drawMiniGraph(topY, values, maxVal, color, label) {
+    // axis label
+    ctx.fillStyle = '#333'; ctx.font = '9px system-ui'; ctx.textAlign = 'right';
+    ctx.fillText(label, PAD.l - 2, topY + 10);
+    ctx.fillText(Math.round(maxVal), PAD.l - 2, topY + graphH);
+
+    // baseline
+    ctx.beginPath(); ctx.moveTo(PAD.l, topY + graphH); ctx.lineTo(PAD.l + pw, topY + graphH);
+    ctx.strokeStyle = '#1e1e1e'; ctx.lineWidth = 1; ctx.stroke();
+
+    // curve
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const x = toX(recordFrames[i].t);
+      const y = topY + graphH - (values[i] / maxVal) * graphH;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
+
+    // fill
+    ctx.lineTo(toX(recordFrames[n-1].t), topY + graphH);
+    ctx.lineTo(PAD.l, topY + graphH);
+    ctx.closePath();
+    ctx.fillStyle = color + '22'; ctx.fill();
+  }
+
+  const accels = recordFrames.map(f => f.accelMag);
+  const rots   = recordFrames.map(f => f.rotMag);
+
+  drawMiniGraph(PAD.t,          accels, accelMax, '#ff6b35', 'm/s²');
+  drawMiniGraph(midY + PAD.b,   rots,   rotMax,   '#4cf',    '°/s');
+
+  // divider
+  ctx.beginPath(); ctx.moveTo(PAD.l, midY); ctx.lineTo(PAD.l + pw, midY);
+  ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 1; ctx.stroke();
+
+  // marker line
+  const mx = toX(recordFrames[markerIdx].t);
+  ctx.beginPath(); ctx.moveTo(mx, PAD.t); ctx.lineTo(mx, H - PAD.b);
+  ctx.strokeStyle = '#fff4'; ctx.lineWidth = 1.5; ctx.stroke();
+
+  // marker dot on each graph
+  const ay = PAD.t + graphH - (accels[markerIdx] / accelMax) * graphH;
+  const ry = midY + PAD.b + graphH - (rots[markerIdx] / rotMax) * graphH;
+  for (const [dy, col] of [[ay, '#ff6b35'], [ry, '#4cf']]) {
+    ctx.beginPath(); ctx.arc(mx, dy, 4, 0, Math.PI * 2);
+    ctx.fillStyle = col; ctx.fill();
+  }
+}
+
+document.getElementById('record-btn').addEventListener('click', () => {
+  isRecording ? stopRecording() : startRecording();
+});
+document.getElementById('swing-slider').addEventListener('input', e => {
+  showFrame(Number(e.target.value));
+});
+
 // ── Sensor state ──────────────────────────────────────────────────────────────
 let currentNormal = [0, 0, 1];
 let currentQuat   = [0, 0, 0, 1];
@@ -363,23 +512,23 @@ function onOrientation(normal, quat) {
     render(normal, false);
     emitOrientation(normal, quat);
   }
+  if (mode === 'swing' && isRecording) {
+    recordFrames.push({ t: performance.now(), normal: [...normal], quat: [...quat], accelMag: currentAccelMag, rotMag: currentRotMag });
+  }
 }
 
 // Called on every devicemotion — accelVec is in phone space, mag is its magnitude
-function onMotion(accelVec, mag) {
+function onMotion(accelVec, mag, rotMag) {
+  currentAccelMag = mag;
+  currentRotMag   = rotMag;
   if (mode !== 'swing') return;
 
-  // Update accel bar
-  const bar = document.getElementById('accel-bar');
-  const pct = Math.min(100, (mag / 50) * 100);
-  bar.style.width = pct + '%';
-  bar.style.background = mag > CONFIRM_THRESH ? '#ff9955' : '#ff6b35';
-  document.getElementById('accel-val').textContent = mag.toFixed(0);
-
-  if (trajectoryMode) {
-    runTrajectoryWindow(accelVec, mag);
-  } else {
-    runSimpleDetection(mag);
+  // Update accel bar live (not during playback)
+  if (isRecording || !recordFrames.length) {
+    const bar = document.getElementById('accel-bar');
+    bar.style.width = Math.min(100, (mag / 50) * 100) + '%';
+    bar.style.background = mag > CONFIRM_THRESH ? '#ff9955' : '#ff6b35';
+    document.getElementById('accel-val').textContent = mag.toFixed(0);
   }
 }
 
@@ -416,19 +565,18 @@ function setMode(m) {
   document.getElementById('mode-live').className  = m === 'live'  ? 'active' : '';
   document.getElementById('mode-swing').className = m === 'swing' ? 'active' : '';
 
-  const swingState = document.getElementById('swing-state');
-  const accelWrap  = document.getElementById('accel-bar-wrap');
-  const trajToggle = document.getElementById('traj-toggle');
+  const recordWrap  = document.getElementById('record-wrap');
+  const accelWrap   = document.getElementById('accel-bar-wrap');
+  const playbackWrap = document.getElementById('playback-wrap');
 
   if (m === 'swing') {
-    swingState.style.display = 'block';
-    swingState.textContent = hasSwing ? 'last swing frozen — waiting for next…' : 'waiting for swing…';
-    swingState.className = 'waiting';
-    accelWrap.style.display = 'flex';
-    if (hasSwing) render(swingNormal, true);
+    recordWrap.style.display = 'flex';
+    accelWrap.style.display  = 'flex';
+    if (recordFrames.length) playbackWrap.style.display = 'flex';
   } else {
-    swingState.style.display = 'none';
-    accelWrap.style.display = 'none';
+    recordWrap.style.display  = 'none';
+    accelWrap.style.display   = 'none';
+    playbackWrap.style.display = 'none';
     render(currentNormal, false);
   }
 }
@@ -450,7 +598,9 @@ async function startSensors() {
     if (!a) return;
     const vec = [a.x ?? 0, a.y ?? 0, a.z ?? 0];
     const mag = Math.hypot(...vec);
-    onMotion(vec, mag);
+    const r = e.rotationRate;
+    const rotMag = r ? Math.hypot(r.alpha ?? 0, r.beta ?? 0, r.gamma ?? 0) : 0;
+    onMotion(vec, mag, rotMag);
   });
 
   let nativeSensor = null;
