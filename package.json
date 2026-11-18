@@ -10,7 +10,7 @@
     "play": "npm run build && node server/main.js --production",
     "build": "vite build && node scripts/verify-build.mjs",
     "check": "gts check",
-    "lint": "gts lint",
+    "lint": "tsc --noEmit && eslint src/ --fix",
     "clean": "gts clean",
     "compile": "tsc",
     "fix": "gts fix",

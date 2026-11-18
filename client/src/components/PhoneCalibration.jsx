@@ -36,7 +36,7 @@ export function PhoneCalibration({ progress = 0, calState = 'settling' }) {
         </svg>
       </div>
       <div className="phone-cal__text">
-        <p className="phone-cal__title">Face the net</p>
+        <p className="phone-cal__title">Face the screen</p>
         <p className="phone-cal__status" data-state={calState} data-done={done}>
           {statusText}
         </p>

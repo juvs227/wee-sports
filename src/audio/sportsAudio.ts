@@ -377,7 +377,8 @@ export function createSportsAudio(
       try {
         source.start();
         // Audio-clock deadline also stops a loop if its final game event is lost.
-        if (definition.maxDuration) source.stop(context.currentTime + definition.maxDuration);
+        if (definition.maxDuration)
+          source.stop(context.currentTime + definition.maxDuration);
       } catch {
         voice.finish();
         return false;

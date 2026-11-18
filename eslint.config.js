@@ -1,15 +1,27 @@
-import fs from 'fs';
-import path from 'path';
+// eslint.config.js
 import gts from 'gts';
+import customIgnores from './eslint.ignores.js';
 
-let customConfig = [];
-const ignoresPath = path.resolve('./eslint.ignores.js');
-
-// Check if eslint.ignores.js exists before loading it
-if (fs.existsSync(ignoresPath)) {
-  // Use dynamic import for ES modules instead of require()
-  const ignoresModule = await import('./eslint.ignores.js');
-  customConfig = [{ ignores: ignoresModule.default || ignoresModule }];
-}
-
-export default [...customConfig, ...gts];
+export default [
+  { ignores: customIgnores },
+  {
+    languageOptions: {
+      globals: {
+        window: 'readonly',
+        document: 'readonly',
+        navigator: 'readonly',
+        location: 'readonly',
+        performance: 'readonly',
+        WebSocket: 'readonly',
+        URL: 'readonly',
+        URLSearchParams: 'readonly',
+        ResizeObserver: 'readonly',
+        DeviceMotionEvent: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+      }
+    }
+  },
+  ...gts
+];
