@@ -44,6 +44,38 @@ const state = overrides => receive({type: 'wee:lobby-state', sport: 'bowling', p
 const command = overrides => receive({type: 'wee:game-command', command: {id: 'cmd-1', gameId: 'bowl-one', action: 'new-match', ...overrides}});
 const result = () => parent.postMessage.mock.calls.filter(([message]) => message.type === 'wee:game-command-result').at(-1)?.[0].result;
 
+const aim = overrides => receive({type: 'wee:game-aim', event: {
+  gameId: 'bowl-one', generation: 3, hostEpoch: 2, seq: 1,
+  player: 1, aim: .173, locked: false, ...overrides,
+}});
+
+test('current phone aim reaches the TV precisely without rebuilding scorecards per packet', async () => {
+  await import('@wee/src/bowlingMain.ts'); state({generation: 3, hostEpoch: 2});
+  const getState = vi.spyOn(runtime.world, 'getState');
+  aim({}); aim({seq: 2, aim: .179, locked: true});
+  expect(runtime.world.setAim.mock.calls).toEqual([[.173], [.179]]);
+  expect(getState).not.toHaveBeenCalled();
+  aim({seq: 2, aim: -.8}); aim({seq: 0});
+  expect(runtime.world.setAim).toHaveBeenCalledTimes(2);
+});
+
+test('stale, wrong-player and inactive aim cannot move the lane guide', async () => {
+  await import('@wee/src/bowlingMain.ts'); state({generation: 3, hostEpoch: 2});
+  for (const invalid of [{gameId: 'old'}, {generation: 2}, {hostEpoch: 1},
+    {player: 2}, {seq: -1}, {seq: 1.5}, {aim: 1.01}, {aim: NaN}, {locked: null}]) aim(invalid);
+  state({generation: 3, hostEpoch: 2, paused: true}); aim({});
+  state({generation: 3, hostEpoch: 2, connected: false}); aim({});
+  state({generation: 3, hostEpoch: 2});
+  runtime.world.rolling = true; runtime.world.onState(runtime.world.getState()); aim({});
+  expect(runtime.world.setAim).not.toHaveBeenCalled();
+  runtime.world.rolling = false; runtime.world.onState(runtime.world.getState());
+  aim({seq: 50});
+  state({generation: 4, hostEpoch: 3});
+  aim({seq: 51});
+  aim({generation: 4, hostEpoch: 3, seq: 0, aim: .211});
+  expect(runtime.world.setAim.mock.calls).toEqual([[.173], [.211]]);
+});
+
 test('phone restart is scoped to the current match and a duplicate cannot restart twice', async () => {
   await import('@wee/src/bowlingMain.ts'); state({});
   expect(document.getElementById('replay').hidden).toBe(true);

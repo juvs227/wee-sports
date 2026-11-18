@@ -27,8 +27,8 @@ function lane() {
 test.each([-1, 1])('aim %s moves the preview and delivered ball to the same screen side', direction => {
   const {world, physics, aimLine, screenX} = lane();
   world.setAim(direction * 0.5);
-  const points = aimLine.geometry.getAttribute('position');
-  expect(Math.sign(screenX(points.getX(1), points.getY(1), points.getZ(1)))).toBe(direction);
+  const points = aimLine.geometry.getAttribute('instanceEnd');
+  expect(Math.sign(screenX(points.getX(0), points.getY(0), points.getZ(0)))).toBe(direction);
   expect(world.roll({player: 1, power: 0.65, aim: direction * 0.5, spin: 0}).ok).toBe(true);
   for (let frame = 0; frame < 480 && physics.ball.position.z < 8; frame++) physics.step(FIXED_STEP);
   const ball = physics.ball.position;

@@ -4,9 +4,19 @@ import { createInputId } from './inputId.js';
 import { isSwing } from '../../shared/protocol.js';
 
 // Standalone prototypes retain their relay; embedded tennis uses its lobby.
-export function connectSwings({ room, role, onSwing = () => {}, onStatus = () => {}, onAck = () => {}, onSent = () => {} }) {
-  if (window.parent !== window && new URLSearchParams(location.search).has('lobby')) {
-    return connectLobbySwings({ role, onSwing, onStatus, onAck, onSent });
+export function connectSwings({
+  room,
+  role,
+  onSwing = () => {},
+  onStatus = () => {},
+  onAck = () => {},
+  onSent = () => {},
+}) {
+  if (
+    window.parent !== window &&
+    new URLSearchParams(location.search).has('lobby')
+  ) {
+    return connectLobbySwings({role, onSwing, onStatus, onAck, onSent});
   }
   let socket;
   let retry;
@@ -21,21 +31,29 @@ export function connectSwings({ room, role, onSwing = () => {}, onStatus = () =>
     socket = new WebSocket(url);
     onStatus('Connecting…');
     socket.onopen = () => onStatus('Connected');
-    socket.onmessage = ({ data }) => {
+    socket.onmessage = ({data}) => {
       try {
         const message = JSON.parse(data);
         if (message.type === 'ack') {
           const start = sentAt.get(message.id);
           sentAt.delete(message.id);
-          onAck({ ...message, ...(start === undefined ? {} : {
-            roundTripMs: Math.round(performance.now() - start), timingScope: 'server',
-          }) });
+          onAck({
+            ...message,
+            ...(start === undefined
+              ? {}
+              : {
+                  roundTripMs: Math.round(performance.now() - start),
+                  timingScope: 'server',
+                }),
+          });
         }
         if (!isSwing(message) || seen.has(message.id)) return;
         seen.add(message.id);
         if (seen.size > 200) seen.delete(seen.values().next().value);
         onSwing(message);
-      } catch { /* Ignore malformed messages. */ }
+      } catch {
+        /* Ignore malformed messages. */
+      }
     };
     socket.onerror = () => socket.close();
     socket.onclose = () => {
@@ -56,6 +74,10 @@ export function connectSwings({ room, role, onSwing = () => {}, onStatus = () =>
       onSent(event);
       return true;
     },
-    close() { stopped = true; clearTimeout(retry); socket.close(); },
+    close() {
+      stopped = true;
+      clearTimeout(retry);
+      socket.close();
+    },
   };
 }
