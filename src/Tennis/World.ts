@@ -1,22 +1,23 @@
 // components/world.ts
 import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import {OrbitControls} from 'three/examples/jsm/controls/OrbitControls.js';
 
-import { createParkClub } from './components/parkClub';
-import { createNet } from './components/net';
-import { createCourt } from './components/court';
-import {
-    createPlayer,
-    type PlayerController,
-} from './components/player';
-import {
-    createBall,
-} from './components/ball';
+import {createParkClub} from './components/parkClub';
+import {createNet} from './components/net';
+import {createCourt} from './components/court';
+import {createPlayer, type PlayerController} from './components/player';
+import {createBall} from './components/ball';
 
-import { GameLogic, type TennisGameEvent, type TennisSettings, type PracticeState, type StrokeResult } from './gameLogic';
-import type { Score } from './scoreSystem';
-import type { PlayerInput } from '../Controllers/playerInput';
-import { WorldCamera } from './camera';
+import {
+  GameLogic,
+  type TennisGameEvent,
+  type TennisSettings,
+  type PracticeState,
+  type StrokeResult,
+} from './gameLogic';
+import type {Score} from './scoreSystem';
+import type {PlayerInput} from '../Controllers/playerInput';
+import {WorldCamera} from './camera';
 import {TENNIS_COURT} from './tennisRules';
 import {createFrameQuality} from '../rendering/frameQuality';
 import {browserDiagnostics} from '../../shared/diagnostics.js';
@@ -26,271 +27,357 @@ const COURT_MIN_X = -4.115;
 const COURT_MAX_X = 4.115;
 
 export class World {
-    public scene: THREE.Scene;
-    public camera: THREE.PerspectiveCamera;
-    public renderer: THREE.WebGLRenderer;
-    public controls: OrbitControls;
+  public scene: THREE.Scene;
+  public camera: THREE.PerspectiveCamera;
+  public renderer: THREE.WebGLRenderer;
+  public controls: OrbitControls;
 
-    public player1: PlayerController;
-    public player2: PlayerController;
-    public ball: THREE.Mesh;
+  public player1: PlayerController;
+  public player2: PlayerController;
+  public ball: THREE.Mesh;
 
-    public onSwingFeedback: (message: string) => void = () => { };
-    public onBallHit: (player: 1 | 2) => void = () => { };
-    public onGameEvent: (event: TennisGameEvent) => void = () => { };
-    public onStrokeResult: (result: StrokeResult) => void = () => { };
-    private readonly targetMarkers: THREE.Mesh[] = [];
-    private readonly shotTargetMarker: THREE.Mesh;
-    private readonly gameLogic: GameLogic;
-    private readonly worldCamera: WorldCamera;
-    private readonly parkClub = createParkClub();
-    private clock = new THREE.Clock();
-    private animationFrameId: number | null = null;
-    private readonly frameQuality = createFrameQuality({maxPixelRatio: Math.min(window.devicePixelRatio || 1, 2)});
-    private renderedFrames = 0;
-    private previousFrame: number | null = null;
-    private readonly renderDiagnostics = browserDiagnostics('render.tennis');
+  public onSwingFeedback: (message: string) => void = () => {};
+  public onBallHit: (player: 1 | 2) => void = () => {};
+  public onGameEvent: (event: TennisGameEvent) => void = () => {};
+  public onStrokeResult: (result: StrokeResult) => void = () => {};
+  private readonly targetMarkers: THREE.Mesh[] = [];
+  private readonly shotTargetMarker: THREE.Mesh;
+  private readonly gameLogic: GameLogic;
+  private readonly worldCamera: WorldCamera;
+  private readonly parkClub = createParkClub();
+  private clock = new THREE.Clock();
+  private animationFrameId: number | null = null;
+  private readonly frameQuality = createFrameQuality({
+    maxPixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+  });
+  private renderedFrames = 0;
+  private previousFrame: number | null = null;
+  private readonly renderDiagnostics = browserDiagnostics('render.tennis');
 
-    public get autoPositionEnabled(): boolean {
-        return this.gameLogic.autoPositionEnabled;
+  public get autoPositionEnabled(): boolean {
+    return this.gameLogic.autoPositionEnabled;
+  }
+
+  public set autoPositionEnabled(value: boolean) {
+    this.gameLogic.autoPositionEnabled = value;
+  }
+
+  public get botEnabled(): boolean {
+    return this.gameLogic.botEnabled;
+  }
+
+  public set botEnabled(value: boolean) {
+    this.gameLogic.botEnabled = value;
+  }
+
+  public getScore(): Score {
+    return this.gameLogic.getScore();
+  }
+  public checkpoint() {
+    return this.gameLogic.checkpoint();
+  }
+  public restoreCheckpoint(
+    value: Parameters<GameLogic['restoreCheckpoint']>[0],
+  ): boolean {
+    return this.gameLogic.restoreCheckpoint(value);
+  }
+
+  constructor(container: HTMLElement) {
+    this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0xd6e5e7);
+    this.scene.fog = new THREE.Fog(0xd6e5e7, 45, 110);
+
+    this.worldCamera = new WorldCamera();
+    this.camera = this.worldCamera.primary;
+
+    this.renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: 'high-performance',
+    });
+    this.handleResize();
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.shadowMap.autoUpdate = false;
+    this.renderer.info.autoReset = false;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1;
+
+    container.appendChild(this.renderer.domElement);
+
+    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.controls.enableDamping = true;
+    this.controls.target.set(0, 0, 1);
+
+    const ambientLight = new THREE.HemisphereLight(0xffffff, 0x445547, 2.3);
+    this.scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xfff4db, 2.4);
+    dirLight.position.set(-14, 25, 12);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(1024, 1024);
+    Object.assign(dirLight.shadow.camera, {
+      left: -18,
+      right: 18,
+      top: 22,
+      bottom: -22,
+      near: 1,
+      far: 70,
+    });
+    dirLight.shadow.camera.updateProjectionMatrix();
+    dirLight.shadow.normalBias = 0.03;
+    this.scene.add(dirLight);
+
+    this.scene.add(this.parkClub.group);
+    this.scene.add(createNet());
+    this.scene.add(createCourt());
+
+    this.player1 = createPlayer(0, 0.25, 10, 0x3b82f6, {
+      minX: COURT_MIN_X,
+      maxX: COURT_MAX_X,
+      minZ: 1,
+      maxZ: TENNIS_COURT.serveDepth + 0.2,
+    });
+    this.scene.add(this.player1.group);
+
+    this.player2 = createPlayer(0, 0.25, -10, 0xef4444, {
+      minX: COURT_MIN_X,
+      maxX: COURT_MAX_X,
+      minZ: -TENNIS_COURT.serveDepth - 0.2,
+      maxZ: -1,
+    });
+    this.player2.group.rotation.y = Math.PI;
+    this.scene.add(this.player2.group);
+
+    this.ball = createBall(0, 0.3, 10.0);
+    this.scene.add(this.ball);
+
+    for (const color of [0x60a5fa, 0xf87171]) {
+      const marker = new THREE.Mesh(
+        new THREE.RingGeometry(0.22, 0.3, 24),
+        new THREE.MeshBasicMaterial({
+          color,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.8,
+          depthWrite: false,
+        }),
+      );
+      marker.rotation.x = -Math.PI / 2;
+      this.scene.add(marker);
+      this.targetMarkers.push(marker);
+    }
+    this.shotTargetMarker = new THREE.Mesh(
+      new THREE.RingGeometry(0.16, 0.23, 24),
+      new THREE.MeshBasicMaterial({
+        color: 0xfacc15,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      }),
+    );
+    this.shotTargetMarker.rotation.x = -Math.PI / 2;
+    this.shotTargetMarker.visible = false;
+    this.scene.add(this.shotTargetMarker);
+    this.gameLogic = new GameLogic({
+      scene: this.scene,
+      player1: this.player1,
+      player2: this.player2,
+      ball: this.ball,
+      targetMarkers: this.targetMarkers,
+      shotTargetMarker: this.shotTargetMarker,
+      onSwingFeedback: () => this.onSwingFeedback,
+      onHit: player => this.onBallHit(player),
+      onGameEvent: event => this.onGameEvent(event),
+      onStrokeResult: result => this.onStrokeResult(result),
+    });
+    window.addEventListener('resize', this.handleResize);
+  }
+
+  private handleResize = (): void => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    this.worldCamera.resize(width, height);
+    // Resize logical dimensions and DPR together: changing DPR first could
+    // briefly reallocate the previous 4K viewport at the new larger ratio.
+    this.renderer.setDrawingBufferSize(
+      width,
+      height,
+      this.frameQuality.resize(width, height).pixelRatio,
+    );
+    this.renderer.domElement.style.width = `${width}px`;
+    this.renderer.domElement.style.height = `${height}px`;
+  };
+
+  public setSplitScreen(enabled: boolean): void {
+    this.worldCamera.setSplitScreen(
+      enabled,
+      window.innerWidth,
+      window.innerHeight,
+    );
+    this.controls.enabled = !enabled;
+  }
+
+  public get isSplitScreen(): boolean {
+    return this.worldCamera.isSplitScreen;
+  }
+
+  public setPlayerInput(input: PlayerInput, player: 1 | 2 = 1): void {
+    this.gameLogic.setPlayerInput(input, player);
+  }
+
+  public swing(event: {
+    label: 'Forehand' | 'Backhand';
+    hand: 'Left' | 'Right';
+    player?: 1 | 2;
+    power?: number;
+    aim?: number;
+    depth?: number;
+    id?: string;
+  }): void {
+    this.gameLogic.swing(event);
+  }
+
+  public getSettings(): TennisSettings {
+    return this.gameLogic.getSettings();
+  }
+  public configure(settings: Partial<TennisSettings>): void {
+    this.gameLogic.configure(settings);
+  }
+  public getServeState() {
+    return this.gameLogic.getServeState();
+  }
+  public getPracticeState(): PracticeState {
+    return this.gameLogic.getPracticeState();
+  }
+  public getRenderDiagnostics() {
+    return {
+      ...this.frameQuality.diagnostics(),
+      views: this.isSplitScreen ? 2 : 1,
+      drawCalls: this.renderer.info.render.calls,
+      triangles: this.renderer.info.render.triangles,
+    };
+  }
+  public startPractice(
+    stroke: PracticeState['stroke'] = 'alternate',
+    hand: 'Right' | 'Left' = 'Right',
+  ): void {
+    this.gameLogic.startPractice(stroke, hand);
+  }
+  public stopPractice(): void {
+    this.gameLogic.stopPractice();
+  }
+
+  public feedPracticeBall(backhand = false, number: 1 | 2 = 1): void {
+    this.gameLogic.feedPracticeBall(backhand, number);
+  }
+
+  public playerServe(playerNumber: 1 | 2 = 1): void {
+    this.gameLogic.playerServe(playerNumber);
+  }
+
+  public startRound(): void {
+    this.gameLogic.startRound();
+  }
+
+  public start(): void {
+    if (this.animationFrameId !== null) {
+      return;
     }
 
-    public set autoPositionEnabled(value: boolean) {
-        this.gameLogic.autoPositionEnabled = value;
-    }
+    this.clock.start();
+    // A paused or restored iframe may have changed size without a resize
+    // listener. Refresh its camera and canvas before the first resumed frame.
+    this.handleResize();
+    window.addEventListener('resize', this.handleResize);
+    window.addEventListener('keydown', this.gameLogic.handleKeyDown);
 
-    public get botEnabled(): boolean {
-        return this.gameLogic.botEnabled;
-    }
+    const animate = (): void => {
+      this.animationFrameId = requestAnimationFrame(animate);
+      const frameAt = performance.now();
+      if (
+        !document.hidden &&
+        this.previousFrame !== null &&
+        frameAt > this.previousFrame &&
+        frameAt - this.previousFrame <= 1000
+      )
+        this.renderDiagnostics.observe(
+          'frameGapMs',
+          frameAt - this.previousFrame,
+        );
+      this.previousFrame = document.hidden ? null : frameAt;
+      const delta = Math.min(this.clock.getDelta(), 0.05);
 
-    public set botEnabled(value: boolean) {
-        this.gameLogic.botEnabled = value;
-    }
+      this.gameLogic.update(delta);
 
-    public getScore(): Score {
-        return this.gameLogic.getScore();
-    }
-    public checkpoint() { return this.gameLogic.checkpoint(); }
-    public restoreCheckpoint(value: Parameters<GameLogic['restoreCheckpoint']>[0]): boolean { return this.gameLogic.restoreCheckpoint(value); }
-
-    constructor(container: HTMLElement) {
-        this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0xd6e5e7);
-        this.scene.fog = new THREE.Fog(0xd6e5e7, 45, 110);
-
-        this.worldCamera = new WorldCamera();
-        this.camera = this.worldCamera.primary;
-
-        this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-        this.handleResize();
-        this.renderer.shadowMap.enabled = true;
-        this.renderer.shadowMap.type = THREE.PCFShadowMap;
-        this.renderer.shadowMap.autoUpdate = false;
-        this.renderer.info.autoReset = false;
-        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        this.renderer.toneMappingExposure = 1;
-
-        container.appendChild(this.renderer.domElement);
-
-        this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-        this.controls.enableDamping = true;
-        this.controls.target.set(0, 0, 1);
-
-        const ambientLight = new THREE.HemisphereLight(0xffffff, 0x445547, 2.3);
-        this.scene.add(ambientLight);
-
-        const dirLight = new THREE.DirectionalLight(0xfff4db, 2.4);
-        dirLight.position.set(-14, 25, 12);
-        dirLight.castShadow = true;
-        dirLight.shadow.mapSize.set(1024, 1024);
-        Object.assign(dirLight.shadow.camera, {left: -18, right: 18, top: 22, bottom: -22, near: 1, far: 70});
-        dirLight.shadow.camera.updateProjectionMatrix();
-        dirLight.shadow.normalBias = .03;
-        this.scene.add(dirLight);
-
-        this.scene.add(this.parkClub.group);
-        this.scene.add(createNet());
-        this.scene.add(createCourt());
-
-        this.player1 = createPlayer(0, 0.25, 10, 0x3b82f6, {
-            minX: COURT_MIN_X,
-            maxX: COURT_MAX_X,
-            minZ: 1,
-            maxZ: TENNIS_COURT.serveDepth + .2,
+      this.controls.update();
+      this.renderer.info.reset();
+      this.renderer.shadowMap.needsUpdate =
+        this.renderedFrames++ % this.frameQuality.settings.shadowEvery === 0;
+      this.worldCamera.render(
+        this.renderer,
+        this.scene,
+        window.innerWidth,
+        window.innerHeight,
+      );
+      const workMs = performance.now() - frameAt,
+        previousLevel = this.frameQuality.settings.level;
+      if (!document.hidden)
+        this.renderDiagnostics.observe('frameWorkMs', workMs);
+      const quality = this.frameQuality.sample(
+        frameAt,
+        workMs,
+        !document.hidden,
+      );
+      if (quality)
+        this.renderDiagnostics.count(
+          quality.level > previousLevel ? 'qualityReduced' : 'qualityRecovered',
+        );
+      if (quality && this.renderer.getPixelRatio() !== quality.pixelRatio)
+        this.renderer.setPixelRatio(quality.pixelRatio);
+      if (quality && this.renderer.shadowMap.enabled !== quality.shadows) {
+        this.renderer.shadowMap.enabled = quality.shadows;
+        this.renderer.shadowMap.needsUpdate = quality.shadows;
+        // Three caches shadow shader variants on each material.
+        // Refresh them when the emergency shadow budget changes.
+        this.scene.traverse(object => {
+          const material = (object as THREE.Mesh).material;
+          if (material)
+            for (const value of Array.isArray(material) ? material : [material])
+              value.needsUpdate = true;
         });
-        this.scene.add(this.player1.group);
-
-        this.player2 = createPlayer(0, 0.25, -10, 0xef4444, {
-            minX: COURT_MIN_X,
-            maxX: COURT_MAX_X,
-            minZ: -TENNIS_COURT.serveDepth - .2,
-            maxZ: -1,
-        });
-        this.player2.group.rotation.y = Math.PI;
-        this.scene.add(this.player2.group);
-
-        this.ball = createBall(0, 0.3, 10.0);
-        this.scene.add(this.ball);
-
-        for (const color of [0x60a5fa, 0xf87171]) {
-            const marker = new THREE.Mesh(new THREE.RingGeometry(0.22, 0.3, 24),
-                new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, transparent: true, opacity: 0.8, depthWrite: false }));
-            marker.rotation.x = -Math.PI / 2;
-            this.scene.add(marker);
-            this.targetMarkers.push(marker);
-        }
-        this.shotTargetMarker = new THREE.Mesh(new THREE.RingGeometry(0.16, 0.23, 24),
-            new THREE.MeshBasicMaterial({ color: 0xfacc15, side: THREE.DoubleSide, depthWrite: false }));
-        this.shotTargetMarker.rotation.x = -Math.PI / 2;
-        this.shotTargetMarker.visible = false;
-        this.scene.add(this.shotTargetMarker);
-        this.gameLogic = new GameLogic({
-            scene: this.scene,
-            player1: this.player1,
-            player2: this.player2,
-            ball: this.ball,
-            targetMarkers: this.targetMarkers,
-            shotTargetMarker: this.shotTargetMarker,
-            onSwingFeedback: () => this.onSwingFeedback,
-            onHit: player => this.onBallHit(player),
-            onGameEvent: event => this.onGameEvent(event),
-            onStrokeResult: result => this.onStrokeResult(result),
-        });
-        window.addEventListener('resize', this.handleResize);
-    }
-
-    private handleResize = (): void => {
-        const width = window.innerWidth, height = window.innerHeight;
-        this.worldCamera.resize(width, height);
-        // Resize logical dimensions and DPR together: changing DPR first could
-        // briefly reallocate the previous 4K viewport at the new larger ratio.
-        this.renderer.setDrawingBufferSize(width, height, this.frameQuality.resize(width, height).pixelRatio);
-        this.renderer.domElement.style.width = `${width}px`;
-        this.renderer.domElement.style.height = `${height}px`;
+      }
     };
 
-    public setSplitScreen(enabled: boolean): void {
-        this.worldCamera.setSplitScreen(enabled, window.innerWidth, window.innerHeight);
-        this.controls.enabled = !enabled;
+    animate();
+  }
+
+  public stop(): void {
+    this.gameLogic.clearPendingInputs();
+    this.frameQuality.sample(0, 0, false);
+    this.previousFrame = null;
+    if (this.animationFrameId !== null) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
     }
 
-    public get isSplitScreen(): boolean {
-        return this.worldCamera.isSplitScreen;
+    window.removeEventListener('resize', this.handleResize);
+    window.removeEventListener('keydown', this.gameLogic.handleKeyDown);
+  }
+
+  public dispose(): void {
+    this.stop();
+    this.parkClub.dispose();
+    this.shotTargetMarker.geometry.dispose();
+    (this.shotTargetMarker.material as THREE.Material).dispose();
+    this.shotTargetMarker.removeFromParent();
+    for (const marker of this.targetMarkers) {
+      marker.geometry.dispose();
+      (marker.material as THREE.Material).dispose();
+      marker.removeFromParent();
     }
-
-    public setPlayerInput(input: PlayerInput, player: 1 | 2 = 1): void {
-        this.gameLogic.setPlayerInput(input, player);
-    }
-
-    public swing(event: {
-        label: 'Forehand' | 'Backhand';
-        hand: 'Left' | 'Right';
-        player?: 1 | 2;
-        power?: number;
-        aim?: number;
-        depth?: number;
-        id?: string;
-    }): void {
-        this.gameLogic.swing(event);
-    }
-
-    public getSettings(): TennisSettings { return this.gameLogic.getSettings(); }
-    public configure(settings: Partial<TennisSettings>): void { this.gameLogic.configure(settings); }
-    public getServeState() { return this.gameLogic.getServeState(); }
-    public getPracticeState(): PracticeState { return this.gameLogic.getPracticeState(); }
-    public getRenderDiagnostics() {
-        return {...this.frameQuality.diagnostics(), views: this.isSplitScreen ? 2 : 1,
-            drawCalls: this.renderer.info.render.calls, triangles: this.renderer.info.render.triangles};
-    }
-    public startPractice(stroke: PracticeState['stroke'] = 'alternate', hand: 'Right' | 'Left' = 'Right'): void { this.gameLogic.startPractice(stroke, hand); }
-    public stopPractice(): void { this.gameLogic.stopPractice(); }
-
-    public feedPracticeBall(backhand = false, number: 1 | 2 = 1): void {
-        this.gameLogic.feedPracticeBall(backhand, number);
-    }
-
-    public playerServe(playerNumber: 1 | 2 = 1): void {
-        this.gameLogic.playerServe(playerNumber);
-    }
-
-    public startRound(): void {
-        this.gameLogic.startRound();
-    }
-
-    public start(): void {
-        if (this.animationFrameId !== null) {
-            return;
-        }
-
-        this.clock.start();
-        // A paused or restored iframe may have changed size without a resize
-        // listener. Refresh its camera and canvas before the first resumed frame.
-        this.handleResize();
-        window.addEventListener('resize', this.handleResize);
-        window.addEventListener('keydown', this.gameLogic.handleKeyDown);
-
-        const animate = (): void => {
-            this.animationFrameId = requestAnimationFrame(animate);
-            const frameAt = performance.now();
-            if (!document.hidden && this.previousFrame !== null && frameAt > this.previousFrame && frameAt - this.previousFrame <= 1000) this.renderDiagnostics.observe('frameGapMs',frameAt-this.previousFrame);
-            this.previousFrame = document.hidden ? null : frameAt;
-            const delta = Math.min(this.clock.getDelta(), 0.05);
-
-            this.gameLogic.update(delta);
-
-            this.controls.update();
-            this.renderer.info.reset();
-            this.renderer.shadowMap.needsUpdate = this.renderedFrames++ % this.frameQuality.settings.shadowEvery === 0;
-            this.worldCamera.render(this.renderer, this.scene,
-                window.innerWidth, window.innerHeight);
-            const workMs = performance.now()-frameAt, previousLevel = this.frameQuality.settings.level;
-            if (!document.hidden) this.renderDiagnostics.observe('frameWorkMs',workMs);
-            const quality = this.frameQuality.sample(frameAt, workMs, !document.hidden);
-            if (quality) this.renderDiagnostics.count(quality.level > previousLevel ? 'qualityReduced' : 'qualityRecovered');
-            if (quality && this.renderer.getPixelRatio() !== quality.pixelRatio) this.renderer.setPixelRatio(quality.pixelRatio);
-            if (quality && this.renderer.shadowMap.enabled !== quality.shadows) {
-                this.renderer.shadowMap.enabled = quality.shadows;
-                this.renderer.shadowMap.needsUpdate = quality.shadows;
-                // Three caches shadow shader variants on each material.
-                // Refresh them when the emergency shadow budget changes.
-                this.scene.traverse(object => {
-                    const material = (object as THREE.Mesh).material;
-                    if (material) for (const value of Array.isArray(material) ? material : [material]) value.needsUpdate = true;
-                });
-            }
-        };
-
-        animate();
-    }
-
-    public stop(): void {
-        this.gameLogic.clearPendingInputs();
-        this.frameQuality.sample(0, 0, false);
-        this.previousFrame = null;
-        if (this.animationFrameId !== null) {
-            cancelAnimationFrame(this.animationFrameId);
-            this.animationFrameId = null;
-        }
-
-        window.removeEventListener('resize', this.handleResize);
-        window.removeEventListener('keydown', this.gameLogic.handleKeyDown);
-    }
-
-    public dispose(): void {
-        this.stop();
-        this.parkClub.dispose();
-        this.shotTargetMarker.geometry.dispose();
-        (this.shotTargetMarker.material as THREE.Material).dispose();
-        this.shotTargetMarker.removeFromParent();
-        for (const marker of this.targetMarkers) {
-            marker.geometry.dispose();
-            (marker.material as THREE.Material).dispose();
-            marker.removeFromParent();
-        }
-        this.player1.hitbox?.dispose();
-        this.player2.hitbox?.dispose();
-        this.controls.dispose();
-        this.renderer.dispose();
-        this.renderer.domElement.remove();
-    }
+    this.player1.hitbox?.dispose();
+    this.player2.hitbox?.dispose();
+    this.controls.dispose();
+    this.renderer.dispose();
+    this.renderer.domElement.remove();
+  }
 }
