@@ -1,5 +1,3 @@
-> This proposal adds the guest native controller. Optional account screens and saved profile preferences are introduced by the following PR 5.
-
 # Optional Wee Sports controller
 
 The normal phone-camera QR link still opens the complete browser controller.

@@ -60,7 +60,7 @@ mapping and source credits](sound.md).
 4. Open TV practice, match its hand to your phone and try alternating returns.
    Confirm counters increase, points stay unchanged and returning keeps the
    score. A pending second serve should still be the second serve.
-5. Try Beginner/Standard and a quick match. Check that server/side calls match
+5. Try Beginner/Standard and a best-of-three match. Check that server/side calls match
    the play, the receiver waits for the service bounce, and ordinary points do
    not repeat the opening countdown.
 6. If a swing feels late, check the three phone timing measurements separately.

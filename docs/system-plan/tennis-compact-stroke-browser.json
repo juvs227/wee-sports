@@ -1,0 +1,126 @@
+{
+  "recordedAt": "2026-11-08T21:38:56.419Z",
+  "checks": [
+    {
+      "name": "two-forehands-one-backhand",
+      "hand": "Right",
+      "gain": 0.5,
+      "received": [
+        {
+          "label": "Forehand",
+          "hand": "Right"
+        },
+        {
+          "label": "Forehand",
+          "hand": "Right"
+        },
+        {
+          "label": "Backhand",
+          "hand": "Right"
+        }
+      ]
+    },
+    {
+      "name": "four-backhands",
+      "hand": "Right",
+      "gain": 0.5,
+      "received": [
+        {
+          "label": "Backhand",
+          "hand": "Right"
+        },
+        {
+          "label": "Backhand",
+          "hand": "Right"
+        },
+        {
+          "label": "Backhand",
+          "hand": "Right"
+        },
+        {
+          "label": "Backhand",
+          "hand": "Right"
+        }
+      ]
+    },
+    {
+      "name": "left-mixed",
+      "hand": "Left",
+      "gain": 0.5,
+      "received": [
+        {
+          "label": "Forehand",
+          "hand": "Left"
+        },
+        {
+          "label": "Backhand",
+          "hand": "Left"
+        },
+        {
+          "label": "Forehand",
+          "hand": "Left"
+        },
+        {
+          "label": "Backhand",
+          "hand": "Left"
+        }
+      ]
+    },
+    {
+      "name": "left-four-backhands-new",
+      "hand": "Left",
+      "gain": 0.5,
+      "received": [
+        {
+          "label": "Backhand",
+          "hand": "Left"
+        },
+        {
+          "label": "Backhand",
+          "hand": "Left"
+        },
+        {
+          "label": "Backhand",
+          "hand": "Left"
+        },
+        {
+          "label": "Backhand",
+          "hand": "Left"
+        }
+      ]
+    },
+    {
+      "name": "left-four-forehands",
+      "hand": "Left",
+      "gain": 0.5,
+      "received": [
+        {
+          "label": "Forehand",
+          "hand": "Left"
+        },
+        {
+          "label": "Forehand",
+          "hand": "Left"
+        },
+        {
+          "label": "Forehand",
+          "hand": "Left"
+        },
+        {
+          "label": "Forehand",
+          "hand": "Left"
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "limitations": [
+    "Synthetic replay through actual web UI and local room transport. Not physical iPhone motion, Wi-Fi/Railway latency or native Expo rendering.",
+    "These cases check detection, labels and once-only TV delivery. Real-model contact is checked separately."
+  ],
+  "investigation": {
+    "beforeFinalTimingFix": "Two earlier browser runs missed the fourth compact right-hand backhand; another passed. Captured failure had supporting readings only 15.4 ms apart, below the old 16 ms check. Recognized inputs were acknowledged and delivered.",
+    "fix": "Allow 12 ms for repeated directional support, retaining strength, travel, post-peak confirmation and recovery suppression.",
+    "regression": "The captured failing stream now yields all 7 expected strokes. All 40 deterministic \u00b12 ms jitter combinations and the final 19-stroke browser run pass."
+  }
+}

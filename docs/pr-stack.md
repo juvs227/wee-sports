@@ -78,9 +78,9 @@ with `6efe90e`:
 | Proposal | Latest-main validation |
 | --- | --- |
 | 1 | Compile/lint, 783 unit tests, 31 server tests, 19-stroke motion replay and production build passed; browser smoke recorded in PR #19 |
-| 2 | See PR #20 for validation of its current head |
-| 4 | See PR #21 for validation of its current head, including native/export coverage |
-| 5 | See PR #22 for validation of its current head, including native/export coverage |
+| 2 | Compile/lint, 849 unit tests, 51 server tests, motion replay, production build and browser recovery passed |
+| 4 | Compile/lint, 849 unit tests, 53 server tests, production build, 68 native tests and Android/iOS export passed |
+| 5 | Compile/lint, 896 unit tests, 74 server tests, motion replay, production build, 72 native tests and Android/iOS export passed; browser results recorded in PR #22 |
 
 Validation uses compile/lint, unit and server tests, recorded motion replay,
 production builds and browser flows. PRs 4 and 5 also require native unit tests,

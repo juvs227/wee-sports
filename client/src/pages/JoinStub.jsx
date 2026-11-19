@@ -1,5 +1,6 @@
 import {RoomScanner} from '../components/RoomScanner.jsx';
 import {SelectedSportIcon} from '../components/SelectedSportIcon.jsx';
+import {GuestResultClaim} from '../components/GuestResultClaim.jsx';
 import {createControllerCapabilities} from '../../../shared/controllerCapabilities.js';
 import {SportSwitcher} from '../components/SportSwitcher.jsx';
 /** Browser phone entry, reconnecting seat and active controller shell. */
@@ -60,11 +61,18 @@ export default function JoinStub() {
   useEffect(() => {setCode(linkedCode);}, [linkedCode]);
   const [name, setName] = useState(loadName);
   const [controllerIntent, setControllerIntent] = useState(rememberedControllerIntent);
-  const prefersTouch = false;
+  const [prefersTouch, setPrefersTouch] = useState(false);
   const controllerMode = useCallback(mode => {
     const intent = {mode, permission: mode === 'motion' ? 'granted' : 'unavailable'};
     rememberControllerIntent(intent);
     setControllerIntent(previous => previous?.mode === mode ? previous : intent);
+  }, []);
+  useEffect(() => {
+    let active = true;
+    fetch('/api/profile').then(response => response.ok ? response.json() : null).then(data => {
+      if (active) setPrefersTouch(data?.profile?.preferences?.touchControls === true);
+    }).catch(() => {});
+    return () => {active = false;};
   }, []);
   const { url: secureUrl, loading: phoneLinkLoading, status: phoneLinkStatus } = usePhoneLink(code);
   const needsSecurePage = window.location.protocol === 'http:';
@@ -123,8 +131,10 @@ export default function JoinStub() {
     const tvAway = lobby.reconnecting?.some(member => member.role === 'host' || (!member.role && member.name === 'TV'));
     const lobbyOptions = (
       <>
+        <GuestResultClaim lobby={lobby} />
         <PhoneSoundToggle lobby={lobby} disabled={reconnecting} />
         {seat.slot === (lobby.leaderSlot ?? 0) && !lobby.resumeGame ? <details><summary>Change sport</summary><SportSwitcher lobby={lobby} role="player" disabled={reconnecting} /></details> : null}
+        <a className="btn btn--ghost" href="/profile">Profile & history</a>
         <RoomScanner label="Scan another TV" activeRoom={seat} onLeave={leaveSession} disabled={reconnecting} />
         <h2>In this lobby</h2>
         <ul className="seats" aria-live="polite">
@@ -210,6 +220,7 @@ export default function JoinStub() {
         : ended === 'expired' ? 'Your reconnect window expired. Join again if the lobby is still open.'
         : ended === 'recovery-owner-required' ? 'Sign in to the profile that saved this game, then return here to reconnect.'
         : 'This game has ended. Check the TV for a new lobby.'}</p> : null}
+      {ended === 'recovery-owner-required' ? <Link className="btn btn--primary" to="/profile" state={{returnTo: `/join?code=${code}`}}>Sign in</Link> : null}
       <p className="stub__muted">Your phone is the controller. Watch the TV and swing.</p>
 
       {error ? (

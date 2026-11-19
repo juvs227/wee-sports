@@ -25,8 +25,17 @@ export function GameFrame({ code, controller = false, controllerIntent = null, o
   const recovering = useRef(!controller);
   const recoveryRequest = useRef(null);
   const [saveIssue, setSaveIssue] = useState('');
+  const [profilePreferences, setProfilePreferences] = useState(null);
   const stateKey = `${gameId}:${matchRound}`;
   if (checkpointKey.current !== stateKey) {checkpointKey.current = stateKey; checkpointRevision.current = 0;}
+  useEffect(() => {
+    if (!controller) return;
+    let active = true;
+    fetch('/api/profile').then(response => response.ok ? response.json() : null).then(data => {
+      if (active && data?.profile?.preferences) setProfilePreferences(data.profile.preferences);
+    }).catch(() => {});
+    return () => {active = false;};
+  }, [controller]);
   const currentControl = useRef('');
   currentControl.current = `${gameId}:${generation}:${hostEpoch}`;
   const currentGame = useRef(gameId);
@@ -107,6 +116,7 @@ export function GameFrame({ code, controller = false, controllerIntent = null, o
   function publishState() {
     const post = message => frame.current?.contentWindow?.postMessage(message, window.location.origin);
     post({ type: 'wee:lobby-state', paused: paused || connection !== 'online' || (!controller && recovering.current), manuallyPaused, connected: connection === 'online', players, playing, sport, gameId, generation, inputGeneration: generation, hostEpoch });
+    if (controller && profilePreferences) post({type:'wee:profile-preferences',preferences:profilePreferences});
     if (controller && controllerIntent) post({type:'wee:controller-intent', ...controllerIntent});
     if (controller && sport === 'bowling') post({ type: 'wee:bowling-state', ...gameState,
       canRoll: playing && !paused && connection === 'online' && gameState?.phase === 'ready' && gameState.currentPlayer === player });
@@ -371,7 +381,7 @@ export function GameFrame({ code, controller = false, controllerIntent = null, o
       socket.off(EVENTS.GAME_HIT, hit);
       socket.off(EVENTS.GAME_STROKE_RESULT, strokeResult);
     };
-  }, [paused, manuallyPaused, connection, src, controller, controllerIntent, onControllerMode, attempt, players, playing, sport, gameId, gameState, generation, hostEpoch, matchRound, player, onAudio, onPauseToggle, onSwing]);
+  }, [paused, manuallyPaused, connection, src, controller, controllerIntent, onControllerMode, attempt, players, playing, sport, gameId, gameState, generation, hostEpoch, matchRound, profilePreferences, player, onAudio, onPauseToggle, onSwing]);
   return (
     <div className={`game-frame ${controller ? 'game-frame--phone' : ''}`}>
       {loading ? <p role="status">{failed ? 'Taking too long to load.' : `Loading ${controller ? 'controller' : sport}…`}

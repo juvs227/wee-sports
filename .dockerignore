@@ -8,3 +8,12 @@ build
 *.log
 .DS_Store
 stress-results
+.wee-data
+**/*.sqlite
+**/*.sqlite-*
+**/*.db
+**/*.db-*
+.local-preview
+.cloud-setup
+**/*.tsbuildinfo
+apps/controller/.expo
