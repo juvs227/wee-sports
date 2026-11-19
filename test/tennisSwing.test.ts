@@ -1,7 +1,10 @@
-import { test, expect } from 'vitest';
-import { createSwingDetector, SWING_LIMITS } from '../src/controller/classifySwing.js';
+import {test, expect} from 'vitest';
+import {
+  createSwingDetector,
+  SWING_LIMITS,
+} from '../src/controller/accelerationSwing.js';
 
-const sample = (timeMs: number, accelMag: number) => ({ timeMs, accelMag });
+const sample = (timeMs: number, accelMag: number) => ({timeMs, accelMag});
 
 test('detects a swing when accelMag meets the threshold', () => {
   const detector = createSwingDetector();
@@ -60,13 +63,16 @@ test('swing result includes startMs and peakTimeMs equal to the sample time', ()
 
 // do this in 2 different directions verify
 
-const swing = (netNormal: [number, number, number], currentNormal: [number, number, number]) =>
+const swing = (
+  netNormal: [number, number, number],
+  currentNormal: [number, number, number],
+) =>
   createSwingDetector().push({
     timeMs: 0,
     accelMag: SWING_LIMITS.start,
-    netOrientation: { normal: netNormal },
+    netOrientation: {normal: netNormal},
     currentNormal,
-  } as any);
+  });
 
 // facing east (net normal [1,0,0])
 test('forehand when facing same direction as net — east', () => {
@@ -92,8 +98,18 @@ test('forehand classification stays consistent across 20 swings', () => {
   const results = [];
   for (let i = 0; i < 20; i++) {
     const t = i * 1100; // spaced beyond cooldown
-    detector.push({ timeMs: t, accelMag: 0, netOrientation: { normal: netNormal }, currentNormal } as any);
-    const r = detector.push({ timeMs: t + 10, accelMag: SWING_LIMITS.start, netOrientation: { normal: netNormal }, currentNormal } as any);
+    detector.push({
+      timeMs: t,
+      accelMag: 0,
+      netOrientation: {normal: netNormal},
+      currentNormal,
+    });
+    const r = detector.push({
+      timeMs: t + 10,
+      accelMag: SWING_LIMITS.start,
+      netOrientation: {normal: netNormal},
+      currentNormal,
+    });
     if (r) results.push(r.label);
   }
   expect(results).toHaveLength(20);
@@ -107,8 +123,18 @@ test('backhand classification stays consistent across 20 swings', () => {
   const results = [];
   for (let i = 0; i < 20; i++) {
     const t = i * 1100;
-    detector.push({ timeMs: t, accelMag: 0, netOrientation: { normal: netNormal }, currentNormal } as any);
-    const r = detector.push({ timeMs: t + 10, accelMag: SWING_LIMITS.start, netOrientation: { normal: netNormal }, currentNormal } as any);
+    detector.push({
+      timeMs: t,
+      accelMag: 0,
+      netOrientation: {normal: netNormal},
+      currentNormal,
+    });
+    const r = detector.push({
+      timeMs: t + 10,
+      accelMag: SWING_LIMITS.start,
+      netOrientation: {normal: netNormal},
+      currentNormal,
+    });
     if (r) results.push(r.label);
   }
   expect(results).toHaveLength(20);

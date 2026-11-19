@@ -1,6 +1,7 @@
-import {connectLobbySwings} from './lobbyConnection.js';
-import {createInputId} from './inputId.js';
-import {isSwing} from '../../shared/protocol.js';
+import {copySwingDetails} from '../../shared/swingDetails.js';
+import { connectLobbySwings } from './lobbyConnection.js';
+import { createInputId } from './inputId.js';
+import { isSwing } from '../../shared/protocol.js';
 
 // Standalone prototypes retain their relay; embedded tennis uses its lobby.
 export function connectSwings({
@@ -63,16 +64,9 @@ export function connectSwings({
   }
   connect();
   return {
-    sendSwing(label, hand, power = 0.5, netNormal, swingNormal) {
-      const event = {
-        type: 'swing',
-        id: createInputId(),
-        label,
-        hand,
-        power,
-        netNormal,
-        swingNormal,
-      };
+    sendSwing(label, hand, power = 0.5, placement = {}, swingNormal) {
+      const event = { type: 'swing', id: createInputId(), label, hand, power,
+        ...copySwingDetails(placement, swingNormal) };
       if (!isSwing(event) || socket.readyState !== WebSocket.OPEN) return false;
       sentAt.set(event.id, performance.now());
       if (sentAt.size > 40) sentAt.delete(sentAt.keys().next().value);

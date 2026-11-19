@@ -16,3 +16,9 @@ build/
 *.tsbuildinfo
 .DS_Store
 /.phone-build/
+
+# Local profile database, session hashes, and development state
+.wee-data/
+
+# Repository-local preview builds and browser tooling
+.local-preview/

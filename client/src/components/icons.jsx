@@ -1,7 +1,6 @@
 /**
- * Placeholder art, drawn as inline SVG so it stays sharp on a TV. The asset
- * pass replaces the sport icons; the step icons use currentColor so CSS
- * decides their color.
+ * Scalable sport and control marks. Outline sport icons use currentColor so
+ * the phone and existing controls retain readable contrast in both themes.
  */
 
 export function BallMark(props) {
@@ -15,52 +14,49 @@ export function BallMark(props) {
 
 export function RacketIcon(props) {
   return (
-    <svg viewBox="0 0 64 64" aria-hidden="true" {...props}>
+    <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
       <g transform="rotate(-35 32 32)">
-        <clipPath id="wee-racket-strings">
-          <ellipse cx="32" cy="22" rx="11.5" ry="14.5" />
-        </clipPath>
-        <g clipPath="url(#wee-racket-strings)" stroke="#2f80ed" strokeOpacity="0.35" strokeWidth="1.3">
-          <path d="M18 11h28M18 16h28M18 21h28M18 26h28M18 31h28M24 5v34M28 5v34M32 5v34M36 5v34M40 5v34" />
-        </g>
-        <ellipse cx="32" cy="22" rx="13" ry="16" fill="none" stroke="#2f80ed" strokeWidth="3.5" />
-        <path d="M28.5 37 32 44l3.5-7" fill="none" stroke="#2f80ed" strokeWidth="3" strokeLinejoin="round" />
-        <rect x="29" y="43" width="6" height="15" rx="3" fill="#1f4f99" />
+        <ellipse cx="32" cy="22" rx="13" ry="16" />
+        <path d="M24 11v22M29 7v30M35 7v30M40 11v22M21 14h22M19 20h26M20 26h24M23 32h18" strokeWidth="1.2" />
+        <path d="M28.5 37 32 44l3.5-7" />
+        <rect x="29" y="43" width="6" height="15" rx="2" />
       </g>
-      <circle cx="17" cy="48" r="7.5" fill="#d7f34a" stroke="#a3c227" strokeWidth="1.5" />
-      <path d="M11.5 44.5c3 1.5 3 5.5 0 7M22.5 44.5c-3 1.5-3 5.5 0 7" fill="none" stroke="#fff" strokeWidth="1.5" />
     </svg>
   );
 }
 
+
+
 export function BowlingIcon(props) {
   return (
-    <svg viewBox="0 0 64 64" aria-hidden="true" {...props}>
+    <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
       <path
         d="M40 6c-4 0-5.5 3.5-5.5 7 0 3 1.5 5 1.5 7.5 0 2.5-6 7-6 17 0 8 3 15 4 20h12c1-5 4-12 4-20 0-10-6-14.5-6-17 0-2.5 1.5-4.5 1.5-7.5 0-3.5-1.5-7-5.5-7z"
-        fill="#fff"
-        stroke="#b9c1c9"
-        strokeWidth="1.5"
       />
-      <path d="M35.8 22.5h8.4M35.2 26h9.6" stroke="#e5484d" strokeWidth="2.2" />
-      <circle cx="19" cy="46" r="11" fill="#6e56cf" />
-      <circle cx="15.5" cy="42" r="1.8" fill="#3b2a87" />
-      <circle cx="20.5" cy="40.5" r="1.8" fill="#3b2a87" />
-      <circle cx="19" cy="46" r="1.8" fill="#3b2a87" />
-      <path d="M12 41a9 9 0 0 1 5-5" fill="none" stroke="#fff" strokeOpacity="0.5" strokeWidth="2" strokeLinecap="round" />
+      <path d="M35.8 22.5h8.4" />
+      <circle cx="18" cy="44" r="13" />
+      <circle cx="15" cy="39" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="20" cy="37" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="20" cy="43" r="1.4" fill="currentColor" stroke="none" />
     </svg>
   );
 }
 
 export function GolfIcon(props) {
   return (
-    <svg viewBox="0 0 64 64" aria-hidden="true" {...props}>
-      <ellipse cx="32" cy="52" rx="26" ry="8" fill="#30a46c" />
-      <ellipse cx="32" cy="50.5" rx="24" ry="6" fill="#4cc38a" />
-      <ellipse cx="38" cy="50" rx="4" ry="1.6" fill="#145233" />
-      <path d="M38 50V8" stroke="#5b646c" strokeWidth="2" strokeLinecap="round" />
-      <path d="M38 8l16 5.5L38 19z" fill="#e5484d" />
-      <circle cx="20" cy="46.5" r="4.5" fill="#fff" stroke="#c3cad1" strokeWidth="1.2" />
+    <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <ellipse cx="29" cy="53" rx="21" ry="6" />
+      <path d="M29 52V7l20 7-20 7M23 53h12" />
+    </svg>
+  );
+}
+
+/** Neutral fallback for a supported sport awaiting its own artwork. */
+export function SportIcon(props) {
+  return (
+    <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true" {...props}>
+      <circle cx="32" cy="32" r="23" />
+      <path d="M14 18c18 5 18 23 0 28M50 18c-18 5-18 23 0 28" />
     </svg>
   );
 }

@@ -86,13 +86,13 @@ export class BowlingMatch {
   constructor(players: BowlingPlayer[]) {
     if (
       players.length < 1 ||
-      players.length > 4 ||
+      players.length > 8 ||
       new Set(players.map(p => p.player)).size !== players.length ||
       players.some(
-        p => !Number.isInteger(p.player) || p.player < 1 || p.player > 4,
+        p => !Number.isInteger(p.player) || p.player < 1 || p.player > 8,
       )
     ) {
-      throw new Error('Bowling needs one to four unique players.');
+      throw new Error('Bowling needs one to eight unique players.');
     }
     this.participants = players.map(p => ({...p}));
     this.frames = players.map(() => Array.from({length: 10}, () => []));

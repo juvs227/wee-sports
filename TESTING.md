@@ -10,7 +10,9 @@ Most tests follow the **Arrange, Act, Assert** pattern:
 - **Act:** Call the function being tested.
 - **Assert:** Check that the result matches the expected behavior.
 
-Suppose we want to test swing detection in `classifySwing.js`.
+This walkthrough tests the acceleration-based detector in `accelerationSwing.js`,
+which is preserved for orientation compatibility. The active phone controller uses
+the separate gyro-based detector in `classifySwing.js`; its input format differs.
 
 ## 1. Create a test file
 
@@ -36,7 +38,7 @@ import { test, expect } from 'vitest';
 import {
   createSwingDetector,
   SWING_LIMITS,
-} from '../src/controller/classifySwing.js';
+} from '../src/controller/accelerationSwing.js';
 ```
 
 ## 3. Define the test
@@ -45,7 +47,7 @@ Give the test a name that describes the expected behavior.
 The callback contains the setup, action, and assertions:
 
 ```ts
-test('detects a swing when acceleration meets the threshold', () => {
+test('detects a swing when accelMag meets the threshold', () => {
   // Arrange
 
   // Act
@@ -101,9 +103,9 @@ import { test, expect } from 'vitest';
 import {
   createSwingDetector,
   SWING_LIMITS,
-} from '../src/controller/classifySwing.js';
+} from '../src/controller/accelerationSwing.js';
 
-test('detects a swing when acceleration meets the threshold', () => {
+test('detects a swing when accelMag meets the threshold', () => {
   // Arrange
   const detector = createSwingDetector();
   const sample = {
@@ -146,6 +148,6 @@ If it fails, inspect the expected and actual values in the terminal.
 Before committing a new test or code change, run:
 
 ```bash
-npm run compile
+npm run check
 npm test
 ```

@@ -145,6 +145,52 @@ test('one TV audio context survives countdown into actual game effects', async (
   sound.dispose();
 });
 
+test('changing sports preserves TV activation, mute and pause without replaying events', async () => {
+  const h = harness();
+  const sound = createSportsAudio('bowling', h.options);
+  await sound.unlock();
+  expect(sound.play('roll')).toBe(true);
+  await sound.setSport('tennis');
+  expect(h.sources[0].stop).toHaveBeenCalled();
+  expect(h.createContext).toHaveBeenCalledTimes(1);
+  expect(h.context.resume).toHaveBeenCalledTimes(1);
+  expect(sound.play('hit')).toBe(true);
+  expect(sound.play('roll')).toBe(false);
+  sound.setMuted(true);
+  await sound.setSport('tennis');
+  expect(sound.getStatus().muted).toBe(true);
+  expect(sound.play('hit')).toBe(false);
+  sound.setMuted(false);
+  sound.setActive(false);
+  await sound.setSport('tennis');
+  expect(sound.play('point')).toBe(false);
+  const played = h.sources.length;
+  sound.setActive(true);
+  expect(h.sources).toHaveLength(played);
+  expect(sound.play('point')).toBe(true);
+  sound.dispose();
+});
+
+test('late sound downloads from an old sport never replace the current effect', async () => {
+  const h = harness();
+  let finish!: () => void;
+  const slow = new Promise<void>(resolve => { finish = resolve; });
+  h.fetchAsset.mockImplementation(async (...args: unknown[]) => {
+    if (String(args[0]).includes('/bowling/')) await slow;
+    return {ok: true, arrayBuffer: async () => new ArrayBuffer(4)};
+  });
+  const sound = createSportsAudio('bowling', h.options);
+  const unlock = sound.unlock();
+  await sound.setSport('tennis');
+  expect(sound.play('hit')).toBe(true);
+  finish();
+  await unlock;
+  expect(sound.play('release')).toBe(false);
+  expect(h.sources).toHaveLength(1);
+  expect(h.createContext).toHaveBeenCalledTimes(1);
+  sound.dispose();
+});
+
 test('restored matches do not replay start, skipped countdowns do not catch up, and pause stops loops', () => {
   const sound = {
     play: vi.fn((_event: string) => true),

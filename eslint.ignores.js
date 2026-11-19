@@ -1,6 +1,8 @@
-// eslint.ignores.js
 export default [
-  'dist/**',
+  '**/node_modules/**',
+  '**/dist/**',
   'build/**',
-  '.phone-build/**'
+  '.phone-build/**',
+  '.local-preview/**',
+  'apps/controller/.expo/**',
 ];

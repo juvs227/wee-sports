@@ -1,23 +1,36 @@
 {
   "extends": "./node_modules/gts/tsconfig-google.json",
   "compilerOptions": {
+    "rootDir": ".",
     "outDir": "build",
-    "module": "ESNext",
-    "lib": ["DOM", "DOM.Iterable", "ESNext"],
-    "types": ["node"],
+    "tsBuildInfoFile": "./node_modules/.cache/wee-sports/tsconfig.tsbuildinfo",
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "ESNext"
+    ],
+    "types": [
+      "node"
+    ],
     "skipLibCheck": true,
-    "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
-    "noEmit": true
+    "noEmit": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler"
   },
   "include": [
     "src/**/*.ts",
-    "test/**/*.ts"
+    "test/**/*.ts",
+    "components/**/*.ts",
+    "*.ts",
+    "shared/**/*.d.ts"
   ],
   "exclude": [
     "node_modules",
     "dist",
     "build",
-    ".phone-build"
+    ".phone-build",
+    ".local-preview",
+    "apps/controller/.expo"
   ]
 }

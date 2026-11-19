@@ -1,48 +1,82 @@
 #!/usr/bin/env node
-import http from 'http';
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
-import { fileURLToPath } from 'url';
-import { WebSocketServer } from 'ws';
+import http from 'node:http';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import process from 'node:process';
+import {fileURLToPath, URL} from 'node:url';
+import {WebSocketServer, WebSocket} from 'ws';
 
-const PORT = 3737;
-const ROOT = path.resolve(fileURLToPath(import.meta.url), '../../..');
+const ROOT = fileURLToPath(new URL('../../', import.meta.url));
+const FILES = new Set([
+  '/tools/orientation-test/index.html',
+  '/src/controller/orientationCalibration.js',
+  '/src/controller/androidCalibration.js',
+  '/src/controller/iosCalibration.js',
+]);
 
-const MIME = {
-  '.html': 'text/html',
-  '.js':   'application/javascript',
-  '.css':  'text/css',
-};
-
-const server = http.createServer((req, res) => {
-  let url = req.url.split('?')[0];
-  if (url === '/' || url === '') url = '/tools/orientation-test/index.html';
-  const file = path.join(ROOT, url);
-  if (!file.startsWith(ROOT)) { res.writeHead(403); res.end(); return; }
-  fs.readFile(file, (err, data) => {
-    if (err) { res.writeHead(404); res.end(String(err)); return; }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] ?? 'text/plain' });
-    res.end(data);
+// This diagnostic server serves only its four public files, never repo data.
+export function createOrientationTestServer() {
+  const server = http.createServer(async (req, res) => {
+    const pathname = new URL(req.url, 'http://localhost').pathname;
+    const file =
+      pathname === '/' ? '/tools/orientation-test/index.html' : pathname;
+    if (!FILES.has(file) || !['GET', 'HEAD'].includes(req.method)) {
+      res.writeHead(404);
+      res.end();
+      return;
+    }
+    try {
+      const bytes = await fs.readFile(path.join(ROOT, file));
+      res.writeHead(200, {
+        'Content-Type': file.endsWith('.html')
+          ? 'text/html; charset=utf-8'
+          : 'application/javascript',
+        'X-Content-Type-Options': 'nosniff',
+        'Cache-Control': 'no-store',
+      });
+      res.end(req.method === 'HEAD' ? undefined : bytes);
+    } catch {
+      res.writeHead(404);
+      res.end();
+    }
   });
-});
-
-const wss = new WebSocketServer({ server });
-const clients = new Set();
-
-wss.on('connection', ws => {
-  clients.add(ws);
-  ws.on('message', msg => {
-    const str = msg.toString();
-    for (const c of clients) if (c !== ws && c.readyState === 1) c.send(str);
+  const relay = new WebSocketServer({
+    server,
+    maxPayload: 16384,
+    verifyClient: ({origin, req}) => {
+      try {
+        return new URL(origin).host === req.headers.host;
+      } catch {
+        return false;
+      }
+    },
   });
-  ws.on('close', () => clients.delete(ws));
-});
+  relay.on('connection', socket => {
+    socket.on('error', () => {});
+    socket.on('message', message => {
+      for (const client of relay.clients) {
+        if (
+          client !== socket &&
+          client.readyState === WebSocket.OPEN &&
+          client.bufferedAmount < 16384
+        )
+          client.send(message.toString());
+      }
+    });
+  });
+  return {server, relay};
+}
 
-const lan = Object.values(os.networkInterfaces()).flat()
-  .find(i => i.family === 'IPv4' && !i.internal)?.address ?? 'YOUR_LAN_IP';
-
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`\nLaptop: http://localhost:${PORT}?role=screen`);
-  console.log(`Phone:  http://${lan}:${PORT}?role=phone\n`);
-});
+if (
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  const {server} = createOrientationTestServer();
+  const host = process.env.HOST || '127.0.0.1',
+    port = Number(process.env.PORT || 3737);
+  server.listen(port, host, () => {
+    process.stdout.write(
+      `Orientation test: http://localhost:${server.address().port}?role=screen\nUse HOST=0.0.0.0 with a trusted LAN or HTTPS tunnel for a phone.\n`,
+    );
+  });
+}

@@ -30,6 +30,13 @@ export function requestSwing(event, payload, current) {
   return sendSwingRequest(socket, event, payload, current);
 }
 
+/** A release is also transient; never queue it behind a stalled connection. */
+export function requestRoll(event, payload, current) {
+  // Allow the server's 2.5 s delivery outcome to settle before reconciliation.
+  // This acknowledgement deadline does not extend the 80 ms transport wait.
+  return sendSwingRequest(socket, event, payload, current, 5000);
+}
+
 /** 'connecting' | 'online' | 'offline'. Socket.io keeps retrying while offline. */
 export function useConnection() {
   const [state, setState] = useState(socket.connected ? 'online' : 'connecting');

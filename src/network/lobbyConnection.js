@@ -1,5 +1,6 @@
-import {isSwing} from '../../shared/protocol.js';
-import {createInputId} from './inputId.js';
+import {copySwingDetails} from '../../shared/swingDetails.js';
+import { isSwing } from '../../shared/protocol.js';
+import { createInputId } from './inputId.js';
 
 /** Embedded tennis uses the outer page's lobby session and reconnect handling. */
 export function connectLobbySwings({
@@ -73,25 +74,10 @@ export function connectLobbySwings({
   onStatus('Connecting to homepage lobby…');
   post({type: 'wee:bridge-ready'});
   return {
-    sendSwing(label, hand, power = 0.5, netNormal, swingNormal) {
-      const event = {
-        type: 'swing',
-        id: createInputId(),
-        label,
-        hand,
-        power,
-        gameId,
-        netNormal,
-        swingNormal,
-      };
-      if (
-        role !== 'phone' ||
-        !connected ||
-        paused ||
-        !gameId ||
-        !isSwing(event)
-      )
-        return false;
+    sendSwing(label, hand, power = 0.5, placement = {}, swingNormal) {
+      const event = { type: 'swing', id: createInputId(), label, hand, power, gameId,
+        ...copySwingDetails(placement, swingNormal) };
+      if (role !== 'phone' || !connected || paused || !gameId || !isSwing(event)) return false;
       sentAt.set(event.id, performance.now());
       if (sentAt.size > 40) sentAt.delete(sentAt.keys().next().value);
       post({type: 'wee:player-swing', event});

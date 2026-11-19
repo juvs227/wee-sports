@@ -16,8 +16,7 @@ function game(sport = 'tennis') {
   const host = store.createRoom('tv', { v, sport });
   const phone = store.join('phone', { v, code: host.code, name: 'Player' });
   store.setSetup('phone', { setup: 'motion' });
-  store.setReady('phone', { ready: true });
-  store.calibrationDone('tv');
+  store.setReady('phone', { ready: true }); store.startGame('phone');
   now = 5000;
   store.finishCountdown(host.code);
   now += VOTE_SECONDS * 1000;
@@ -87,7 +86,7 @@ test('bowling contact feedback is restricted to the current rolling seat and mat
   state('ready');
   assert.equal(store.hitTarget('tv', { ...hit, id: 'after-roll' }).error, 'not-playing');
   assert.equal(isGameHit({ ...hit, player: 4 }, 'bowling'), true);
-  assert.equal(isGameHit({ ...hit, player: 5 }, 'bowling'), false);
+  assert.equal(isGameHit({ ...hit, player: 9 }, 'bowling'), false);
   assert.equal(store.lobby(host.code).gameState.phase, 'ready');
 });
 
@@ -112,7 +111,7 @@ for (const sport of ['tennis', 'bowling']) test(`${sport}: real socket feedback 
   const seat = await send(phone, EVENTS.PLAYER_JOIN, { v, code: room.code, name: 'Player' });
   await send(phone, EVENTS.PLAYER_SETUP, { setup: 'motion' });
   await send(phone, EVENTS.PLAYER_READY, { ready: true });
-  await send(host, EVENTS.HOST_CALIBRATION_DONE, {});
+  await send(phone, EVENTS.PLAYER_START, {});
   now = 5000; store.finishCountdown(room.code);
   now += VOTE_SECONDS * 1000; store.expireVote(room.code);
   const hit = { id: 'actual-contact', gameId: store.lobby(room.code).gameId, player: 1 };

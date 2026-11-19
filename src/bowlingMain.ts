@@ -22,6 +22,11 @@ let pageSuspended = false;
 let manuallyPaused = false;
 let paused = embedded;
 let connected = false;
+let inputGeneration: number | undefined;
+let hostEpoch: number | undefined;
+let lastAimSequence = -1;
+let lastAimPlayer: number | null = null;
+let aimTarget: Pick<BowlingState, 'phase' | 'currentPlayer'> | null = null;
 const sound = embedded ? null : createSportsAudio('bowling');
 sound?.mountButton(document.querySelector('.bowling-heading') as HTMLElement);
 sound?.setActive(!paused);
@@ -67,6 +72,11 @@ function audioEvent(event: string): void {
 }
 
 function render(state: BowlingState): void {
+  aimTarget = {phase: state.phase, currentPlayer: state.currentPlayer};
+  if (state.currentPlayer !== lastAimPlayer) {
+    lastAimSequence = -1;
+    lastAimPlayer = state.currentPlayer;
+  }
   complete = state.complete;
   const call = callouts.observe(state, paused);
   if (paused || state.phase === 'rolling' || !state.lastRoll) clearCallout();
@@ -233,6 +243,7 @@ function newMatch(): void {
   clearCallout();
   callouts.reset();
   delivered.clear();
+  lastAimSequence = -1;
   world?.reset();
   audioEvent('start');
   publishOptions();
@@ -248,6 +259,11 @@ function receive(event: MessageEvent): void {
   if (data?.type === 'wee:lobby-state' && data.sport === 'bowling') {
     const wasPaused = paused;
     const wasConnected = connected;
+    const nextGeneration = data.inputGeneration ?? data.generation;
+    if (nextGeneration !== inputGeneration || data.hostEpoch !== hostEpoch)
+      lastAimSequence = -1;
+    inputGeneration = nextGeneration;
+    hostEpoch = data.hostEpoch;
     connected = data.connected === true;
     lobbyPaused =
       data.paused ||
@@ -275,6 +291,7 @@ function receive(event: MessageEvent): void {
       world?.dispose();
       world = null;
       gameId = data.gameId;
+      lastAimSequence = -1;
       delivered.clear();
       commands.clear();
       try {
@@ -312,15 +329,32 @@ function receive(event: MessageEvent): void {
       result = {ok: true};
     }
     post({type: 'wee:game-command-result', id: command.id, gameId, result});
-  } else if (
-    data?.type === 'wee:aim-preview' &&
-    data.gameId === gameId &&
-    Number.isFinite(data.aim) &&
-    Math.abs(data.aim) <= 1 &&
-    world &&
-    !paused
-  ) {
-    world.setAim(data.aim);
+  } else if (data?.type === 'wee:game-aim') {
+    const aim = data.event;
+    const sequence = aim?.seq ?? aim?.sequence;
+    const generation = aim?.inputGeneration ?? aim?.generation;
+    // World transitions publish synchronously. Read the cached turn so live
+    // sensor packets do not rebuild every player's ten-frame scorecard.
+    const target = aimTarget;
+    if (
+      !world ||
+      paused ||
+      !connected ||
+      aim?.gameId !== gameId ||
+      target?.phase !== 'ready' ||
+      aim.player !== target.currentPlayer ||
+      !Number.isFinite(aim.aim) ||
+      Math.abs(aim.aim) > 1 ||
+      typeof aim.locked !== 'boolean' ||
+      !Number.isSafeInteger(sequence) ||
+      sequence < 0 ||
+      sequence <= lastAimSequence ||
+      (inputGeneration !== undefined && generation !== inputGeneration) ||
+      (hostEpoch !== undefined && aim.hostEpoch !== hostEpoch)
+    )
+      return;
+    lastAimSequence = sequence;
+    world.setAim(aim.aim);
   } else if (data?.type === 'wee:game-roll') {
     const roll = data.event;
     if (!roll || typeof roll.id !== 'string') return;

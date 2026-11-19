@@ -9,8 +9,8 @@
  * iosCalibration.js — this file contains only the calibration logic.
  */
 
-import { createAndroidOrientationSource } from './androidCalibration.js';
-import { createIOSOrientationSource }     from './iosCalibration.js';
+import {createAndroidOrientationSource} from './androidCalibration.js';
+import {createIOSOrientationSource} from './iosCalibration.js';
 
 // ── Math helpers ──────────────────────────────────────────────────────────────
 
@@ -28,28 +28,34 @@ function qrot(q, v) {
   ];
 }
 
-function qdot(a, b) { return a[0]*b[0] + a[1]*b[1] + a[2]*b[2] + a[3]*b[3]; }
+function qdot(a, b) {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+}
 
 /** Angular distance between two quaternions in degrees. */
-function qdeg(a, b) { return 2 * Math.acos(Math.min(1, Math.abs(qdot(a, b)))) * 180 / Math.PI; }
+function qdeg(a, b) {
+  return (2 * Math.acos(Math.min(1, Math.abs(qdot(a, b)))) * 180) / Math.PI;
+}
 
-function qnorm(q) { const l = Math.hypot(...q); return q.map(v => v / l); }
+function qnorm(q) {
+  const l = Math.hypot(...q);
+  return q.map(v => v / l);
+}
 
 /**
  * W3C deviceorientation Euler → screen normal vector in ENU world space.
  * Column 3 of the W3C rotation matrix is the screen's outward normal.
  */
 export function eulerToNormal(alpha, beta, gamma) {
-  const a = alpha * Math.PI / 180;
-  const b = beta  * Math.PI / 180;
-  const g = gamma * Math.PI / 180;
+  const a = (alpha * Math.PI) / 180;
+  const b = (beta * Math.PI) / 180;
+  const g = (gamma * Math.PI) / 180;
   return [
     -Math.cos(a) * Math.sin(g) + Math.cos(g) * Math.sin(a) * Math.sin(b),
-     Math.sin(a) * Math.sin(g) + Math.cos(a) * Math.cos(g) * Math.sin(b),
-     Math.cos(b) * Math.cos(g),
+    Math.sin(a) * Math.sin(g) + Math.cos(a) * Math.cos(g) * Math.sin(b),
+    Math.cos(b) * Math.cos(g),
   ];
 }
-
 
 // ── Source factory ────────────────────────────────────────────────────────────
 
@@ -62,18 +68,86 @@ export function eulerToNormal(alpha, beta, gamma) {
  * @param {{ alpha: number, beta: number, gamma: number }} [opts.bias]
  * @returns source object with { onReading, start(), stop(), getNormal(), getQuaternion() }
  */
-export function createOrientationSource({ bias } = {}) {
-  if ('AbsoluteOrientationSensor' in window) {
-    return createAndroidOrientationSource();
-  }
-  return createIOSOrientationSource(bias ?? { alpha: 0, beta: 0, gamma: 0 });
+export function createOrientationSource({
+  bias,
+  target = globalThis.window,
+  permissions = globalThis.navigator?.permissions,
+  clock = () => performance.now(),
+} = {}) {
+  let active = false,
+    attempt = 0,
+    current = null,
+    quaternion = null,
+    normal = null;
+  const listeners = new Set();
+  const source = {
+    onReading: null,
+    onReset: null,
+    async start() {
+      source.stop();
+      active = true;
+      const generation = attempt;
+      const bind = candidate => {
+        current = candidate;
+        candidate.onReading = (q, n) => {
+          if (!active || generation !== attempt || current !== candidate)
+            return;
+          quaternion = [...q];
+          normal = [...n];
+          source.onReading?.([...q], [...n]);
+          for (const listener of listeners) listener([...q], [...n]);
+        };
+        return candidate;
+      };
+      const fallback = () => {
+        if (!active || generation !== attempt) return;
+        current?.stop();
+        quaternion = null;
+        normal = null;
+        source.onReset?.();
+        const candidate = bind(
+          createIOSOrientationSource(bias, {target, clock}),
+        );
+        candidate.start();
+      };
+      if (typeof target?.AbsoluteOrientationSensor !== 'function') {
+        fallback();
+        return;
+      }
+      const native = bind(
+        createAndroidOrientationSource({target, permissions}),
+      );
+      native.onError = fallback;
+      try {
+        await native.start();
+      } catch {
+        if (active && generation === attempt && current === native) fallback();
+      }
+    },
+    stop() {
+      active = false;
+      attempt++;
+      current?.stop();
+      current = null;
+      quaternion = null;
+      normal = null;
+      source.onReset?.();
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    getNormal: () => normal && [...normal],
+    getQuaternion: () => quaternion && [...quaternion],
+  };
+  return source;
 }
 
 // ── Calibration session ───────────────────────────────────────────────────────
 
-const STILL_REQUIRED_MS = 500;  // phone must be still before capture starts
-const CAPTURE_MS        = 2000; // duration of the capture window
-const STILL_THRESH_DEG  = 1.5;  // °/frame threshold for "still"
+const STILL_REQUIRED_MS = 500; // phone must be still before capture starts
+const CAPTURE_MS = 2000; // duration of the capture window
+const STILL_THRESH_DEG = 1.5; // °/frame threshold for "still"
 
 /**
  * @param {object} opts
@@ -82,13 +156,16 @@ const STILL_THRESH_DEG  = 1.5;  // °/frame threshold for "still"
  * @param {(normal: number[], quat: number[]) => void} opts.onDone
  * @returns {{ start: () => Promise<void>, stop: () => void }}
  */
-export function createOrientationCalibration({ source, onProgress, onDone }) {
-  let calState   = 'waiting_still';
+export function createOrientationCalibration({source, onProgress, onDone}) {
+  const owned = !source;
+  source ??= createOrientationSource();
+  let calState = 'waiting_still';
   let stillSince = null;
-  let calStart   = null;
+  let calStart = null;
   let calSamples = [];
-  let lastQuat   = null;
-  let stopped    = false;
+  let lastQuat = null;
+  let stopped = false;
+  let detach = () => {};
 
   function tick(quat) {
     if (stopped) return;
@@ -104,8 +181,8 @@ export function createOrientationCalibration({ source, onProgress, onDone }) {
       } else {
         if (stillSince === null) stillSince = now;
         if (now - stillSince >= STILL_REQUIRED_MS) {
-          calState   = 'calibrating';
-          calStart   = now;
+          calState = 'calibrating';
+          calStart = now;
           calSamples = [quat];
           onProgress(0, 'calibrating');
         } else {
@@ -117,7 +194,7 @@ export function createOrientationCalibration({ source, onProgress, onDone }) {
 
     if (calState === 'calibrating') {
       if (moving) {
-        calState   = 'waiting_still';
+        calState = 'waiting_still';
         stillSince = null;
         calSamples = [];
         onProgress(0, 'moving');
@@ -134,12 +211,18 @@ export function createOrientationCalibration({ source, onProgress, onDone }) {
       if (progress >= 1) {
         // Average collected quaternions then normalise.
         const avg = [0, 0, 0, 0];
-        for (const q of calSamples) { avg[0] += q[0]; avg[1] += q[1]; avg[2] += q[2]; avg[3] += q[3]; }
-        const refQuat   = qnorm(avg);
+        for (const q of calSamples) {
+          avg[0] += q[0];
+          avg[1] += q[1];
+          avg[2] += q[2];
+          avg[3] += q[3];
+        }
+        const refQuat = qnorm(avg);
         const refNormal = qrot(refQuat, [0, 0, 1]);
         calState = 'done';
-        stopped  = true;
-        source.onReading = null; // detach — source keeps running for live game
+        stopped = true;
+        detach();
+        if (owned) source.stop(); // A borrowed source keeps its live observers.
         onDone(refNormal, refQuat);
       }
     }
@@ -148,11 +231,25 @@ export function createOrientationCalibration({ source, onProgress, onDone }) {
   return {
     start() {
       if (stopped) return;
-      source.onReading = tick; // source is already running — just hook in
+      detach();
+      if (source.subscribe) detach = source.subscribe(tick);
+      else {
+        const previous = source.onReading;
+        const reading = (quaternion, normal) => {
+          previous?.(quaternion, normal);
+          tick(quaternion, normal);
+        };
+        source.onReading = reading;
+        detach = () => {
+          if (source.onReading === reading) source.onReading = previous;
+        };
+      }
+      if (owned) return source.start();
     },
     stop() {
       stopped = true;
-      source.onReading = null;
+      detach();
+      if (owned) source.stop();
     },
   };
 }

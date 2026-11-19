@@ -12,6 +12,8 @@ export interface SwingResult {
 export interface SwingSample {
   timeMs: number;
   accelMag: number;
+  netOrientation?: {normal: [number, number, number]};
+  currentNormal?: [number, number, number];
 }
 
 export interface SwingDetector {

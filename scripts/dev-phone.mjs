@@ -1,7 +1,6 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { securePhoneOrigin } from '../server/phoneLink.js';
-import { phoneBuildEnvironment, waitForGameServer } from './phone-session.mjs';
+import { phoneBuildEnvironment, waitForGameServer, waitForTunnelOrigin } from './phone-session.mjs';
 
 // One command builds the app, creates an HTTPS tunnel and serves the game.
 // Serve the production build so the public URL does not expose Vite's file API.
@@ -42,30 +41,14 @@ try {
   if (stopping) process.exit(0);
   console.log('Preparing Wee Sports for phone play…');
   const build = launch(npm, ['run', 'build'], { env: phoneBuildEnvironment(process.env), shell: process.platform === 'win32' });
-  const [buildCode] = await once(build, 'exit');
-  if (stopping) process.exit(0);
-  if (buildCode !== 0) throw new Error('The game build failed. Fix the build before opening a phone session.');
+  const built = once(build, 'exit').then(([code]) => {
+    if (code !== 0) throw new Error('The game build failed. Fix the build before opening a phone session.');
+  });
+  // Tunnel provisioning and the build are independent. Serve nothing until
+  // both finish, then verify HTTPS reachability before advertising the QR.
   const tunnel = launch('cloudflared', ['tunnel', '--no-autoupdate', '--protocol', 'http2', '--url', `http://127.0.0.1:${port}`], { stdio: ['ignore', 'pipe', 'pipe'] });
-  const origin = await new Promise((resolve, reject) => {
-    let output = '';
-    const timer = setTimeout(() => reject(new Error('The secure phone link timed out. Check your internet connection and try again.')), 45000);
-    const read = chunk => {
-      output = (output + chunk.toString()).slice(-12000);
-      const match = output.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com\b/);
-      if (match) { clearTimeout(timer); resolve(securePhoneOrigin(match[0])); }
-    };
-    tunnel.stdout.on('data', read);
-    tunnel.stderr.on('data', read);
-    tunnel.once('error', error => { clearTimeout(timer); reject(error); });
-    tunnel.once('exit', () => { clearTimeout(timer); reject(new Error('The secure connection stopped before it was ready.')); });
-  });
-  if (stopping) process.exit(0);
-  const server = launch(process.execPath, ['server/main.js', '--preview'], {
-    stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
-    env: { ...phoneBuildEnvironment(process.env), PORT: String(port), PUBLIC_GAME_URL: origin, PHONE_LINK_MANAGED: '1' },
-  });
-  server.once('error', error => { console.error(error.message); stop(1); });
-  server.once('exit', code => { if (!stopping) stop(code || 1); });
+  const tunnelOrigin = waitForTunnelOrigin(tunnel, { signal: shutdown.signal });
+  let server;
   let tunnelRunning = true;
   let linkStatus = 'connecting';
   function setLinkStatus(status) {
@@ -75,14 +58,30 @@ try {
     if (status === 'ready') console.log(`Phone link ready: ${origin}\nScan the current lobby QR. This temporary link is not tied to a Cloudflare account.\nKeep this session open while playing. Restarting creates a new phone link.\n`);
     else if (status === 'reconnecting') console.log('The phone link is reconnecting. The TV game stays open; its QR will return when the link is reachable.');
   }
-  tunnel.once('exit', () => {
+  function tunnelStopped() {
+    if (!tunnelRunning) return;
     tunnelRunning = false;
     clearTimeout(healthTimer);
     if (!stopping) {
-      setLinkStatus('unavailable');
-      console.error('The phone link stopped. Restart this session for a fresh QR code. The local game is still running.');
+      if (!server) {
+        console.error('The secure connection stopped before startup finished. Run npm run dev again.');
+        stop(1);
+      } else {
+        setLinkStatus('unavailable');
+        console.error('The phone link stopped. Restart this session for a fresh QR code. The local game is still running.');
+      }
     }
+  }
+  tunnel.once('exit', tunnelStopped);
+  tunnel.once('error', tunnelStopped);
+  const [, origin] = await Promise.all([built, tunnelOrigin]);
+  if (stopping) process.exit(process.exitCode ?? 0);
+  server = launch(process.execPath, ['server/main.js', '--preview'], {
+    stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
+    env: { ...phoneBuildEnvironment(process.env), PORT: String(port), PUBLIC_GAME_URL: origin, PHONE_LINK_MANAGED: '1' },
   });
+  server.once('error', error => { console.error(error.message); stop(1); });
+  server.once('exit', code => { if (!stopping) stop(code || 1); });
   await waitForGameServer(`http://127.0.0.1:${port}/health`, { signal: shutdown.signal });
   if (stopping) process.exit(0);
   console.log(`\nOpen the TV here: http://localhost:${port}\nChecking that the phone link works from the internet…\n`);
@@ -93,7 +92,7 @@ try {
     } catch {
       if (tunnelRunning) setLinkStatus('reconnecting');
     }
-    if (!stopping && tunnelRunning) healthTimer = setTimeout(() => { void checkPhoneLink(); }, 15000);
+    if (!stopping && tunnelRunning) healthTimer = setTimeout(() => { void checkPhoneLink(); }, linkStatus === 'ready' ? 15000 : 1000);
   }
   await checkPhoneLink(true);
 } catch (error) {

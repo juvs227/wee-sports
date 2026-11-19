@@ -40,6 +40,17 @@ test('TV reload preserves the room and players and transfers host permission', (
   assert.equal(store.hostedBy('host'), null);
 });
 
+test('reconnection snapshots distinguish the TV from a player named TV without exposing proof', () => {
+  const {store,code,host}=setup();
+  const player=store.join('named-tv',{v,code,name:'TV'});
+  store.disconnect('named-tv');store.disconnect('host');
+  const reconnecting=store.lobby(code).reconnecting;
+  assert.equal(reconnecting.filter(member=>member.name==='TV').length,2);
+  assert.deepEqual(new Set(reconnecting.map(member=>member.role)),new Set(['host','player']));
+  assert.equal(JSON.stringify(reconnecting).includes(host.token),false);
+  assert.equal(JSON.stringify(reconnecting).includes(player.token),false);
+});
+
 test('wrong tokens, room codes, roles, and protocol versions cannot resume', () => {
   const { store, players, code } = setup();
   const payload = { v, code, token: players[0].token, role: 'player' };
@@ -97,7 +108,7 @@ test('all missing participants must return before the flow resumes', () => {
 test('countdown freezes on disconnect and continues with its remaining duration', () => {
   const { store, players, clock, code } = setup(2);
   for (let i = 0; i < 2; i++) store.setReady(`p${i}`, { ready: true });
-  store.calibrationDone('host');
+  store.startGame('p0');
   clock.now += 2000;
   store.disconnect('p0'); clock.now += 20_000;
   assert.equal(store.finishCountdown(code), null);
@@ -111,7 +122,7 @@ test('countdown freezes on disconnect and continues with its remaining duration'
 test('reconnecting during the game preserves the current flow', () => {
   const { store, players, clock, code } = setup(2);
   for (let i = 0; i < 2; i++) store.setReady(`p${i}`, { ready: true });
-  store.calibrationDone('host');
+  store.startGame('p0');
   clock.now += 5000; store.finishCountdown(code);
   clock.now += VOTE_SECONDS * 1000; store.expireVote(code);
   store.disconnect('p1');
@@ -125,15 +136,15 @@ test('expiration frees the reserved seat and invalidates the old token', () => {
   // Expired tokens are rejected even before the background sweep runs.
   assert.equal(restore(store, 'late', players[0]).error, 'bad-session');
   store.expireDisconnected();
-  assert.equal(store.lobby(code).phase, PHASES.LOBBY);
+  assert.equal(store.lobby(code).phase, PHASES.READY);
   assert.equal(store.lobby(code).players.length, 1);
-  assert.equal(store.join('replacement', { v, code, name: 'Replacement' }).slot, 0);
+  assert.equal(store.join('replacement', { v, code, name: 'Replacement' }).slot, 1);
   assert.equal(restore(store, 'late', players[0]).ok, false);
 });
 
-test('a host timeout closes the room and invalidates all player sessions', () => {
+test('a host timeout closes the room when all players have disconnected', () => {
   const { store, host, players, clock, code } = setup();
-  store.disconnect('host'); clock.now += RECONNECT_MS;
+  store.disconnect('host'); store.disconnect('p0'); clock.now += RECONNECT_MS;
   assert.equal(store.expireDisconnected()[0].closed, true);
   assert.equal(store.lobby(code), null);
   assert.equal(restore(store, 'host-back', host).error, 'no-room');
@@ -163,7 +174,7 @@ test('navigating away and creating another lobby on the same socket does not ove
   assert.equal(store.lobby(next.code).paused, false);
   clock.now += RECONNECT_MS;
   store.expireDisconnected();
-  assert.equal(store.lobby(code), null);
+  assert.equal(store.lobby(code).players.length, 1);
   assert.equal(store.hostedBy('host'), next.code);
-  assert.equal(restore(store, 'back', host).error, 'no-room');
+  assert.equal(restore(store, 'back', host).ok, true);
 });

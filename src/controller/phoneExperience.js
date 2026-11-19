@@ -74,12 +74,16 @@ export function createPhoneFeedback({
   reducedMotion,
 }) {
   let active = false;
+  let haptics = true;
   let animation = null;
   let confirmation = null;
   let lastMotion = -Infinity;
   let lastHit = -Infinity;
   const reduced = () => reducedMotion?.matches === true;
-  const set = (name, value) => visual.style?.setProperty(name, value);
+  const set = (name, value) => {
+    if (visual.style?.getPropertyValue?.(name) !== value)
+      visual.style?.setProperty(name, value);
+  };
   function reset() {
     animation?.cancel();
     animation = null;
@@ -104,6 +108,7 @@ export function createPhoneFeedback({
   }
   function pulse(length) {
     if (
+      !haptics ||
       !active ||
       document.hidden ||
       navigator?.userActivation?.hasBeenActive === false
@@ -133,6 +138,17 @@ export function createPhoneFeedback({
   };
   reducedMotion?.addEventListener?.('change', preferenceChanged);
   return {
+    setHaptics(value) {
+      const next = value === true;
+      if (haptics && !next) {
+        try {
+          navigator?.vibrate?.(0);
+        } catch {
+          /* Optional device capability. */
+        }
+      }
+      haptics = next;
+    },
     setActive(value) {
       const next = Boolean(value) && !document.hidden;
       if (next === active) return;
