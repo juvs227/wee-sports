@@ -3,14 +3,27 @@ html, body { width: 100%; height: 100%; overflow: hidden; }
 body { margin: 0; background: #203a32; color: var(--text); font-family: var(--font); }
 #bowling-app { position: relative; width: 100%; height: 100dvh; min-height: 0; overflow: hidden; }
 #lane { position: absolute; inset: 0; overflow: hidden; }
-.bowling-hud { width: min(1040px, calc(100% - 32px)); border-radius: 15px; padding: 9px 12px 8px; backdrop-filter: blur(12px); }
+.bowling-hud { left: max(16px, env(safe-area-inset-left)); transform: none; width: clamp(190px, 18vw, 270px); max-height: calc(100dvh - 90px); overflow-y: auto; border-radius: 18px; padding: 12px; background: var(--surface-overlay); backdrop-filter: none; box-shadow: 0 5px 20px #09231b24; }
 .bowling-embedded .bowling-hud { top: max(54px, calc(env(safe-area-inset-top) + 48px)); }
-.bowling-heading { gap: 8px; margin-bottom: 7px; }
+.bowling-heading { gap: 8px; margin-bottom: 9px; }
 .bowling-heading h1 { margin: 0; color: var(--accent-ink); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; line-height: 1.3; font-weight: 900; }
 .bowling-pill { color: var(--text-muted); font-weight: 800; white-space: nowrap; font-size: 11px; font-variant-numeric: tabular-nums; }
-.bowling-hud__footer { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 2px 16px; margin-top: 5px; }
+.bowling-hud__footer { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .bowling-hud #roll-status { margin: 0; font-size: 11px; font-weight: 800; overflow-wrap: anywhere; }
 .bowling-hud .scorecard-help { margin: 0; color: var(--text-muted); font-size: 9px; }
+.bowling-standings { list-style: none; display: grid; gap: 5px; padding: 0; margin: 0; }
+.bowling-standings li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; align-items: center; padding: 7px 9px; border: 1px solid transparent; border-left: 3px solid var(--player-color); border-radius: 8px; background: var(--surface-sunk); }
+.bowling-standings li[data-active='true'] { background: var(--accent-soft); border-color: var(--player-color); }
+.bowling-standings__name { grid-column: 1; grid-row: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: clamp(12px, 1.1vw, 17px); font-weight: 800; }
+.bowling-standings strong { grid-column: 2; grid-row: 1 / 3; color: var(--text); font-size: clamp(19px, 1.6vw, 25px); font-weight: 900; font-variant-numeric: tabular-nums; }
+.bowling-standings__frame { grid-column: 1; grid-row: 2; color: var(--text-muted); font-size: 11px; min-height: 14px; }
+#bowling-app #open-scorecard { width: 100%; min-height: 44px; padding: 8px 12px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--accent-ink); }
+.bowling-scorecard-dialog { width: min(1100px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 20px; border: 1px solid var(--border); border-radius: 22px; color: var(--text); background: var(--surface); box-shadow: 0 20px 80px #09231b55; }
+.bowling-scorecard-dialog::backdrop { background: #061b2166; }
+.bowling-scorecard-dialog > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.bowling-scorecard-dialog h2 { margin: 0; font-size: 22px; }
+.bowling-scorecard-dialog .bowling-scores { max-height: calc(100dvh - 180px); }
+.bowling-scorecard-dialog .scorecard-help { font-size: 12px; color: var(--text-muted); margin: 12px 0 0; }
 .bowling-scores { overflow: auto; max-height: min(280px, 33dvh); border-radius: 7px; border: 1px solid var(--border-strong); background: var(--surface); scrollbar-width: thin; overscroll-behavior: contain; }
 .bowling-scores table { border-collapse: separate; border-spacing: 0; table-layout: fixed; width: 100%; min-width: 730px; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; }
 .bowling-scores thead th { position: sticky; top: 0; z-index: 2; padding: 4px; height: 24px; background: var(--surface-sunk); color: var(--text-muted); font-size: 10px; }
@@ -35,7 +48,16 @@ body { margin: 0; background: #203a32; color: var(--text); font-family: var(--fo
 .bowling-callout[data-kind='spare'] { border-color: #9fd6e9; }
 .bowling-callout[data-kind='spare'] strong { color: #b4e9f5; }
 @keyframes bowling-call-in { from { opacity: 0; translate: 0 10px; scale: .96; } to { opacity: 1; translate: 0 0; scale: 1; } }
-.bowling-help { position: absolute; bottom: max(10px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100% - 28px); padding: 6px 12px; border-radius: 20px; color: #fff; background: #142c2ac7; font-size: 11px; text-align: center; margin: 0; }
+.bowling-aim { --aim-position: 50%; position: absolute; bottom: max(22px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); width: min(278px, calc(100% - 32px)); padding: 12px 18px 13px; border: 1px solid #c5ffe045; border-radius: 20px; background: #12342ff5; box-shadow: 0 10px 30px #06211b30; color: #effff5; pointer-events: none; }
+.bowling-aim[hidden] { display: none; }
+.bowling-aim__heading { display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 800; }
+.bowling-aim__state { color: #c5ffe0; font-size: 10px; text-transform: uppercase; letter-spacing: .09em; }
+.bowling-aim__track { position: relative; height: 4px; margin: 15px 4px; border-radius: 3px; background: #a2c8b74a; }
+.bowling-aim__track::before { content: ''; position: absolute; left: 50%; top: -4px; height: 12px; width: 1px; background: #d5f2e45c; }
+.bowling-aim__marker { position: absolute; left: var(--aim-position); top: -5px; width: 14px; height: 14px; border-radius: 5px 5px 3px 3px; transform: translateX(-50%) rotate(45deg); background: #c5ffe0; box-shadow: 0 0 0 3px #12342f; }
+.bowling-aim[data-locked='true'] .bowling-aim__marker { background: #ffdb7d; }
+.bowling-aim[data-locked='true'] .bowling-aim__state { color: #ffdb7d; }
+.bowling-help { color: #deece3; font-size: 11px; line-height: 1.4; text-align: center; margin: 0; }
 #bowling-app button { border: 1px solid var(--accent-bottom); border-radius: var(--radius-sm); background: linear-gradient(var(--accent-top), var(--accent-bottom)); color: white; padding: 10px 18px; font: 800 13px var(--font); cursor: pointer; }
 #bowling-app button:disabled { opacity: .45; cursor: default; }
 #bowling-app button:focus-visible, #bowling-app input:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
@@ -44,9 +66,16 @@ body { margin: 0; background: #203a32; color: var(--text); font-family: var(--fo
 .bowling-controls { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; }
 .bowling-controls label { display: flex; gap: 8px; align-items: center; font-size: 12px; font-weight: 800; }
 .bowling-controls input { width: 110px; accent-color: var(--accent-ink); }
-#bowling-app:has(#local-controls:not([hidden])) .bowling-help { display: none; }
-@media (max-width: 540px) {
-  .bowling-hud { width: calc(100% - 14px); padding: 7px 8px; }
+#bowling-app:has(#local-controls:not([hidden])) .bowling-aim { bottom: 174px; }
+@media (max-width: 720px) {
+  .bowling-hud { left: 7px; width: calc(100% - 14px); max-height: 40dvh; padding: 7px 8px; }
+  .bowling-standings { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+  .bowling-standings li { padding: 4px; gap: 2px 3px; }
+  .bowling-standings__name { grid-column: 1 / -1; font-size: 10px; }
+  .bowling-standings strong { grid-row: 2; font-size: 17px; }
+  .bowling-standings__frame { grid-row: 2; font-size: 10px; }
+  .bowling-hud__footer { margin-top: 5px; flex-wrap: nowrap; }
+  #bowling-app #open-scorecard { width: auto; flex: 0 0 auto; min-height: 36px; font-size: 11px; }
   .bowling-embedded .bowling-hud { top: max(48px, calc(env(safe-area-inset-top) + 44px)); }
   .bowling-heading { margin-bottom: 5px; }
   .bowling-pill, .bowling-help { font-size: 10px; }
@@ -54,5 +83,10 @@ body { margin: 0; background: #203a32; color: var(--text); font-family: var(--fo
   .bowling-scores table { min-width: 680px; }
   .bowling-scores tbody th { font-size: 10px; }
   .bowling-hud .scorecard-help { font-size: 8px; }
+}
+@media (max-height: 650px) and (min-width: 721px) {
+  .bowling-standings li { padding-block: 3px; }
+  .bowling-standings__name { font-size: 12px; }
+  .bowling-standings strong { font-size: 18px; }
 }
 @media (prefers-reduced-motion: reduce) { .bowling-callout { animation: none; } }

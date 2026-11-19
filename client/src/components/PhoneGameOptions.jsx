@@ -151,7 +151,7 @@ export function PhoneGameOptions({ lobby, slot, disabled }) {
                   {options.practice?.active ? 'Start a new ten-frame game' : 'Practice rolls (resets score)'}</button> : null}
               </>)}
               <details className="phone-options-section"><summary>{tennis ? 'New match' : 'New bowling game'}</summary>
-                {tennis ? <p>Follow the score on your TV. Choose the match format before starting.</p> : (null)}
+                {tennis ? <p>Best of 3 sets. First to 7 points, win by 2. Win 2 sets to win the match.</p> : (null)}
                 <p className="stub__muted">This resets the current score for everyone.</p>
                 {confirmRestart ? <div className="phone-options-confirm"><button type="button" className="btn btn--primary" onClick={() => command('new-match', tennis ? { format: 'full' } : {})}>Reset score and start</button>
                   <button type="button" className="btn btn--ghost" onClick={() => setConfirmRestart(false)}>Cancel</button></div>

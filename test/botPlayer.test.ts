@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import { strict as assert } from 'node:assert';
-import { chooseBotStroke, type BotStroke } from '../src/Tennis/botPlayer.ts';
+import { chooseBotStroke, chooseBotPlacement, type BotStroke } from '../src/Tennis/botPlayer.ts';
 
 const position = { x: 0, y: 0, z: -10 };
 const forehand: BotStroke = { backhand: false, duration: 0.3, offset: { x: 0.5, y: 1, z: 0 } };
@@ -30,4 +30,20 @@ test('bot accepts balls near either edge of the racket contact window', () => {
     const late = { ...incoming, position: { x: 0.5, y: 1, z: -8.1 } };
     assert.equal(chooseBotStroke(early, position, [forehand]), forehand);
     assert.equal(chooseBotStroke(late, position, [forehand]), forehand);
+});
+
+test('Rally opponent offers safe reachable returns, Challenge targets open space and varies depth', () => {
+    for (const opponentX of [-3, 3]) {
+        const rally = chooseBotPlacement(opponentX, 0, 'beginner');
+        const challenge = chooseBotPlacement(opponentX, 0, 'standard');
+        assert.equal(Math.sign(-rally.aim), Math.sign(opponentX));
+        assert.ok(Math.abs(rally.aim) <= .3);
+        assert.equal(Math.sign(-challenge.aim), -Math.sign(opponentX));
+        assert.ok(Math.abs(challenge.aim) > Math.abs(rally.aim));
+        assert.ok(rally.depth < challenge.depth);
+    }
+    const choices = [0, 1, 2].map(shot => chooseBotPlacement(0, shot, 'standard'));
+    assert.notEqual(choices[0].aim, choices[1].aim);
+    assert.ok(choices[2].depth < choices[1].depth);
+    assert.deepEqual(chooseBotPlacement(0, 2, 'standard'), choices[2]);
 });

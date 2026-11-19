@@ -6,9 +6,9 @@ export function createCourt(): THREE.Group {
   const court = new THREE.Mesh(
     new THREE.PlaneGeometry(20, 50),
     new THREE.MeshStandardMaterial({
-      color: 0x15803d,
-      roughness: 0.8,
-      metalness: 0.1,
+      color: 0x315f57,
+      roughness: 0.95,
+      metalness: 0,
     }),
   );
   court.rotation.x = -Math.PI / 2;
@@ -16,6 +16,18 @@ export function createCourt(): THREE.Group {
   court.receiveShadow = true;
   group.add(court);
   const {halfWidth, halfLength, serviceLine, lineWidth} = TENNIS_COURT;
+  const playingSurface = new THREE.Mesh(
+    new THREE.PlaneGeometry(halfWidth * 2, halfLength * 2),
+    new THREE.MeshStandardMaterial({
+      color: 0x478c7b,
+      roughness: 0.95,
+      metalness: 0,
+    }),
+  );
+  playingSurface.rotation.x = -Math.PI / 2;
+  playingSurface.position.y = 0.022;
+  playingSurface.receiveShadow = true;
+  group.add(playingSurface);
   const paint = new THREE.MeshBasicMaterial({
     color: 0xffffff,
     side: THREE.DoubleSide,

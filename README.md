@@ -58,8 +58,8 @@ assets; provide a trusted HTTPS origin for phone sensors when using that command
    and changing sports are in the controller tools.
 
 Tennis supports one player against a bot or two players, with assisted positioning,
-racket contact detection and court-targeted shots. This foundation branch preserves
-the team's current tennis rules; PR 2 adds the scoring upgrade. Bowling supports
+racket contact detection and court-targeted shots. Its upgraded rules use best of
+three sets, seven points per set, winning by two. Bowling supports
 one to eight players and uses ten-frame scoring. Aim with the phone, then swing to
 release the ball, or use the touch controls. Post-release spin is disabled for now;
 there is no extra steering step after the ball leaves your hand.

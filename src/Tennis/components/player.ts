@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import {
   forehandDrop,
+  strokeHeightOffset,
   worldOffsetToLocal,
   DEFAULT_FOREHAND_DROP,
 } from './forehandPose';
@@ -16,15 +17,18 @@ export interface PlayerController {
   actions: Record<string, THREE.AnimationAction>;
   currentAnimation: string | null;
   isSwinging: boolean;
+  isPreparing?: boolean;
   hitbox: RacketHitbox | null;
   contactActive: boolean;
   hitConsumed: boolean;
   swingBackhand: boolean;
+  swingHeightOffset: number;
   strikeOffsets: Record<string, THREE.Vector3>;
   swingPoses: Record<string, THREE.Matrix4[]>;
   movementSpeed: number;
 
   playAnimation: (name: string) => void;
+  prepareSwing?: (name: string, backhand: boolean) => void;
   stopAnimation: () => void;
   update: (delta: number) => void;
   move: (dx: number, dz: number, delta: number) => void;
@@ -83,10 +87,12 @@ export function createPlayer(
     actions: {},
     currentAnimation: null,
     isSwinging: false,
+    isPreparing: false,
     hitbox: null,
     contactActive: false,
     hitConsumed: false,
     swingBackhand: false,
+    swingHeightOffset: 0,
     strikeOffsets: {},
     swingPoses: {},
     movementSpeed: speed,
@@ -98,9 +104,10 @@ export function createPlayer(
         return;
       }
 
-      if (this.currentAnimation === name) {
+      if (this.currentAnimation === name && !this.isPreparing) {
         return;
       }
+      this.isPreparing = false;
 
       clearHandOffset();
       const previous = this.currentAnimation
@@ -112,6 +119,7 @@ export function createPlayer(
       }
 
       next.reset();
+      next.paused = false;
       next.enabled = true;
       next.setEffectiveTimeScale(1);
       next.setEffectiveWeight(1);
@@ -130,6 +138,22 @@ export function createPlayer(
       if (isSwing) this.hitConsumed = false;
     },
 
+    prepareSwing(name: string, backhand: boolean): void {
+      this.stopAnimation();
+      this.swingBackhand = backhand;
+      this.playAnimation(name);
+      const action = this.actions[name];
+      if (!action) return;
+      action.stopFading();
+      action.setEffectiveWeight(1);
+      action.time = action.getClip().duration * 0.12;
+      action.paused = true;
+      this.isSwinging = false;
+      this.isPreparing = true;
+      this.contactActive = false;
+      this.mixer?.update(0);
+    },
+
     stopAnimation(): void {
       clearHandOffset();
       Object.values(this.actions).forEach(action => {
@@ -137,7 +161,9 @@ export function createPlayer(
       });
       this.currentAnimation = null;
       this.isSwinging = false;
+      this.isPreparing = false;
       this.contactActive = false;
+      this.swingHeightOffset = 0;
     },
 
     update(delta: number): void {
@@ -164,10 +190,14 @@ export function createPlayer(
           forehandDropAmount,
         );
         handBone.parent.updateWorldMatrix(true, false);
+        const height = strokeHeightOffset(
+          action.time / duration,
+          this.swingHeightOffset,
+        );
         appliedHandOffset.copy(
           worldOffsetToLocal(
             handBone.parent.matrixWorld,
-            new THREE.Vector3(0, -drop, 0),
+            new THREE.Vector3(0, height - drop, 0),
           ),
         );
         handBone.position.add(appliedHandOffset);
@@ -222,7 +252,15 @@ export function createPlayer(
           const cloned = material.clone();
 
           if ('color' in cloned) {
-            (cloned as THREE.MeshStandardMaterial).color.setHex(color);
+            // The shipped GLB has unpainted Head, Hand and Body
+            // meshes. Keep skin readable instead of tinting the
+            // whole avatar one metallic team colour.
+            const painted = cloned as THREE.MeshStandardMaterial;
+            painted.color.setHex(
+              /^(Head|Hand)$/i.test(child.name) ? 0xf0be91 : color,
+            );
+            painted.metalness = 0;
+            painted.roughness = 0.82;
           }
 
           return cloned;

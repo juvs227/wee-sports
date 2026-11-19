@@ -26,7 +26,11 @@ let inputGeneration: number | undefined;
 let hostEpoch: number | undefined;
 let lastAimSequence = -1;
 let lastAimPlayer: number | null = null;
+let previousPhase: BowlingState['phase'] | null = null;
 let aimTarget: Pick<BowlingState, 'phase' | 'currentPlayer'> | null = null;
+let lastCheckpoint = '';
+let restored = false;
+let restoring = false;
 const sound = embedded ? null : createSportsAudio('bowling');
 sound?.mountButton(document.querySelector('.bowling-heading') as HTMLElement);
 sound?.setActive(!paused);
@@ -42,7 +46,29 @@ const post = (message: object): void => {
 document.body.classList.toggle('bowling-embedded', embedded);
 el('replay').hidden = embedded;
 function publishOptions(): void {
-  if (gameId) post({type: 'wee:game-options', gameId, sport: 'bowling'});
+  if (gameId)
+    post({
+      type: 'wee:game-options',
+      gameId,
+      sport: 'bowling',
+      ...(world?.getState().practice ? {practice: {active: true}} : {}),
+    });
+}
+function publishCheckpoint(): void {
+  if (!gameId || restoring) return;
+  const payload = world?.exportCheckpoint?.();
+  if (!payload) return;
+  const serialized = JSON.stringify(payload);
+  if (serialized === lastCheckpoint) return;
+  lastCheckpoint = serialized;
+  post({
+    type: 'wee:game-checkpoint',
+    gameId,
+    sport: 'bowling',
+    rulesVersion: 1,
+    checkpointVersion: 1,
+    payload,
+  });
 }
 function clearCallout(): void {
   if (calloutTimer !== null) clearTimeout(calloutTimer);
@@ -71,20 +97,47 @@ function audioEvent(event: string): void {
   else sound?.play(event);
 }
 
+function showAim(aim: number, locked = false): void {
+  (el('aim') as HTMLInputElement).value = String(aim);
+  const guide = el('aim-hud');
+  guide.style.setProperty('--aim-position', `${50 + aim * 45}%`);
+  guide.dataset.locked = String(locked);
+  el('aim-label').textContent =
+    `Aim · ${Math.abs(aim) < 0.08 ? 'centre' : aim < 0 ? 'left' : 'right'}`;
+  el('aim-state').textContent = locked ? 'Locked' : 'Live';
+  el('help').textContent = locked
+    ? 'Follow through. Turn your wrist to curve.'
+    : 'Tilt to aim. Swing forward to bowl.';
+}
+
 function render(state: BowlingState): void {
   aimTarget = {phase: state.phase, currentPlayer: state.currentPlayer};
-  if (state.currentPlayer !== lastAimPlayer) {
+  const changedPlayer = state.currentPlayer !== lastAimPlayer;
+  if (changedPlayer) {
     lastAimSequence = -1;
     lastAimPlayer = state.currentPlayer;
   }
+  if (
+    !restoring &&
+    state.phase === 'ready' &&
+    (changedPlayer || previousPhase === 'rolling')
+  ) {
+    // A completed delivery never leaves a gold, locked guide for the next turn.
+    showAim(0);
+    world?.setAim(0);
+  }
+  previousPhase = state.phase;
+  el('aim-hud').hidden = paused || state.phase !== 'ready';
   complete = state.complete;
   const call = callouts.observe(state, paused);
   if (paused || state.phase === 'rolling' || !state.lastRoll) clearCallout();
   if (state.phase !== 'rolling') audioEvent('roll-end');
   const player = state.players.find(p => p.player === state.currentPlayer);
-  el('frame-label').textContent = state.complete
-    ? 'Final · 10 frames'
-    : `Frame ${state.frame} / 10 · Ball ${state.ball}`;
+  el('frame-label').textContent = state.practice
+    ? 'Solo practice · fresh rack'
+    : state.complete
+      ? 'Final · 10 frames'
+      : `Frame ${state.frame} / 10 · Ball ${state.ball}`;
   const last = state.lastRoll;
   const result = last
     ? last.strike
@@ -104,6 +157,37 @@ function render(state: BowlingState): void {
         : `${result ? `${result} · ` : ''}${player?.name}, ${last?.player === state.currentPlayer ? 'roll again' : 'your turn'}`;
   if (el('roll-status').textContent !== cue)
     el('roll-status').textContent = cue;
+  el('score-totals').replaceChildren(
+    ...state.players.map(score => {
+      const item = document.createElement('li');
+      item.dataset.active = String(
+        !state.complete && score.player === state.currentPlayer,
+      );
+      item.style.setProperty(
+        '--player-color',
+        `var(--p${score.player}, var(--accent-ink))`,
+      );
+      const name = document.createElement('span');
+      name.className = 'bowling-standings__name';
+      name.textContent = `P${score.player} · ${score.name}`;
+      name.title = score.name;
+      const total = document.createElement('strong');
+      total.textContent = String(score.total);
+      total.setAttribute('aria-label', `${score.total} points`);
+      const marks = document.createElement('span');
+      marks.className = 'bowling-standings__frame';
+      marks.textContent =
+        frameMarks(score.frames[state.frame - 1] || [], state.frame - 1)
+          .filter(Boolean)
+          .join(' ') || '—';
+      marks.setAttribute(
+        'aria-label',
+        `Frame ${state.frame}: ${marks.textContent}`,
+      );
+      item.append(name, total, marks);
+      return item;
+    }),
+  );
   const body = el('score-body');
   body.replaceChildren();
   for (const score of state.players) {
@@ -206,6 +290,14 @@ function render(state: BowlingState): void {
   }
   (el('roll') as HTMLButtonElement).disabled =
     paused || state.phase !== 'ready';
+  const practiceButton = document.getElementById('practice');
+  if (practiceButton) {
+    practiceButton.textContent = state.practice
+      ? 'Start ten-frame game'
+      : 'Practice a fresh rack';
+    (practiceButton as HTMLButtonElement).disabled =
+      paused || state.phase === 'rolling';
+  }
   if (call) showCallout(call);
   post({
     type: 'wee:bowling-state',
@@ -220,6 +312,7 @@ function render(state: BowlingState): void {
         }
       : {}),
   });
+  publishCheckpoint();
 }
 function create(players: Array<{player: number; name: string}>): void {
   callouts.reset();
@@ -243,8 +336,10 @@ function newMatch(): void {
   clearCallout();
   callouts.reset();
   delivered.clear();
-  lastAimSequence = -1;
   world?.reset();
+  showAim(0);
+  world?.setAim(0);
+  lastAimSequence = -1;
   audioEvent('start');
   publishOptions();
 }
@@ -259,12 +354,12 @@ function receive(event: MessageEvent): void {
   if (data?.type === 'wee:lobby-state' && data.sport === 'bowling') {
     const wasPaused = paused;
     const wasConnected = connected;
-    const nextGeneration = data.inputGeneration ?? data.generation;
-    if (nextGeneration !== inputGeneration || data.hostEpoch !== hostEpoch)
-      lastAimSequence = -1;
-    inputGeneration = nextGeneration;
-    hostEpoch = data.hostEpoch;
     connected = data.connected === true;
+    const generation = data.inputGeneration ?? data.generation;
+    if (generation !== inputGeneration || data.hostEpoch !== hostEpoch)
+      lastAimSequence = -1;
+    inputGeneration = generation;
+    hostEpoch = data.hostEpoch;
     lobbyPaused =
       data.paused ||
       !connected ||
@@ -291,9 +386,11 @@ function receive(event: MessageEvent): void {
       world?.dispose();
       world = null;
       gameId = data.gameId;
-      lastAimSequence = -1;
       delivered.clear();
       commands.clear();
+      lastAimSequence = -1;
+      lastCheckpoint = '';
+      restored = false;
       try {
         create(players);
       } catch (error) {
@@ -309,32 +406,43 @@ function receive(event: MessageEvent): void {
     if (wasPaused !== paused || wasConnected !== connected)
       render(world!.getState());
     if (wasConnected !== connected) publishOptions();
-  } else if (data?.type === 'wee:game-command') {
-    const command = data.command;
-    if (!command || typeof command.id !== 'string') return;
-    let result: {ok: boolean; error?: string};
-    if (!world || command.gameId !== gameId)
-      result = {ok: false, error: 'game-loading'};
-    else if (!isGameCommand(command, 'bowling'))
-      result = {ok: false, error: 'invalid-command'};
-    else if (paused || !connected) result = {ok: false, error: 'paused'};
-    else if (commands.has(command.id))
-      result = {ok: false, error: 'duplicate-command'};
-    else if (world.getState().phase === 'rolling')
-      result = {ok: false, error: 'ball-in-play'};
-    else {
-      commands.add(command.id);
-      if (commands.size > 256) commands.delete(commands.values().next().value!);
-      newMatch();
-      result = {ok: true};
+  } else if (data?.type === 'wee:checkpoint-request') {
+    if (world && data.gameId === gameId) {
+      lastCheckpoint = '';
+      publishCheckpoint();
     }
-    post({type: 'wee:game-command-result', id: command.id, gameId, result});
+  } else if (data?.type === 'wee:restore-checkpoint') {
+    let ok = false;
+    if (
+      world &&
+      data.gameId === gameId &&
+      !restored &&
+      delivered.size === 0 &&
+      commands.size === 0
+    ) {
+      restoring = true;
+      ok = world.restoreCheckpoint(data.payload);
+      restoring = false;
+      if (ok) {
+        restored = true;
+        showAim(data.payload.settings.aim);
+        lastCheckpoint = JSON.stringify(world.exportCheckpoint());
+        publishOptions();
+      }
+    }
+    post({
+      type: 'wee:restore-checkpoint-result',
+      gameId,
+      ok,
+      ...(ok ? {} : {error: 'checkpoint-unavailable'}),
+    });
   } else if (data?.type === 'wee:game-aim') {
     const aim = data.event;
     const sequence = aim?.seq ?? aim?.sequence;
     const generation = aim?.inputGeneration ?? aim?.generation;
-    // World transitions publish synchronously. Read the cached turn so live
-    // sensor packets do not rebuild every player's ten-frame scorecard.
+    // World transitions publish synchronously. Live aim needs only the turn;
+    // rebuilding eight ten-frame scorecards on every sensor packet adds work
+    // to the same thread that renders the lane.
     const target = aimTarget;
     if (
       !world ||
@@ -354,7 +462,44 @@ function receive(event: MessageEvent): void {
     )
       return;
     lastAimSequence = sequence;
-    world.setAim(aim.aim);
+    world.setAim(aim.aim, aim.locked);
+    showAim(aim.aim, aim.locked);
+  } else if (data?.type === 'wee:game-command') {
+    const command = data.command;
+    if (!command || typeof command.id !== 'string') return;
+    let result: {ok: boolean; error?: string};
+    if (!world || command.gameId !== gameId)
+      result = {ok: false, error: 'game-loading'};
+    else if (!isGameCommand(command, 'bowling'))
+      result = {ok: false, error: 'invalid-command'};
+    else if (paused || !connected) result = {ok: false, error: 'paused'};
+    else if (commands.has(command.id))
+      result = {ok: false, error: 'duplicate-command'};
+    else if (world.getState().phase === 'rolling')
+      result = {ok: false, error: 'ball-in-play'};
+    else {
+      commands.add(command.id);
+      if (commands.size > 256) commands.delete(commands.values().next().value!);
+      if (
+        command.action === 'practice-start' ||
+        command.action === 'practice-stop'
+      ) {
+        const ok = world.setPractice(command.action === 'practice-start');
+        result = ok ? {ok: true} : {ok: false, error: 'practice-requires-solo'};
+        if (ok) {
+          callouts.reset();
+          clearCallout();
+          delivered.clear();
+          showAim(0);
+          world.setAim(0);
+          publishOptions();
+        }
+      } else {
+        newMatch();
+        result = {ok: true};
+      }
+    }
+    post({type: 'wee:game-command-result', id: command.id, gameId, result});
   } else if (data?.type === 'wee:game-roll') {
     const roll = data.event;
     if (!roll || typeof roll.id !== 'string') return;
@@ -385,6 +530,13 @@ for (const label of [
 el('replay').onclick = () => {
   if (!paused) newMatch();
 };
+const scorecard = el('scorecard-dialog') as HTMLDialogElement;
+el('open-scorecard').onclick = () => scorecard.showModal();
+el('close-scorecard').onclick = () => scorecard.close();
+scorecard.onclose = () => el('open-scorecard').focus({preventScroll: true});
+scorecard.onclick = event => {
+  if (event.target === scorecard) scorecard.close();
+};
 el('roll').onclick = () => {
   const player = world?.getState().currentPlayer;
   if (!world || !player || paused) return;
@@ -397,8 +549,23 @@ el('roll').onclick = () => {
     power: value('power'),
   });
 };
-el('aim').oninput = () =>
-  world?.setAim(Number((el('aim') as HTMLInputElement).value));
+el('aim').oninput = () => {
+  const aim = Number((el('aim') as HTMLInputElement).value);
+  world?.setAim(aim);
+  showAim(aim);
+};
+const practiceButton = document.getElementById('practice');
+if (practiceButton)
+  practiceButton.onclick = () => {
+    if (!world || paused) return;
+    if (world.setPractice(!world.getState().practice)) {
+      callouts.reset();
+      clearCallout();
+      showAim(0);
+      world.setAim(0);
+      publishOptions();
+    }
+  };
 function syncWorldState(): void {
   paused = lobbyPaused || pageSuspended;
   sound?.setActive(!paused);
@@ -417,8 +584,7 @@ try {
   if (!embedded) {
     create([{player: 1, name: 'Player 1'}]);
     el('local-controls').hidden = false;
-    el('help').textContent =
-      'Aim, choose your curve and power, then roll. X = strike · / = spare · ten frames to make your mark.';
+    el('help').textContent = 'Choose your aim below, then roll.';
   }
   post({type: 'wee:bridge-ready'});
 } catch (error) {

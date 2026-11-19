@@ -17,7 +17,9 @@ export interface ShotIntent {
   /** Captured before animation assistance: negative late, positive early. */
   timing?: number;
   /** Optional deliberate placement, relative to the hitter's view. */
-  aim?: -1 | 0 | 1;
+  aim?: number;
+  /** Captured pitch: -1 short, 0 normal, +1 deep. */
+  depth?: number;
   serve?: ServiceSide;
   beginner?: boolean;
 }
@@ -88,11 +90,18 @@ export function planCourtShot(
     (timing + 1) / 2,
   );
   const strokeSide = (backhand ? 1 : -1) * (player === 1 ? 1 : -1);
+  const aim = Number.isFinite(intent.aim)
+    ? THREE.MathUtils.clamp(intent.aim!, -1, 1)
+    : undefined;
+  const depth = Number.isFinite(intent.depth)
+    ? THREE.MathUtils.clamp(intent.depth!, -1, 1)
+    : 0;
   const placement =
-    intent.aim === undefined
+    aim === undefined
       ? strokeSide * angle - origin.x * 0.25
-      : intent.aim * (player === 1 ? 1 : -1) * 2.1;
+      : aim * (player === 1 ? 1 : -1) * 2.1;
   const x = THREE.MathUtils.clamp(placement, -3, 3);
+  const targetDepth = depth < 0 ? 8.5 + depth * 3 : 8.5 + depth * 0.7;
   const targets = intent.serve
     ? [
         new THREE.Vector3(
@@ -102,8 +111,12 @@ export function planCourtShot(
         ),
       ]
     : [
-        new THREE.Vector3(x, RADIUS, direction * 8.5),
-        new THREE.Vector3(0, RADIUS, direction * 7),
+        new THREE.Vector3(x, RADIUS, direction * targetDepth),
+        new THREE.Vector3(
+          aim === undefined ? 0 : x,
+          RADIUS,
+          direction * Math.min(targetDepth, 7),
+        ),
       ];
   const strength = Number.isFinite(power)
     ? THREE.MathUtils.clamp(power, 0, 1)

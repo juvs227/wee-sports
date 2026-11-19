@@ -43,6 +43,8 @@ re-enable post-release Bowling spin.
 The team's live Bowling aim feedback is preserved through the authenticated
 controller-input stream. Preview updates remain tied to the current room, player,
 game and input epoch; they do not bypass the existing release/turn checks.
+PR 1 retains main’s thicker line; PR 2 uses its existing filled arrow with locked
+feedback and reusable geometry, preserving that visibility without a second guide.
 
 Upstream already contains the lint/config cleanup from #42 and #53, the new test
 walkthrough from #54 and generated-output cleanup from #55. Preserve those fixes

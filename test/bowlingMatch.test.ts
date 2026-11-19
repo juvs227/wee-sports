@@ -9,6 +9,23 @@ function toTenth(match: BowlingMatch) {
 }
 
 describe('ten-pin match rules', () => {
+  it('advances eight seats through all 168 spare deliveries and restores the full scorecard', () => {
+    const match = new BowlingMatch(Array.from({length: 8}, (_, index) => ({player: index + 1, name: `Player ${index + 1}`})));
+    for (let frame = 1; frame <= 10; frame++) {
+      for (let player = 1; player <= 8; player++) {
+        expect(match.getState()).toMatchObject({currentPlayer: player, frame});
+        bowl(match, 5); bowl(match, 5);
+        if (frame === 10) bowl(match, 5);
+      }
+    }
+    expect(match.getState().complete).toBe(true);
+    expect(match.getState().players).toHaveLength(8);
+    expect(match.getState().players.every(player => player.total === 150)).toBe(true);
+    const saved = match.exportCheckpoint();
+    expect(saved.deliveries).toHaveLength(168);
+    expect(BowlingMatch.fromCheckpoint(saved).getState()).toEqual(match.getState());
+    expect(() => new BowlingMatch(Array.from({length: 9}, (_, index) => ({player: index + 1, name: 'Overflow'})))).toThrow('eight');
+  });
   it.each([
     {rolls: [0, 10], frame: 0, marks: '–  /'},
     {rolls: [10, 0, 10], frame: 9, marks: 'X  –  /'},

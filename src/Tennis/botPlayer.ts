@@ -1,9 +1,17 @@
 import {predictBaselineIntercept, type BallForecast} from './autoPosition.ts';
 
 export interface BotStroke {
-  backhand: boolean;
-  duration: number;
+    backhand: boolean;
+    duration: number;
   offset: {x: number; y: number; z: number};
+}
+
+/** Player-two camera coordinates. Rally mode offers reachable depth; challenge
+ * mode chooses space deliberately without changing a ball after contact. */
+export function chooseBotPlacement(opponentX: number, shot: number, difficulty: 'beginner' | 'standard') {
+    if (difficulty === 'beginner') return {aim: Math.max(-.3, Math.min(.3, -opponentX / 2.1)), depth: -.45};
+    const side = Math.abs(opponentX) > .6 ? Math.sign(opponentX) : shot % 2 === 0 ? -1 : 1;
+    return {aim: side * .9, depth: shot % 3 === 2 ? -.65 : .65};
 }
 
 const CONTACT_START = 0.2;
@@ -18,11 +26,11 @@ export function chooseBotStroke(
   position: {x: number; y: number; z: number},
   strokes: BotStroke[],
 ): BotStroke | null {
-  if (ball.velocity.z >= -0.001) return null;
-  let selected: BotStroke | null = null;
-  let bestError = Infinity;
-  for (const stroke of strokes) {
-    if (!Number.isFinite(stroke.duration) || stroke.duration <= 0) continue;
+    if (ball.velocity.z >= -0.001) return null;
+    let selected: BotStroke | null = null;
+    let bestError = Infinity;
+    for (const stroke of strokes) {
+        if (!Number.isFinite(stroke.duration) || stroke.duration <= 0) continue;
     const intercept = predictBaselineIntercept(
       ball,
       position.z + stroke.offset.z,
@@ -33,14 +41,14 @@ export function chooseBotStroke(
       intercept.time < stroke.duration * (CONTACT_START * 0.5)
     )
       continue;
-    const dx = Math.abs(intercept.x - position.x - stroke.offset.x);
-    const dy = Math.abs(intercept.y - position.y - stroke.offset.y);
-    if (dx > POSITION_TOLERANCE_X || dy > POSITION_TOLERANCE_Y) continue;
-    const error = dx + dy + Math.abs(intercept.time - stroke.duration * 0.45);
+        const dx = Math.abs(intercept.x - position.x - stroke.offset.x);
+        const dy = Math.abs(intercept.y - position.y - stroke.offset.y);
+        if (dx > POSITION_TOLERANCE_X || dy > POSITION_TOLERANCE_Y) continue;
+        const error = dx + dy + Math.abs(intercept.time - stroke.duration * 0.45);
     if (error < bestError) {
       bestError = error;
       selected = stroke;
     }
-  }
-  return selected;
+    }
+    return selected;
 }
