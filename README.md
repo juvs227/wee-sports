@@ -80,6 +80,18 @@ a Socket.IO fallback.
 Player positioning is assisted by default; manual movement keys do not override
 that assistance.
 
+## Expo controller
+
+```sh
+npm run expo:install
+npm run expo
+```
+
+Scan the TV from the native app. The Expo controller shares motion normalization,
+automatic setup, room lifecycle and gesture logic with the browser controller.
+See [native setup](apps/controller/README.md) for development builds and device
+permissions. Simulator/export checks do not establish real phone sensor latency.
+
 ## Check changes
 
 ```sh
@@ -88,6 +100,8 @@ npm test
 npm run test:server
 npm run test:motion
 npm run build
+npm --prefix apps/controller test
+npm --prefix apps/controller run export -- --output-dir /tmp/wee-controller-export --max-workers 2
 ```
 
 `npm run check` compiles TypeScript and runs ESLint without changing files.
