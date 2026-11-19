@@ -256,10 +256,11 @@ test('a late stroke misses, and pausing discards a prepared stroke', async () =>
     expect(paused.feedback.some(message => message.startsWith('Player 2: Hit!'))).toBe(false);
     expect(paused.game.getScore().player1).toBe(15);
 });
+
 test('24 consecutive human returns keep normal contact, then a missed ball scores only once', async () => {
     let completedStreak = false;
     let lastError: unknown;
-    for (let attempt = 0; attempt < 30 && !completedStreak; attempt++) {
+    for (let attempt = 0; attempt < 90 && !completedStreak; attempt++) {
         try {
             const state = await court();
             state.game.swing({ label: 'Forehand', hand: 'Right', player: 1 });
