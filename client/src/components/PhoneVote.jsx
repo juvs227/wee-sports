@@ -4,7 +4,7 @@
  * its own.
  */
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { EVENTS, PHASES, PICKS } from '@wee/shared/protocol.js';
 import { errorText } from '../lib/errors.js';
 import { request } from '../lib/socket.js';
@@ -17,7 +17,7 @@ const PICK_TEXT = {
 };
 
 /** lobby is the latest snapshot; slot is this phone's seat. */
-export function PhoneVote({ lobby, slot, automatic = false }) {
+export function PhoneVote({ lobby, slot }) {
   // The server keeps picks secret until the vote ends, so this phone
   // remembers its own. A fresh vote remounts this component and clears it.
   const [watch, setWatch] = useState(null);
@@ -27,10 +27,6 @@ export function PhoneVote({ lobby, slot, automatic = false }) {
   const open = lobby.phase === PHASES.VOTE;
   const secondsLeft = useCountdown(open ? lobby.vote.msLeft : null);
   const voted = watch !== null || lobby.vote.voted?.includes(slot);
-  useEffect(() => {
-    if (automatic && open && !voted) void vote(false);
-  }, [automatic, open, voted]);
-
   async function vote(choice) {
     setSending(true);
     setError(null);
@@ -39,11 +35,6 @@ export function PhoneVote({ lobby, slot, automatic = false }) {
     if (result.ok) setWatch(choice);
     else setError(result.error);
   }
-
-  if (automatic) return <section className="phone-vote" aria-live="polite">
-    <p className="stub__status">Watch the TV. Your game is starting.</p>
-    {error ? <button type="button" className="btn btn--ghost" disabled={sending} onClick={() => vote(false)}>Continue</button> : null}
-  </section>;
 
   if (!open) {
     const mine = lobby.vote.picks.find((entry) => entry.slot === slot)?.pick;

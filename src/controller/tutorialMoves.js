@@ -1,4 +1,4 @@
-import { createSwingDetector } from './classifySwing.js';
+import { createSwingDetector } from './accelerationSwing.js';
 import { bowlingTiltAim, createBowlingMotionDetector } from './motionGestures.js';
 
 /**

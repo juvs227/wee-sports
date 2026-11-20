@@ -210,7 +210,7 @@ export default function JoinStub() {
           <p className="stub__status">Getting your lobby ready…</p>
         ) : phase === PHASES.VOTE || revealing ? (
           // Keyed by game, so a fresh vote forgets this phone's last pick.
-          <PhoneVote key={lobby.gameId} lobby={lobby} slot={seat.slot} automatic />
+          <PhoneVote key={lobby.gameId} lobby={lobby} slot={seat.slot} />
         ) : phase === PHASES.TUTORIAL ? (
           <PhoneTutorial key={lobby.tutorial.step} lobby={lobby} slot={seat.slot} attempt={tutorialAttempt} />
         ) : (
