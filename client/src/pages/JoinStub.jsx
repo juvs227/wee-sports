@@ -4,7 +4,7 @@ import {createControllerCapabilities} from '../../../shared/controllerCapabiliti
 import {SportSwitcher} from '../components/SportSwitcher.jsx';
 /** Browser phone entry, reconnecting seat and active controller shell. */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   CODE_LENGTH,
@@ -22,7 +22,7 @@ import { PhoneTutorial } from '../components/PhoneTutorial.jsx';
 import { PhoneVote } from '../components/PhoneVote.jsx';
 import { useRevealHold } from '../lib/useRevealHold.js';
 import { errorText } from '../lib/errors.js';
-import { request, socket } from '../lib/socket.js';
+import { request } from '../lib/socket.js';
 import { useReconnect } from '../lib/useReconnect.js';
 import { ReconnectNotice } from '../components/ReconnectNotice.jsx';
 import { sportName } from '../lib/sports.js';
@@ -83,36 +83,11 @@ export default function JoinStub() {
   const revealing = useRevealHold(lobby?.phase) && Boolean(lobby?.vote?.picks);
   const [error, setError] = useState(null);
   const [joining, setJoining] = useState(false);
-  const [calibrationProgress, setCalibrationProgress] = useState(0);
-  const [calibrationState, setCalibrationState] = useState('settling');
-  const [calibrationStarted, setCalibrationStarted] = useState(false);
   // The latest move the controller saw during the tutorial. A fresh object per
   // attempt, so repeating the same wrong move still shows its feedback.
   const [tutorialAttempt, setTutorialAttempt] = useState(null);
   const handleTutorialAttempt = useCallback((attempt) => setTutorialAttempt({ ...attempt }), []);
-  const lastProgressEmit = useRef(0);
-  // Reset if calibration phase is re-entered (e.g. someone un-readied).
-  useEffect(() => {
-    if (lobby?.phase !== PHASES.CALIBRATION) {
-      setCalibrationStarted(false);
-      setCalibrationProgress(0);
-      setCalibrationState('settling');
-    }
-  }, [lobby?.phase]);
   const canJoin = !openingSecurePage && isRoomCode(code) && Boolean(cleanName(name)) && !joining;
-
-  const handleCalibrationProgress = useCallback((progress, state) => {
-    setCalibrationProgress(progress);
-    if (state) setCalibrationState(state);
-    const now = Date.now();
-    if (now - lastProgressEmit.current >= 100) {
-      lastProgressEmit.current = now;
-      socket.volatile.emit(EVENTS.PLAYER_CALIBRATION_PROGRESS, { progress, state });
-    }
-  }, []);
-  const handleCalibrationDone = useCallback(() => {
-    setCalibrationProgress(1);
-  }, []);
 
   async function join(event) {
     event.preventDefault();
@@ -222,7 +197,7 @@ export default function JoinStub() {
           <>
             <GameFrame code={seat.code} controller controllerIntent={controllerIntent} onControllerMode={controllerMode} player={seat.slot + 1} players={players} sport={seat.sport} gameId={seat.gameId} gameState={seat.gameState} generation={seat.inputGeneration} hostEpoch={seat.hostEpoch} matchRound={seat.matchRound}
               playing={phase === PHASES.GAME}
-              paused={(phase !== PHASES.GAME && phase !== PHASES.TUTORIAL && !(phase === PHASES.CALIBRATION && calibrationStarted)) || reconnecting || seat.paused}
+              paused={(phase !== PHASES.GAME && phase !== PHASES.TUTORIAL) || reconnecting || seat.paused}
               tutorialStep={tutorial ? tutorial.step : null}
               tutorialMove={learningMove}
               onTutorialAttempt={handleTutorialAttempt}

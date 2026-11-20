@@ -2,10 +2,7 @@ import {createSwingOrientation} from './swingOrientation.js';
 import {focusControllerSection} from './focusSection.js';
 import {createSwingStream} from './swingStream.js';
 import {
-  createSimpleSwingStream,
   createBowlingDeliveryGate,
-  createBowlingMotionDetector,
-  bowlingTiltAim,
 } from './motionGestures.js';
 import {
   createAutomaticMotionSetup,
