@@ -33,7 +33,7 @@ for (const sport of ['tennis', 'bowling']) for (const role of ['host', 'player']
   test(`${sport}: ${role} returns everyone with their seats/setup intact and requires a fresh ready check`, () => {
     const { store, room, start } = fixture(sport, sport === 'bowling' ? 4 : 2);
     const gameId = start();
-    const players = store.lobby(room.code).players;
+    const players = store.lobby(room.code).players.map(player => ({ ...player, ready: false }));
     store.setSound('tv', { muted: true });
     const result = sport === 'tennis' ? { gameId, phase: 'complete', server: 1, winner: 2 }
       : { gameId, phase: 'complete', currentPlayer: null, frame: 10, winners: [1, 2], winnerScore: 120 };

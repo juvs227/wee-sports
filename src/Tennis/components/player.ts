@@ -29,6 +29,7 @@ export interface PlayerController {
   update: (delta: number) => void;
   move: (dx: number, dz: number, delta: number) => void;
   setPosition: (x: number, z: number) => void;
+  setColor: (color: number) => void;
 }
 
 export interface PlayerOptions {
@@ -68,6 +69,27 @@ export function createPlayer(
   } = options;
 
   const loader = new GLTFLoader();
+  let model: THREE.Object3D | null = null;
+  let racketObject: THREE.Object3D | null = null;
+  let playerColor = color;
+  function isRacketDescendant(object: THREE.Object3D): boolean {
+    if (!racketObject) return false;
+    let current: THREE.Object3D | null = object;
+    while (current && current !== model) {
+      if (current === racketObject) return true;
+      current = current.parent;
+    }
+    return false;
+  }
+  function applyColor(): void {
+    model?.traverse(child => {
+      if (!(child instanceof THREE.Mesh) || isRacketDescendant(child)) return;
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      materials.forEach(material => {
+        if ('color' in material) (material as THREE.MeshStandardMaterial).color.setHex(playerColor);
+      });
+    });
+  }
   let handBone: THREE.Object3D | null = null;
   const appliedHandOffset = new THREE.Vector3();
   function clearHandOffset(): void {
@@ -90,6 +112,10 @@ export function createPlayer(
     strikeOffsets: {},
     swingPoses: {},
     movementSpeed: speed,
+    setColor(newColor: number): void {
+      playerColor = newColor;
+      applyColor();
+    },
 
     playAnimation(name: string): void {
       const next = this.actions[name];
@@ -208,7 +234,7 @@ export function createPlayer(
   loader.load(
     modelPath,
     gltf => {
-      const model = gltf.scene;
+      model = gltf.scene;
       model.scale.set(scale, scale, scale);
       model.traverse(child => {
         if (!(child instanceof THREE.Mesh)) {
@@ -222,7 +248,7 @@ export function createPlayer(
           const cloned = material.clone();
 
           if ('color' in cloned) {
-            (cloned as THREE.MeshStandardMaterial).color.setHex(color);
+            (cloned as THREE.MeshStandardMaterial).color.setHex(playerColor);
           }
 
           return cloned;
@@ -283,6 +309,7 @@ export function createPlayer(
             const racketScene = racketGltf.scene;
             racketScene.scale.set(racketScale, racketScale, racketScale);
 
+            racketObject = racketScene;
             handSocket.add(racketScene);
             controller.racket = racketScene;
             controller.hitbox = new RacketHitbox(racketScene);

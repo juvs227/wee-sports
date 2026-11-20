@@ -153,6 +153,7 @@ test('real sockets deliver actual game results, publish applied settings and iso
     await send(phone, EVENTS.PLAYER_START, {});
   now += 5000; store.finishCountdown(room.code); now += VOTE_SECONDS * 1000; store.expireVote(room.code);
     await send(phone, EVENTS.PLAYER_READY, { ready: true });
+    await send(phone, EVENTS.PLAYER_READY, { ready: true });
     const gameId = store.lobby(room.code).gameId;
     await send(tv, EVENTS.HOST_GAME_OPTIONS, tennisOptions(gameId));
     return { tv, phone, room, gameId };

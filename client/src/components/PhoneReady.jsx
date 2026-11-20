@@ -19,7 +19,6 @@ export function PhoneReady({ lobby, slot, disabled = false }) {
   const current = useRef(null);
   const boundary = `${lobby.code}:${lobby.sport}:${lobby.gameId}:${lobby.phase}:${lobby.inputGeneration ?? 0}:${slot}`;
   if (current.current?.key !== boundary) current.current = { key: boundary };
-
   const counting = lobby.phase === PHASES.COUNTDOWN;
   const secondsLeft = useCountdown(counting ? lobby.countdown?.msLeft : null);
   const ownSeat = lobby.players.find(player => player.slot === slot);

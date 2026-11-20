@@ -11,6 +11,7 @@ vi.mock('@wee/src/Tennis/World', () => ({ World: class {
   constructor() {
     this.start = vi.fn(); this.stop = vi.fn(); this.dispose = vi.fn(); this.swing = vi.fn();
     this.setPlayerInput = vi.fn();
+    this.setPlayerColors = vi.fn();
     this.setSplitScreen = vi.fn(); this.startRound = vi.fn();
     this.settings = { autoMove: true, timingAssist: true, assistance: 'standard', botDifficulty: 'standard', format: 'full' };
     this.configure = vi.fn(settings => Object.assign(this.settings, settings));
