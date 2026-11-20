@@ -4,6 +4,8 @@ import {createSwingStream} from './swingStream.js';
 import {
   createSimpleSwingStream,
   createBowlingDeliveryGate,
+  createBowlingMotionDetector,
+  bowlingTiltAim,
 } from './motionGestures.js';
 import {
   createAutomaticMotionSetup,
@@ -15,7 +17,7 @@ import {
 } from './bowlingAim.js';
 import {readLegacyWebMotion} from './webMotionAdapter.js';
 import {createControllerPreferences} from './preferences.js';
-import { createTutorialDetector } from './tutorialMoves.js';
+import {createTutorialDetector} from './tutorialMoves.js';
 import {tennisPower, tennisStrength} from './tennisPower.js';
 import {createStrengthRehearsal} from './strengthRehearsal.js';
 import {connectSwings} from '../network/swingConnection.js';
@@ -26,10 +28,15 @@ import {
   createCalibrationResume,
 } from './calibrationMemory.js';
 import {createPhoneFeedback, createScreenAwake} from './phoneExperience.js';
-import {isTennisState, isStrokeResult} from '../../shared/protocol.js';
+import {isTennisState, isStrokeResult, PHASES} from '../../shared/protocol.js';
 import {createTimingStats} from '../network/timingStats.js';
 import {createTennisAim} from '../../shared/tennisAim.js';
 import {browserDiagnostics} from '../../shared/diagnostics.js';
+import {createSwingDetector} from './classifySwing.js';
+import {
+  createOrientationCalibration,
+  createOrientationSource,
+} from './orientationCalibration.js';
 import '../theme.js';
 import '../../client/src/styles/tokens.css';
 import '../play.css';
@@ -161,6 +168,10 @@ let orientationCalibration = null;
 let orientationSource = null;
 let netOrientation = null;
 let currentNormal = null;
+let lobbyPhase = null;
+// The move this player is learning right now, and the detector watching for it.
+let tutorial = null;
+let tutorialDetector = null;
 const timingStats = { recognition: createTimingStats(), delivery: createTimingStats(), contact: createTimingStats() };
 const pendingTimings = new Map();
 let nextRecognitionMs;
@@ -284,6 +295,8 @@ function publishSetup() {
 }
 function turnReady() { return bowling && gameActive && connected && !lobbyPaused && canRoll && currentPlayer === player && !pendingRoll; }
 function cancelArmedRoll() { bowlingDetector = null; armedAt = null; }
+// Tutorial motion is watched outside a match and never sent to the game.
+function tutorialActive() { return Boolean(tutorial) && connected && !lobbyPaused && !gameActive; }
 // One calm play screen; setup remains mounted so switching views preserves
 // calibration, sensor permission and the lobby connection.
 function renderPlayState() {
@@ -478,9 +491,9 @@ function renderPlayState() {
   element('tilt-help').hidden = buttonMode || !tiltAvailable;
   element('bowling-readout').hidden = !bowling || buttonMode || !gameActive || state === 'paused' || !(bowlingDetector || (bowlingReadout && performance.now() < feedbackUntil));
   element('bowling-buttons').hidden = !buttonMode;
-  element('manual-controls').hidden = bowling || !buttonMode || state !== 'playing';
+  element('manual-controls').hidden = bowling || !buttonMode || !gameActive || state !== 'playing';
   element('latest').hidden = !gameActive || state === 'paused' || performance.now() >= feedbackUntil;
-  const activeController = setup && gameActive && connected && !lobbyPaused && !settingsOpen && pageActive && !document.hidden && (state === 'playing' || state === 'waiting');
+  const activeController = setup && (gameActive || tutorialActive()) && connected && !lobbyPaused && !settingsOpen && pageActive && !document.hidden && (state === 'playing' || state === 'waiting');
   const readyInLobby = !gameActive && Boolean(bias) && !buttonMode && connected && !settingsOpen && pageActive && !document.hidden && state === 'ready';
   const rehearsing = Boolean(rehearsal) && connected && pageActive && !document.hidden;
   screenAwake.setActive(activeController || readyInLobby || rehearsing);
@@ -729,14 +742,15 @@ function stop(
 }
 function startMotion() {
   if (!bowling && tennisState?.phase === 'complete') return;
-  if (recording || settingsOpen || rehearsal || !motionWanted || !bias || buttonMode || calibration || !enabled || !gameActive || lobbyPaused || !connected || document.hidden || !recentReadings()) return;
+  if (recording || settingsOpen || rehearsal || !motionWanted || !bias || buttonMode || calibration || !enabled || !(gameActive || tutorialActive()) || lobbyPaused || !connected || document.hidden || !recentReadings()) return;
   stream = bowling ? null : createSwingDetector();
   started = performance.now();
   recording = true;
   if (!bowling) void swingOrientation.start({bias});
   element('latest').textContent = '';
   playNotice = '';
-  element('motion').textContent = bowling ? 'Motion is live. Arm a roll when it is your turn.' : 'Motion is live. Swing to play; use Stop motion to pause your detector.';
+  element('motion').textContent = tutorialActive() ? 'Motion is live. Do the move shown above.'
+    : bowling ? 'Motion is live. Arm a roll when it is your turn.' : 'Motion is live. Swing to play; use Stop motion to pause your detector.';
   controls();
 }
 function finishRehearsal(message, profile = null) {
@@ -1025,8 +1039,16 @@ window.addEventListener('message', event => {
   gameActive = data.playing === true;
   lobbyPaused = data.paused;
   manuallyPaused = data.manuallyPaused === true;
+  lobbyPhase = typeof data.phase === 'string' ? data.phase : null;
+  const nextTutorial = !gameActive && lobbyPhase === PHASES.TUTORIAL && Number.isInteger(data.tutorial?.step) &&
+    typeof data.tutorial?.move === 'string' ? { step: data.tutorial.step, move: data.tutorial.move } : null;
+  if (nextTutorial?.step !== tutorial?.step || nextTutorial?.move !== tutorial?.move) {
+    // A new step starts from a clean detector, so no half-finished swing carries over.
+    tutorial = nextTutorial;
+    tutorialDetector = tutorial ? createTutorialDetector(bowling ? 'bowling' : 'tennis', tutorial.move) : null;
+  }
   if (lobbyPaused || !connected) { pendingTimings.clear(); strokeNoticeUntil = 0; }
-  if (lobbyPaused || !connected || !gameActive) stop('Paused. Motion will resume when the match is ready.');
+  if (lobbyPaused || !connected || (!gameActive && !tutorialActive())) stop('Paused. Motion will resume when the match is ready.');
   if (data.phase === PHASES.CALIBRATION && !orientationCalibration && enabled) startOrientationCalibration();
   startMotion();
   controls();

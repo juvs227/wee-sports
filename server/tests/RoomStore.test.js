@@ -338,6 +338,27 @@ test('a bowling Yes teaches aim, a straight roll, and both curves before the gam
 test('a player leaving during the countdown cancels it and clears the ready flags', () => {
   const { store, code, clock } = startReadyCheck();
   everyoneReady(store);
+  store.calibrationDone('tv');
+  clock.t += COUNTDOWN_MS;
+  store.finishCountdown(code);
+  store.vote('p0', { watch: true });
+  for (const id of ['p1', 'p2', 'p3']) store.vote(id, { watch: false });
+  assert.deepEqual(store.lobby(code).tutorial, {
+    step: 0,
+    moves: ['aim', 'straight', 'curveRight', 'curveLeft'],
+    learners: [0],
+    done: [],
+  });
+  for (let step = 0; step < TUTORIAL_MOVES.bowling.length; step++) {
+    assert.equal(store.lobby(code).phase, PHASES.TUTORIAL);
+    assert.equal(store.tutorialMove('p0', { step }).ok, true);
+  }
+  assert.equal(store.lobby(code).phase, PHASES.GAME);
+});
+
+test('a player leaving during the countdown cancels it and clears the ready flags', () => {
+  const { store, code, clock } = startReadyCheck();
+  everyoneReady(store);
   assert.deepEqual(store.remove('p1'), { code, closed: false, countdownCancelled: true });
   const lobby = store.lobby(code);
   assert.equal(lobby.phase, PHASES.READY);

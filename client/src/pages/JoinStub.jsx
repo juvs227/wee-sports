@@ -150,6 +150,7 @@ export default function JoinStub() {
     const phase = lobby?.phase ?? PHASES.LOBBY;
     const playing = phase === PHASES.GAME && !revealing;
     const tvAway = lobby.reconnecting?.some(member => member.role === 'host' || (!member.role && member.name === 'TV'));
+
     const tutorial = phase === PHASES.TUTORIAL && !revealing ? lobby.tutorial : null;
     // Only a learner who hasn't done this step yet needs their moves watched.
     const learningMove =
