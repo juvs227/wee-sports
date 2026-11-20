@@ -19,6 +19,11 @@ import type {Score} from './scoreSystem';
 import type {PlayerInput} from '../Controllers/playerInput';
 import {WorldCamera} from './camera';
 import {TENNIS_COURT} from './tennisRules';
+import {
+  PLAYER_COLOR_PALETTE,
+  areColorsTooSimilar,
+  pickFallbackColor,
+} from './playerColors';
 export type {TennisSettings, PracticeState, StrokeResult} from './gameLogic';
 
 const COURT_MIN_X = -4.115;
@@ -45,6 +50,7 @@ export class World {
   private readonly parkClub = createParkClub();
   private clock = new THREE.Clock();
   private animationFrameId: number | null = null;
+  private currentPlayer2Color = 0xef4444;
 
   public get autoPositionEnabled(): boolean {
     return this.gameLogic.autoPositionEnabled;
@@ -236,6 +242,34 @@ export class World {
 
   public startRound(): void {
     this.gameLogic.startRound();
+  }
+
+  public setPlayerColors(player1Color?: number, player2Color?: number): void {
+    const p1 = player1Color ?? 0x3b82f6;
+    let p2 = player2Color;
+
+    if (player1Color !== undefined) {
+      this.player1.setColor(player1Color);
+    }
+
+    if (
+      p2 === undefined &&
+      player1Color !== undefined &&
+      areColorsTooSimilar(p1, this.currentPlayer2Color)
+    ) {
+      p2 = pickFallbackColor(
+        this.currentPlayer2Color,
+        p1,
+        PLAYER_COLOR_PALETTE,
+      );
+    } else if (p2 !== undefined && areColorsTooSimilar(p1, p2)) {
+      p2 = pickFallbackColor(p2, p1, PLAYER_COLOR_PALETTE);
+    }
+
+    if (p2 !== undefined) {
+      this.currentPlayer2Color = p2;
+      this.player2.setColor(p2);
+    }
   }
 
   public start(): void {
