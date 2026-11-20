@@ -407,7 +407,7 @@ test('one Yes means the tutorial, and the resolved vote reveals every pick', () 
 });
 
 test('all No skips the tutorial and shows avatars', () => {
-  const { store, code, clock } = openVote();
+  const { store, code } = openVote();
   store.vote('p0', { watch: false });
   store.vote('p1', { watch: false });
   assert.equal(store.lobby(code).phase, PHASES.AVATARS);
@@ -516,7 +516,7 @@ test('a step waits for every learner, then the next one starts', () => {
 });
 
 test('after the last step the game starts', () => {
-  const { store, code, clock } = openTutorial([false, true]);
+  const { store, code } = openTutorial([false, true]);
   for (let step = 0; step < MOVES.length; step += 1) {
     assert.equal(store.lobby(code).phase, PHASES.TUTORIAL);
     assert.equal(store.tutorialMove('p1', { step }).advanced, true);

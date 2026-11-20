@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
@@ -7,7 +7,6 @@ const PLAYER_COLORS = ['#3b82f6', '#ef4444', '#2b9a66', '#e0a100'];
 /** Render the same player model used by tennis in a compact ready-screen view. */
 export function TennisPlayerAvatar({ slot, name, color, size = 96 }) {
   const canvasRef = useRef(null);
-  const [webglUnavailable, setWebglUnavailable] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -22,7 +21,6 @@ export function TennisPlayerAvatar({ slot, name, color, size = 96 }) {
     try {
       renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
     } catch {
-      setWebglUnavailable(true);
       return undefined;
     }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
