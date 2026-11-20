@@ -66,12 +66,24 @@ export function createPlayer(
 
     const loader = new GLTFLoader();
     let model: THREE.Object3D | null = null;
+    let racketObject: THREE.Object3D | null = null;
     let playerColor = color;
     let handBone: THREE.Object3D | null = null;
     const appliedHandOffset = new THREE.Vector3();
+
+    function isRacketDescendant(obj: THREE.Object3D): boolean {
+        if (!racketObject) return false;
+        let current: THREE.Object3D | null = obj;
+        while (current && current !== model) {
+            if (current === racketObject) return true;
+            current = current.parent;
+        }
+        return false;
+    }
+
     function applyColor(): void {
         model?.traverse((child) => {
-            if (!(child instanceof THREE.Mesh)) return;
+            if (!(child instanceof THREE.Mesh) || isRacketDescendant(child)) return;
             const materials = Array.isArray(child.material) ? child.material : [child.material];
             materials.forEach((material) => {
                 if ('color' in material) {
@@ -80,6 +92,7 @@ export function createPlayer(
             });
         });
     }
+
     function clearHandOffset(): void {
         handBone?.position.sub(appliedHandOffset);
         appliedHandOffset.set(0, 0, 0);
@@ -289,7 +302,8 @@ export function createPlayer(
                     (racketGltf) => {
                         const racketScene = racketGltf.scene;
                         racketScene.scale.set(racketScale, racketScale, racketScale);
-                        
+                        racketObject = racketScene;
+
                         handSocket.add(racketScene);
                         controller.racket = racketScene;
                         controller.hitbox = new RacketHitbox(racketScene);
