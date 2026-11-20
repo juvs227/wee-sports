@@ -141,6 +141,10 @@ export const EVENTS = {
    * un-readying during the countdown cancels it. Ack: { ok }.
    */
   PLAYER_READY: 'player:ready',
+  /** Phone -> server: set this player's avatar color during the avatar screen. */
+  PLAYER_COLOR_SET: 'player:color-set',
+  /** TV -> server: set a player's color during the avatar screen. */
+  HOST_PLAYER_COLOR_SET: 'host:player-color-set',
   /** Phone -> server: { watch: boolean }. One final vote per player. Ack: { ok }. */
   TUTORIAL_VOTE: 'tutorial:vote',
   /**
