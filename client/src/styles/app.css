@@ -1170,6 +1170,37 @@
   margin-top: 1.5rem;
 }
 
+.phone-ready__color-picker {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: .5rem 1rem;
+  margin: 0 0 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  font-weight: 800;
+}
+
+.phone-ready__color-picker input[type='color'] {
+  width: 3.5rem;
+  height: 3rem;
+  padding: .2rem;
+  border: 1px solid var(--border-strong);
+  border-radius: .75rem;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.phone-ready__color-picker p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: .85rem;
+  font-weight: 600;
+}
+
 .stub .phone-ready__title {
   margin: 0 0 1rem;
   font-size: 1.6rem;

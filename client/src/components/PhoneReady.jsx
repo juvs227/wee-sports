@@ -29,6 +29,7 @@ export function PhoneReady({ lobby, slot, disabled = false }) {
   const isLeader = slot === leaderSlot;
   const count = lobby.players.length;
   const readyCount = lobby.players.filter(player => player.ready).length;
+  const supportsColorPicker = lobby.sport === 'tennis' || lobby.sport === 'bowling';
 
   useEffect(() => {
     if (confirmation && confirmation === confirmationKey && isLeader) dialog.current?.showModal();
@@ -54,7 +55,7 @@ export function PhoneReady({ lobby, slot, disabled = false }) {
     return () => { live = false; };
   }, [lobby.code, lobby.sport, lobby.gameId, lobby.inputGeneration, lobby.phase, slot, ready, needsSetup, disabled, attempt]);
 
-  async function start() {
+  async function start(ballColor = color) {
     if (pending.current || disabled || !isLeader || !lobby.canStart || counting || !confirmation || confirmation !== confirmationKey) return;
     setConfirmation(null);
     dialog.current?.close();
@@ -62,11 +63,16 @@ export function PhoneReady({ lobby, slot, disabled = false }) {
     pending.current = true;
     setSending(true);
     setError(null);
-    const result = await request(EVENTS.PLAYER_START, {});
+    const result = await request(EVENTS.PLAYER_START, { color: ballColor });
     if (current.current !== scope) return;
     pending.current = false;
     setSending(false);
     if (!result?.ok) setError(result?.error ?? 'disconnected');
+  }
+
+  async function startWithBall(ballColor) {
+    setColor(ballColor);
+    await start(ballColor);
   }
 
   async function changeColor(event) {
@@ -86,17 +92,19 @@ export function PhoneReady({ lobby, slot, disabled = false }) {
   }
 
   return <section className="phone-ready">
-    {lobby.sport === 'tennis' && ownSeat ? (
+    {supportsColorPicker && ownSeat ? (
       <div className="seat" style={{ justifyContent: 'center', marginBottom: '1rem' }}>
         <span className="seat__badge" data-slot={ownSeat.slot}>P{ownSeat.slot + 1}</span>
         <span>{ownSeat.name}</span>
       </div>
     ) : null}
-    {lobby.phase === PHASES.AVATARS && lobby.sport === 'tennis' ? (
-      <label style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-        Avatar color
-        <input type="color" value={color} onChange={changeColor} aria-label="Choose avatar color" disabled={disabled || sending} />
-      </label>
+    {lobby.phase === PHASES.AVATARS && supportsColorPicker ? (
+      <div className="phone-ready__color-picker">
+        <label htmlFor="phone-player-color">{lobby.sport === 'bowling' ? 'Choose ball color' : 'Choose player color'}</label>
+        <input id="phone-player-color" type="color" value={color} onChange={changeColor}
+          aria-label={lobby.sport === 'bowling' ? 'Choose ball color' : 'Choose player color'} disabled={disabled || sending} />
+        <p>Pick a color before pressing Ready. The TV preview updates as you choose.</p>
+      </div>
     ) : null}
     {counting ? <h2 className="phone-ready__title" role="timer">{secondsLeft > 0 ? `Starting in ${secondsLeft}…` : 'Go!'}</h2> : null}
     {lobby.phase === PHASES.AVATARS ? (
@@ -125,7 +133,7 @@ export function PhoneReady({ lobby, slot, disabled = false }) {
     <dialog ref={dialog} className="phone-start-confirm" aria-labelledby="phone-start-title" onCancel={() => setConfirmation(null)}>
       <h2 id="phone-start-title">Start {sportName(lobby.sport)}?</h2>
       <p>{count === 1 ? 'Solo play' : `${count} players`} · Everyone ready?</p>
-      <button type="button" className="btn btn--primary" disabled={sending || !confirmationKey} onClick={start}>Start now</button>
+      <button type="button" className="btn btn--primary" disabled={sending || !confirmationKey} onClick={() => startWithBall(color)}>Start now</button>
       <button type="button" className="btn btn--ghost" onClick={() => setConfirmation(null)} autoFocus>Keep waiting</button>
     </dialog>
   </section>;

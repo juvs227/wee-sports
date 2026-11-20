@@ -198,6 +198,20 @@ export class RoomStore {
     return { ok: true, code: room.code };
   }
 
+  setHostedPlayerColor(socketId, payload) {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    const room = member?.role === 'host' && this.#rooms.get(member.code);
+    if (!room) return { ok: false, error: ERRORS.NO_ROOM };
+    if (room.phase !== PHASES.AVATARS) return { ok: false, error: ERRORS.NO_READY_CHECK };
+    if (!Number.isInteger(payload?.slot) || typeof payload?.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(payload.color)) {
+      return { ok: false, error: 'bad-color' };
+    }
+    const player = [...room.players.values()].find((seat) => seat.slot === payload.slot);
+    if (!player) return { ok: false, error: 'no-player' };
+    player.color = payload.color.toLowerCase();
+    return { ok: true, code: room.code };
+  }
+
   /** The current leader starts the joined roster; larger parties need no TV configuration. */
   startGame(socketId) {
     const member = this.#members.get(this.#sockets.get(socketId));
@@ -750,9 +764,8 @@ export class RoomStore {
   }
 
   /**
-   * Opens the tutorial vote once the countdown's deadline has passed, or starts
-   * the game for a sport without a tutorial. Returns null and changes nothing
-   * otherwise, so a stale or early tick is harmless.
+   * Opens the tutorial vote after the countdown, or the avatar selection when
+   * no tutorial is needed. Returns null for a stale or early tick.
    */
   finishCountdown(code) {
     const room = this.#rooms.get(code);
@@ -761,7 +774,7 @@ export class RoomStore {
     room.savedMatch = null;
     if (!hasTutorial(room.sport) || [...room.players.values()].every(player => player.skipTutorial)) {
       if (room.recoverySource) room.recoverySource.payload = null;
-      room.phase = PHASES.GAME;
+      room.phase = PHASES.AVATARS;
       room.deadline = null;
       return { code };
     }
