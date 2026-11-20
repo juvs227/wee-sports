@@ -34,6 +34,7 @@ function fixture(t, {sport = 'tennis', count = 2} = {}) {
   assert.equal(store.startGame(phones[0].id).ok,true); time += 5000;
   store.finishCountdown(room.code);
   if (store.lobby(room.code).phase==='vote') for (const phone of phones) store.vote(phone.id,{watch:false});
+  if (store.lobby(room.code).phase==='avatars') for (const phone of phones) store.setReady(phone.id,{ready:true});
   assert.equal(store.lobby(room.code).phase,'game');
   const context = () => {const state=store.lobby(room.code);return {gameId:state.gameId,generation:state.inputGeneration,hostEpoch:state.hostEpoch};};
   const register = peer => peer.request('direct:register',context());
@@ -157,6 +158,7 @@ test('peer heartbeats avoid public snapshots and room changes validate only that
   f.store.setSetup(otherPhone.id,{setup:'buttons'});f.store.setReady(otherPhone.id,{ready:true});
   f.store.startGame(otherPhone.id);f.advance(5000);f.store.finishCountdown(otherRoom.code);
   if(f.store.lobby(otherRoom.code).phase==='vote')f.store.vote(otherPhone.id,{watch:false});
+  if(f.store.lobby(otherRoom.code).phase==='avatars')f.store.setReady(otherPhone.id,{ready:true});
   const other=f.store.lobby(otherRoom.code), otherScope={gameId:other.gameId,generation:other.inputGeneration,hostEpoch:other.hostEpoch};
   const first=f.open(), scope=f.context();
   otherHost.request('direct:register',otherScope);otherPhone.request('direct:register',otherScope);
@@ -198,6 +200,7 @@ test('real sockets route signaling to the authenticated TV and revoke it immedia
   await send(phone,EVENTS.PLAYER_SETUP,{setup:'buttons'});await send(phone,EVENTS.PLAYER_READY,{ready:true});
   await send(phone,EVENTS.PLAYER_START);time+=5000;store.finishCountdown(room.code);
   if (store.lobby(room.code).phase==='vote') store.vote(phone.id,{watch:false});
+  await send(phone,EVENTS.PLAYER_READY,{ready:true});
   const state=store.lobby(room.code), context={gameId:state.gameId,generation:state.inputGeneration,hostEpoch:state.hostEpoch};
   assert.equal((await send(host,'direct:register',context)).ok,true);assert.equal((await send(phone,'direct:register',context)).ok,true);
   const invitation=once(host,'direct:peer'), pair=await send(phone,'direct:open',context);

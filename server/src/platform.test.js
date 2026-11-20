@@ -163,6 +163,7 @@ test('negotiated modern tennis swings cannot bypass generation checks with a leg
   store.setReady('phone', {ready: true}); store.startGame('phone');
   now = 5000; store.finishCountdown(room.code);
   store.vote('phone', {watch: false});
+  store.setReady('phone', {ready:true});
   const state = store.lobby(room.code);
   assert.equal(state.phase, PHASES.GAME);
   const swing = {type: 'swing', id: 'current-swing', label: 'Forehand', hand: 'Right',
