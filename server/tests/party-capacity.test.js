@@ -5,6 +5,7 @@ import {expect, test} from 'vitest';
 import {RoomStore} from '@server/src/RoomStore.js';
 import {PROTOCOL_VERSION as v, PHASES, VOTE_SECONDS, playerCapacity} from '@wee/shared/protocol.js';
 import {createControllerCapabilities} from '@wee/shared/controllerCapabilities.js';
+import {finishAvatarScene} from './finishAvatarScene.js';
 
 function fixture(sport = 'bowling', count = 8) {
   let now = 1000;
@@ -18,6 +19,7 @@ function fixture(sport = 'bowling', count = 8) {
     store.startGame('p1');
     now += 5000; store.finishCountdown(host.code);
     now += VOTE_SECONDS * 1000; store.expireVote(host.code);
+    finishAvatarScene(store, host.code, Array.from({length: count}, (_, i) => `p${i + 1}`));
     return store.lobby(host.code);
   };
   return {store, host, phones, ready, start, advance: ms => {now += ms;}};
@@ -128,7 +130,7 @@ for (const sport of ['tennis', 'bowling']) {
     const view = f.store.lobby(f.host.code);
     expect(view).toMatchObject({phase: PHASES.READY, gameId: null, leaderSlot: 0});
     expect(view.inputGeneration).toBeGreaterThan(game.inputGeneration);
-    expect(view.players).toEqual([{slot: 0, name: 'Player 2', ready: false, setup: 'buttons'}]);
+    expect(view.players).toEqual([{slot: 0, name: 'Player 2', ready: false, setup: 'buttons', color: '#ef4444'}]);
     expect(f.store.lobbyForSocket('p2', view)).toMatchObject({slot: 0, name: 'Player 2'});
     expect(f.store.resume('p2-back', {v, code: f.host.code, role: 'player', token: f.phones[1].token}).slot).toBe(0);
     expect(f.store.setReady('p2-back', {ready: true}).countdownStarted).toBeUndefined();

@@ -2,6 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { PHASES, PROTOCOL_VERSION, RECONNECT_MS, VOTE_SECONDS } from '@wee/shared/protocol.js';
 import { RoomStore } from '@server/src/RoomStore.js';
+import { finishAvatarScene } from './finishAvatarScene.js';
 const v = PROTOCOL_VERSION;
 function setup(count = 1) {
   const clock = { now: 1000 };
@@ -125,6 +126,7 @@ test('reconnecting during the game preserves the current flow', () => {
   store.startGame('p0');
   clock.now += 5000; store.finishCountdown(code);
   clock.now += VOTE_SECONDS * 1000; store.expireVote(code);
+  finishAvatarScene(store, code, ['p0', 'p1']);
   store.disconnect('p1');
   assert.equal(store.lobby(code).paused, true);
   assert.equal(restore(store, 'back', players[1]).phase, PHASES.GAME);

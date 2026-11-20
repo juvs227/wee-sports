@@ -137,7 +137,7 @@ export class RoomStore {
     const unique = this.#uniqueName(room, cleaned);
     const memberId = this.#addSession(playerId, code, 'player');
     this.#members.get(memberId).capabilities = negotiation.capabilities;
-    room.players.set(memberId, { slot, name: unique, ready: false, setup: null });
+    room.players.set(memberId, { slot, name: unique, ready: false, setup: null, color: PLAYER_COLORS[slot] });
     room.savedMatch = null; // A different roster must start its own match.
     // Existing phones have already confirmed Play; a new guest only readies their own seat.
     if (room.phase !== PHASES.READY) this.#resetReady(room);
@@ -154,7 +154,7 @@ export class RoomStore {
     const member = this.#members.get(playerId);
     if (member?.role !== 'player') return { ok: false, error: ERRORS.NOT_PLAYER };
     const room = this.#rooms.get(member.code);
-    if (room?.phase !== PHASES.READY && room?.phase !== PHASES.COUNTDOWN) {
+    if (room?.phase !== PHASES.READY && room?.phase !== PHASES.COUNTDOWN && room?.phase !== PHASES.AVATARS) {
       return { ok: false, error: ERRORS.NO_READY_CHECK };
     }
     if (room.pausedAt !== null) return { ok: false, error: ERRORS.PAUSED };
@@ -176,6 +176,7 @@ export class RoomStore {
       return { ok: true, code: room.code, countdownCancelled: true };
     }
     if (room.phase === PHASES.AVATARS && [...room.players.values()].every((seat) => seat.ready)) {
+      this.#clearReady(room);
       room.phase = PHASES.GAME;
       room.deadline = null;
       return { ok: true, code: room.code, gameStarted: true };
