@@ -52,7 +52,7 @@ const MOVES = {
       name: 'Straight roll',
       cue: 'Swing underhand toward the TV and keep your wrist still.',
       how: [
-        'Swing your arm back, then forward and up, like rolling a real ball.',
+        'Hold still for a moment, then swing back and forward, like rolling a real ball.',
         'Stop your swing out in front of you to release. Never let go of your phone!',
         'A faster swing rolls a faster ball. Keep your wrist flat for a straight roll.',
       ],
@@ -61,7 +61,7 @@ const MOVES = {
       name: 'Curve right',
       cue: 'Swing underhand and turn your wrist to the right.',
       how: [
-        'Start the same underhand swing.',
+        'Hold still for a moment, then start the same underhand swing.',
         'As you swing forward, turn your wrist clockwise, like turning a doorknob to the right.',
         'A bigger turn, up to about a quarter turn, curves the ball more.',
       ],
@@ -70,7 +70,7 @@ const MOVES = {
       name: 'Curve left',
       cue: 'Swing underhand and turn your wrist to the left.',
       how: [
-        'Start the same underhand swing.',
+        'Hold still for a moment, then start the same underhand swing.',
         'As you swing forward, turn your wrist counterclockwise, to the left.',
         'Slower rolls have more time to curve before they reach the pins.',
       ],

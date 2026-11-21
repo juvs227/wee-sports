@@ -1040,7 +1040,7 @@ window.addEventListener('message', event => {
   if (nextTutorial?.step !== tutorial?.step || nextTutorial?.move !== tutorial?.move) {
     // A new step starts from a clean detector, so no half-finished swing carries over.
     tutorial = nextTutorial;
-    tutorialDetector = tutorial ? createTutorialDetector(bowling ? 'bowling' : 'tennis', tutorial.move) : null;
+    tutorialDetector = tutorial ? createTutorialDetector(bowling ? 'bowling' : 'tennis', tutorial.move, {hand: element('hand').value}) : null;
   }
   if (lobbyPaused || !connected) { pendingTimings.clear(); strokeNoticeUntil = 0; }
   if (lobbyPaused || !connected || (!gameActive && !tutorialActive())) stop('Paused. Motion will resume when the match is ready.');

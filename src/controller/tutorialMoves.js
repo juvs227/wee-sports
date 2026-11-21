@@ -1,11 +1,12 @@
-import { createSwingDetector } from './accelerationSwing.js';
-import { bowlingTiltAim, createBowlingMotionDetector } from './motionGestures.js';
+import { createSwingStream } from './swingStream.js';
+import { bowlingTiltAim, createBowlingDeliveryGate } from './motionGestures.js';
 
 /**
  * Tutorial move detection. The controller feeds it the same motion samples as
- * a real match, but nothing it detects is ever sent to the game: it only tells
- * the phone page which move it saw, so the tutorial can advance once every
- * learner has really done the move.
+ * a real match, and it recognizes moves with the same recognizers the match
+ * uses, so a move that counts here also works in the game. Nothing it detects
+ * is ever sent to the game: it only tells the phone page which move it saw, so
+ * the tutorial can advance once every learner has really done the move.
  *
  * Move ids match TUTORIAL_MOVES in shared/protocol.js.
  */
@@ -23,22 +24,33 @@ export function bowlingTutorialMove(spin) {
 }
 
 /**
- * Whether a detected move completes the expected one. The swing detector only
- * tells forehands from backhands, so any real swing counts as a serve.
+ * Whether a detected move completes the expected one. The swing recognizer
+ * only tells forehands from backhands, so any real swing counts as a serve.
  */
 export function tutorialMoveMatches(expected, detected) {
   if (expected === 'serve') return ['serve', 'forehand', 'backhand'].includes(detected);
   return expected === detected;
 }
 
-function tennisDetector(move) {
-  const swings = createSwingDetector();
+/**
+ * The match's own swing recognizer for this hand. Like the match, it ignores
+ * motion it can't classify: real swings sometimes leave a stray unclassified
+ * fragment, which must not count against the player. A serve can't be
+ * classified at all, so for the serve step any swing counts.
+ */
+function tennisDetector(move, hand) {
+  const swings = createSwingStream(hand);
   return {
     push(sample) {
-      const swing = swings.push(sample);
-      if (!swing) return null;
-      const detected = move === 'serve' ? 'serve' : swing.label.toLowerCase();
-      return { detected, matched: tutorialMoveMatches(move, detected) };
+      swings.push(sample);
+      for (const swing of swings.analyze()) {
+        const unknown = swing.label === 'Unknown';
+        if (move === 'serve') return { detected: 'serve', matched: true };
+        if (unknown || !(swing.complete || swing.early || swing.fast)) continue;
+        const detected = swing.label.toLowerCase();
+        return { detected, matched: tutorialMoveMatches(move, detected) };
+      }
+      return null;
     },
   };
 }
@@ -63,14 +75,18 @@ function aimDetector() {
   };
 }
 
-/** Every roll is judged, then a fresh detector waits for the next try. */
+/**
+ * The match's delivery gate: a short rest, then one underhand roll. Each try
+ * gets a fresh turn key, so the next roll is judged on its own.
+ */
 function rollDetector(move) {
-  let rolls = createBowlingMotionDetector();
+  const gate = createBowlingDeliveryGate();
+  let tries = 0;
   return {
     push(sample) {
-      const roll = rolls.push(sample);
+      const roll = gate.push(sample, { active: true, turnKey: tries, aim: 0 });
       if (!roll) return null;
-      rolls = createBowlingMotionDetector();
+      tries += 1;
       const detected = bowlingTutorialMove(roll.spin);
       return { detected, matched: detected === move, power: roll.power, spin: roll.spin };
     },
@@ -79,10 +95,11 @@ function rollDetector(move) {
 
 /**
  * A detector for one tutorial step. push(sample, gravity) returns null until
- * it sees an attempt, then { detected, matched, ... } for that attempt.
+ * it sees an attempt, then { detected, matched, ... } for that attempt. hand
+ * is the controller's playing hand, which tennis needs to tell its swings apart.
  */
-export function createTutorialDetector(sport, move) {
-  if (sport === 'tennis' && ['forehand', 'backhand', 'serve'].includes(move)) return tennisDetector(move);
+export function createTutorialDetector(sport, move, { hand = 'Right' } = {}) {
+  if (sport === 'tennis' && ['forehand', 'backhand', 'serve'].includes(move)) return tennisDetector(move, hand);
   if (sport === 'bowling' && move === 'aim') return aimDetector();
   if (sport === 'bowling' && ['straight', 'curveRight', 'curveLeft'].includes(move)) return rollDetector(move);
   return null;
