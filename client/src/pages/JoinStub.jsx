@@ -197,6 +197,7 @@ export default function JoinStub() {
           <>
             <GameFrame code={seat.code} controller controllerIntent={controllerIntent} onControllerMode={controllerMode} player={seat.slot + 1} players={players} sport={seat.sport} gameId={seat.gameId} gameState={seat.gameState} generation={seat.inputGeneration} hostEpoch={seat.hostEpoch} matchRound={seat.matchRound}
               playing={phase === PHASES.GAME}
+              phase={phase}
               paused={(phase !== PHASES.GAME && phase !== PHASES.TUTORIAL) || reconnecting || seat.paused}
               tutorialStep={tutorial ? tutorial.step : null}
               tutorialMove={learningMove}
