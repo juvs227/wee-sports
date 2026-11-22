@@ -38,7 +38,7 @@ export function PhoneReady({ lobby, slot, disabled = false }) {
   useEffect(() => {
     if (lobby.phase !== PHASES.READY || ready || needsSetup || disabled) return;
     let live = true;
-    request(EVENTS.PLAYER_READY, {ready: true, skipTutorial: true}).then(result => {
+    request(EVENTS.PLAYER_READY, {ready: true}).then(result => {
       if (live && !result?.ok) setError(result?.error ?? 'disconnected');
     });
     return () => {live = false;};

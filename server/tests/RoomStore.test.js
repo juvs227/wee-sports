@@ -296,23 +296,62 @@ test('un-readying during the countdown cancels it, and everyone else stays ready
   assert.equal(store.startGame('p0').countdownStarted, true);
 });
 
-test('a bowling countdown ends in the game, and not a moment early', () => {
+test('a bowling countdown opens the tutorial vote, and not a moment early', () => {
   const { store, code, clock } = startReadyCheck();
   everyoneReady(store);
   clock.t += COUNTDOWN_MS - 1;
   assert.equal(store.finishCountdown(code), null);
   assert.equal(store.lobby(code).phase, PHASES.COUNTDOWN);
   clock.t += 1;
-  assert.deepEqual(store.finishCountdown(code), { code });
+  assert.deepEqual(store.finishCountdown(code), { code, msLeft: VOTE_MS });
   const lobby = store.lobby(code);
-  // Bowling has no tutorial, so there is no vote either.
-  assert.equal(lobby.phase, PHASES.GAME);
+  assert.equal(lobby.phase, PHASES.VOTE);
   assert.equal(lobby.countdown, null);
-  assert.equal(lobby.vote, null);
+  assert.deepEqual(lobby.vote, { msLeft: VOTE_MS, voted: [] });
   assert.deepEqual(readyFlags(store, code), Array(MAX_PLAYERS).fill(false));
   // A second, stale tick changes nothing.
   assert.equal(store.finishCountdown(code), null);
   assert.equal(store.finishCountdown('ZZZZ'), null);
+});
+
+test('a bowling Yes teaches aim, a straight roll, and both curves before the game', () => {
+  const { store, code, clock } = startReadyCheck();
+  everyoneReady(store);
+  clock.t += COUNTDOWN_MS;
+  store.finishCountdown(code);
+  store.vote('p0', { watch: true });
+  for (let i = 1; i < MAX_PLAYERS; i++) store.vote(`p${i}`, { watch: false });
+  assert.deepEqual(store.lobby(code).tutorial, {
+    step: 0,
+    moves: ['aim', 'straight', 'curveRight', 'curveLeft'],
+    learners: [0],
+    done: [],
+  });
+  for (let step = 0; step < TUTORIAL_MOVES.bowling.length; step++) {
+    assert.equal(store.lobby(code).phase, PHASES.TUTORIAL);
+    assert.equal(store.tutorialMove('p0', { step }).ok, true);
+  }
+  assert.equal(store.lobby(code).phase, PHASES.GAME);
+});
+
+test('a player leaving during the countdown cancels it and clears the ready flags', () => {
+  const { store, code, clock } = startReadyCheck();
+  everyoneReady(store);
+  clock.t += COUNTDOWN_MS;
+  store.finishCountdown(code);
+  store.vote('p0', { watch: true });
+  for (let i = 1; i < MAX_PLAYERS; i++) store.vote(`p${i}`, { watch: false });
+  assert.deepEqual(store.lobby(code).tutorial, {
+    step: 0,
+    moves: ['aim', 'straight', 'curveRight', 'curveLeft'],
+    learners: [0],
+    done: [],
+  });
+  for (let step = 0; step < TUTORIAL_MOVES.bowling.length; step++) {
+    assert.equal(store.lobby(code).phase, PHASES.TUTORIAL);
+    assert.equal(store.tutorialMove('p0', { step }).ok, true);
+  }
+  assert.equal(store.lobby(code).phase, PHASES.GAME);
 });
 
 test('a player leaving during the countdown cancels it and clears the ready flags', () => {

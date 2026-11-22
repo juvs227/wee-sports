@@ -54,6 +54,7 @@ export function isController(sport, slot) {
  */
 export const TUTORIAL_MOVES = {
   tennis: ['forehand', 'backhand', 'serve'],
+  bowling: ['aim', 'straight', 'curveRight', 'curveLeft'],
 };
 
 export function hasTutorial(sport) {

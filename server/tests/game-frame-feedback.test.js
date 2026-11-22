@@ -441,3 +441,26 @@ test('the tennis bridge keeps seven-point set scores and rejects inconsistent or
     score: [6, 6], sets: [1, 0], completedSets: [{player1: 7, player2: 2}], targetPoints: 7, setsToWin: 2,
   });
 });
+
+test('a phone in the tutorial tells its controller the move to watch and relays its attempts', async () => {
+  const onTutorialAttempt = vi.fn();
+  const f = mount({ controller: true, sport: 'bowling', playing: false, phase: 'tutorial',
+    tutorialStep: 1, tutorialMove: 'straight', onTutorialAttempt });
+  const states = f.contentWindow.postMessage.mock.calls.map(([message]) => message).filter(message => message.type === 'wee:lobby-state');
+  expect(states.at(-1)).toMatchObject({ phase: 'tutorial', tutorial: { step: 1, move: 'straight' } });
+  await f.receive({ type: 'wee:tutorial-attempt', step: 1, move: 'straight', detected: 'curveLeft', matched: false, spin: -0.3 });
+  expect(onTutorialAttempt).toHaveBeenCalledExactlyOnceWith({ step: 1, detected: 'curveLeft', matched: false });
+});
+
+test('outside the tutorial, or with nothing left to learn, the controller watches no move', async () => {
+  const onTutorialAttempt = vi.fn();
+  const f = mount({ controller: true, sport: 'bowling', playing: false, phase: 'tutorial',
+    tutorialStep: 1, tutorialMove: null, onTutorialAttempt });
+  const lastState = () => f.contentWindow.postMessage.mock.calls.map(([message]) => message)
+    .filter(message => message.type === 'wee:lobby-state').at(-1);
+  expect(lastState().tutorial).toBeNull();
+  f.rerender({ phase: 'game', playing: true, tutorialMove: 'straight' });
+  expect(lastState()).toMatchObject({ phase: 'game', tutorial: null });
+  await f.receive({ type: 'wee:tutorial-attempt', step: 1, move: 'straight', detected: 'straight', matched: true });
+  expect(onTutorialAttempt).not.toHaveBeenCalled();
+});

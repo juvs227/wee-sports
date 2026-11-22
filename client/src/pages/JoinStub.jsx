@@ -83,6 +83,10 @@ export default function JoinStub() {
   const revealing = useRevealHold(lobby?.phase) && Boolean(lobby?.vote?.picks);
   const [error, setError] = useState(null);
   const [joining, setJoining] = useState(false);
+  // The latest move the controller saw during the tutorial. A fresh object per
+  // attempt, so repeating the same wrong move still shows its feedback.
+  const [tutorialAttempt, setTutorialAttempt] = useState(null);
+  const handleTutorialAttempt = useCallback((attempt) => setTutorialAttempt({ ...attempt }), []);
   const canJoin = !openingSecurePage && isRoomCode(code) && Boolean(cleanName(name)) && !joining;
 
   async function join(event) {
@@ -121,6 +125,13 @@ export default function JoinStub() {
     const phase = lobby?.phase ?? PHASES.LOBBY;
     const playing = phase === PHASES.GAME && !revealing;
     const tvAway = lobby.reconnecting?.some(member => member.role === 'host' || (!member.role && member.name === 'TV'));
+
+    const tutorial = phase === PHASES.TUTORIAL && !revealing ? lobby.tutorial : null;
+    // Only a learner who hasn't done this step yet needs their moves watched.
+    const learningMove =
+      tutorial && tutorial.learners.includes(seat.slot) && !tutorial.done.includes(seat.slot)
+        ? tutorial.moves[tutorial.step]
+        : null;
     const lobbyOptions = (
       <>
         <PhoneSoundToggle lobby={lobby} disabled={reconnecting} />
@@ -174,9 +185,9 @@ export default function JoinStub() {
           <p className="stub__status">Getting your lobby ready…</p>
         ) : phase === PHASES.VOTE || revealing ? (
           // Keyed by game, so a fresh vote forgets this phone's last pick.
-          <PhoneVote key={lobby.gameId} lobby={lobby} slot={seat.slot} automatic />
+          <PhoneVote key={lobby.gameId} lobby={lobby} slot={seat.slot} />
         ) : phase === PHASES.TUTORIAL ? (
-          <PhoneTutorial key={lobby.tutorial.step} lobby={lobby} slot={seat.slot} />
+          <PhoneTutorial key={lobby.tutorial.step} lobby={lobby} slot={seat.slot} attempt={tutorialAttempt} />
         ) : (
           <PhoneReady lobby={lobby} slot={seat.slot} disabled={reconnecting || lobby.paused} />
         )}
@@ -186,7 +197,11 @@ export default function JoinStub() {
           <>
             <GameFrame code={seat.code} controller controllerIntent={controllerIntent} onControllerMode={controllerMode} player={seat.slot + 1} players={players} sport={seat.sport} gameId={seat.gameId} gameState={seat.gameState} generation={seat.inputGeneration} hostEpoch={seat.hostEpoch} matchRound={seat.matchRound}
               playing={phase === PHASES.GAME}
-              paused={phase !== PHASES.GAME || reconnecting || seat.paused}
+              phase={phase}
+              paused={(phase !== PHASES.GAME && phase !== PHASES.TUTORIAL) || reconnecting || seat.paused}
+              tutorialStep={tutorial ? tutorial.step : null}
+              tutorialMove={learningMove}
+              onTutorialAttempt={handleTutorialAttempt}
               manuallyPaused={Boolean(lobby.manuallyPaused && !reconnecting && !lobby.reconnecting?.length && !lobby.setupPending?.length)}
               showPause={reconnecting} />
           </>

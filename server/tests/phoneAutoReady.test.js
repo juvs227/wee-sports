@@ -39,7 +39,7 @@ function mount(initial = {}) {
 
 test.each(['motion', 'buttons'])('accepted %s setup gets ready without an extra tap or starting the match', setup => {
   mount({lobby: lobby({players: [{slot: 0, name: 'Sam', setup, ready: false}]})});
-  expect(h.request).toHaveBeenCalledExactlyOnceWith(EVENTS.PLAYER_READY, {ready: true, skipTutorial: true});
+  expect(h.request).toHaveBeenCalledExactlyOnceWith(EVENTS.PLAYER_READY, {ready: true});
 });
 
 test.each([{setup: null}, {ready: true}, {disabled: true}, {phase: PHASES.COUNTDOWN}, {phase: PHASES.GAME}])(
@@ -76,7 +76,7 @@ test('returning from a match restores readiness and waits for a new explicit Sta
   const playing = lobby({phase: PHASES.GAME, gameId: 'finished', players: [{slot: 0, setup: 'motion', ready: true}]});
   const f = mount({lobby: playing});
   f.render({lobby: lobby()});
-  expect(h.request).toHaveBeenCalledExactlyOnceWith(EVENTS.PLAYER_READY, {ready: true, skipTutorial: true});
+  expect(h.request).toHaveBeenCalledExactlyOnceWith(EVENTS.PLAYER_READY, {ready: true});
   f.render({lobby: lobby({players: [{slot: 0, setup: 'motion', ready: true}]})});
   f.button('Start game').props.onClick(); f.render();
   await f.button('Start now').props.onClick();
