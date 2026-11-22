@@ -11,8 +11,12 @@ import { bowlingTiltAim, createBowlingDeliveryGate } from './motionGestures.js';
  * Move ids match TUTORIAL_MOVES in shared/protocol.js.
  */
 
-/** Below this much side spin a roll counts as straight, as on the phone readout. */
-export const STRAIGHT_SPIN = 0.04;
+/**
+ * Below this much side spin a roll counts as straight. About 18 degrees of
+ * wrist turn, so a natural underhand swing still reads as straight and a
+ * curve needs a deliberate turn.
+ */
+export const STRAIGHT_SPIN = 0.15;
 
 /** How far the phone must tilt each way, as a share of the full aim range. */
 export const AIM_TILT = 0.5;
