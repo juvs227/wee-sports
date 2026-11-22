@@ -1,79 +1,85 @@
-/**
- * androidCalibration.js — AbsoluteOrientationSensor source for Android Chrome.
- *
- * Returns a source object compatible with createOrientationCalibration:
- *   { onReading, start(), stop(), getNormal(), getQuaternion() }
- */
-
-// ── Math helpers ──────────────────────────────────────────────────────────────
-
-/** Rotate vector v by quaternion q = [x,y,z,w]. */
-function qrot(q, v) {
-  const [qx, qy, qz, qw] = q;
-  const [vx, vy, vz] = v;
-  const tx = 2 * (qy * vz - qz * vy);
-  const ty = 2 * (qz * vx - qx * vz);
-  const tz = 2 * (qx * vy - qy * vx);
-  return [
-    vx + qw * tx + qy * tz - qz * ty,
-    vy + qw * ty + qz * tx - qx * tz,
-    vz + qw * tz + qx * ty - qy * tx,
-  ];
-}
-
-function qnorm(q) { const l = Math.hypot(...q); return q.map(v => v / l); }
-
-// ── Source factory ────────────────────────────────────────────────────────────
-
-/**
- * Creates an orientation source backed by AbsoluteOrientationSensor (Android Chrome).
- *
- * @returns {{ onReading: null|function, start: function, stop: function, getNormal: function, getQuaternion: function }}
- */
-export function createAndroidOrientationSource() {
-  let currentQuat   = null;
-  let currentNormal = null;
-  let sensor        = null;
-
+/** PR 14's native quaternion source, with cancellation and error ownership. */
+export function createAndroidOrientationSource({
+  target = globalThis.window,
+  permissions = globalThis.navigator?.permissions,
+} = {}) {
+  let currentQuat = null,
+    currentNormal = null,
+    sensor = null,
+    generation = 0;
+  let removeListeners = () => {};
   const source = {
     onReading: null,
-
+    onError: null,
     async start() {
-      if (navigator.permissions) {
-        await Promise.all([
-          navigator.permissions.query({ name: 'accelerometer' }),
-          navigator.permissions.query({ name: 'gyroscope' }),
-          navigator.permissions.query({ name: 'magnetometer' }),
-        ]);
+      source.stop();
+      const attempt = generation;
+      if (permissions?.query) {
+        const grants = await Promise.all(
+          ['accelerometer', 'gyroscope', 'magnetometer'].map(name =>
+            permissions.query({name}),
+          ),
+        );
+        if (attempt !== generation) return;
+        // The optional source must never add a surprise permission prompt.
+        if (grants.some(grant => grant.state !== 'granted'))
+          throw new Error('Absolute orientation permission is unavailable');
       }
-
-      sensor = new window.AbsoluteOrientationSensor({ frequency: 30 });
-
-      sensor.addEventListener('reading', () => {
-        const quat   = [...sensor.quaternion];
-        const normal = qrot(quat, [0, 0, 1]);
-        currentQuat   = quat;
-        currentNormal = normal;
-        if (source.onReading) source.onReading(quat, normal);
-      });
-
-      sensor.addEventListener('error', () => {
-        // Sensor errors after start — nothing to do, let caller handle silence.
-      });
-
-      sensor.start();
+      if (attempt !== generation) return;
+      const next = new target.AbsoluteOrientationSensor({frequency: 30});
+      sensor = next;
+      const reading = () => {
+        if (attempt !== generation || sensor !== next) return;
+        const q = next.quaternion;
+        if (!q || q.length !== 4 || !Array.from(q).every(Number.isFinite))
+          return;
+        const length = Math.hypot(...q);
+        if (length < 0.001) return;
+        const [x, y, z, w] = Array.from(q, value => value / length);
+        currentQuat = [x, y, z, w];
+        currentNormal = [
+          2 * (x * z + w * y),
+          2 * (y * z - w * x),
+          1 - 2 * (x * x + y * y),
+        ];
+        source.onReading?.([...currentQuat], [...currentNormal]);
+      };
+      const error = event => {
+        if (attempt !== generation || sensor !== next) return;
+        source.stop();
+        source.onError?.(
+          event.error || new Error('Absolute orientation stopped'),
+        );
+      };
+      next.addEventListener('reading', reading);
+      next.addEventListener('error', error);
+      removeListeners = () => {
+        next.removeEventListener('reading', reading);
+        next.removeEventListener('error', error);
+      };
+      try {
+        next.start();
+      } catch (error) {
+        source.stop();
+        throw error;
+      }
     },
-
     stop() {
-      if (sensor) {
-        sensor.stop();
+      generation++;
+      removeListeners();
+      removeListeners = () => {};
+      try {
+        sensor?.stop();
+      } catch {
+        /* A failed optional sensor is already unavailable. */
+      } finally {
         sensor = null;
+        currentQuat = null;
+        currentNormal = null;
       }
     },
-
-    getNormal()     { return currentNormal ? [...currentNormal] : null; },
-    getQuaternion() { return currentQuat   ? [...currentQuat]   : null; },
+    getNormal: () => currentNormal && [...currentNormal],
+    getQuaternion: () => currentQuat && [...currentQuat],
   };
-
   return source;
 }

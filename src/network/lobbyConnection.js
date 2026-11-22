@@ -1,8 +1,15 @@
+import {copySwingDetails} from '../../shared/swingDetails.js';
 import { isSwing } from '../../shared/protocol.js';
 import { createInputId } from './inputId.js';
 
 /** Embedded tennis uses the outer page's lobby session and reconnect handling. */
-export function connectLobbySwings({ role, onSwing, onStatus, onAck, onSent = () => {} }) {
+export function connectLobbySwings({
+  role,
+  onSwing,
+  onStatus,
+  onAck,
+  onSent = () => {},
+}) {
   let connected = false;
   let paused = true;
   let gameId = null;
@@ -10,25 +17,54 @@ export function connectLobbySwings({ role, onSwing, onStatus, onAck, onSent = ()
   const sentAt = new Map();
   const post = message => window.parent.postMessage(message, location.origin);
   const receive = event => {
-    if (event.source !== window.parent || event.origin !== location.origin) return;
+    if (event.source !== window.parent || event.origin !== location.origin)
+      return;
     const message = event.data;
     if (message?.type === 'wee:lobby-state') {
-      const nextGameId = typeof message.gameId === 'string' ? message.gameId : null;
-      if (nextGameId !== gameId) { seen.clear(); sentAt.clear(); }
+      const nextGameId =
+        typeof message.gameId === 'string' ? message.gameId : null;
+      if (nextGameId !== gameId) {
+        seen.clear();
+        sentAt.clear();
+      }
       gameId = nextGameId;
       connected = message.connected === true;
       paused = message.paused !== false || message.playing !== true;
       if (paused || !connected) sentAt.clear();
-      onStatus(connected ? 'Connected to homepage lobby' : 'Reconnecting to homepage lobby…');
+      onStatus(
+        connected
+          ? 'Connected to homepage lobby'
+          : 'Reconnecting to homepage lobby…',
+      );
     } else if (message?.type === 'wee:swing-ack' && role === 'phone') {
-      if (!connected || paused || message.gameId !== gameId || !sentAt.has(message.result?.id)) return;
+      if (
+        !connected ||
+        paused ||
+        message.gameId !== gameId ||
+        !sentAt.has(message.result?.id)
+      )
+        return;
       const start = sentAt.get(message.result?.id);
       sentAt.delete(message.result?.id);
-      onAck({ ...message.result, ...(start === undefined ? {} : {
-        roundTripMs: Math.round(performance.now() - start), timingScope: 'game',
-      }) });
-    } else if (message?.type === 'wee:game-swing' && role === 'game' &&
-      connected && !paused && gameId && message.event?.gameId === gameId && isSwing(message.event) && !seen.has(message.event.id)) {
+      onAck({
+        ...message.result,
+        ...(start === undefined
+          ? {}
+          : {
+              roundTripMs: Math.round(performance.now() - start),
+              timingScope: 'game',
+            }),
+      });
+    } else if (
+      message?.type === 'wee:game-swing' &&
+      role === 'game' &&
+      connected &&
+      !paused &&
+      gameId &&
+      message.event?.gameId === gameId &&
+      isSwing(message.event) &&
+      !seen.has(message.event.id)
+    ) {
       seen.add(message.event.id);
       if (seen.size > 200) seen.delete(seen.values().next().value);
       onSwing(message.event);
@@ -36,18 +72,23 @@ export function connectLobbySwings({ role, onSwing, onStatus, onAck, onSent = ()
   };
   window.addEventListener('message', receive);
   onStatus('Connecting to homepage lobby…');
-  post({ type: 'wee:bridge-ready' });
+  post({type: 'wee:bridge-ready'});
   return {
-    sendSwing(label, hand, power = 0.5, netNormal, swingNormal) {
-      const event = { type: 'swing', id: createInputId(), label, hand, power, gameId, netNormal, swingNormal };
+    sendSwing(label, hand, power = 0.5, placement = {}, swingNormal) {
+      const event = { type: 'swing', id: createInputId(), label, hand, power, gameId,
+        ...copySwingDetails(placement, swingNormal) };
       if (role !== 'phone' || !connected || paused || !gameId || !isSwing(event)) return false;
       sentAt.set(event.id, performance.now());
       if (sentAt.size > 40) sentAt.delete(sentAt.keys().next().value);
-      console.log('[lobbyConnection step 3] netNormal:', netNormal, 'swingNormal:', swingNormal);
-      post({ type: 'wee:player-swing', event });
+      post({type: 'wee:player-swing', event});
       onSent(event);
       return true;
     },
-    close() { connected = false; sentAt.clear(); seen.clear(); window.removeEventListener('message', receive); },
+    close() {
+      connected = false;
+      sentAt.clear();
+      seen.clear();
+      window.removeEventListener('message', receive);
+    },
   };
 }

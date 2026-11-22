@@ -8,8 +8,7 @@ function game() {
   const store = new RoomStore({ now: () => now });
   const { code } = store.createRoom('tv', { v, sport: 'tennis' });
   store.join('phone', { v, code, name: 'Player' });
-  store.setSetup('phone', { setup: 'motion' }); store.setReady('phone', { ready: true });
-  store.calibrationDone('tv');
+  store.setSetup('phone', { setup: 'motion' }); store.setReady('phone', { ready: true }); store.startGame('phone');
   now = 5000; store.finishCountdown(code); now += VOTE_SECONDS * 1000; store.expireVote(code);
   const gameId = store.lobby(code).gameId;
   const input = id => store.swingTarget('phone', { type: 'swing', id, gameId, label: 'Forehand', hand: 'Right', power: .5 });

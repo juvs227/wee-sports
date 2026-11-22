@@ -3,27 +3,38 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=24 <25",
+    "npm": ">=11 <12"
+  },
+  "packageManager": "npm@11.9.0",
   "scripts": {
+    "start": "node server/main.js --production",
     "dev": "node scripts/dev-phone.mjs",
     "dev:phone": "node scripts/dev-phone.mjs",
     "dev:local": "node server/main.js",
     "play": "npm run build && node server/main.js --production",
     "build": "vite build && node scripts/verify-build.mjs",
-    "check": "gts check",
-    "lint": "gts lint",
+    "check": "npm run compile && npm run lint",
+    "lint": "eslint .",
     "clean": "gts clean",
     "compile": "tsc",
-    "fix": "gts fix",
+    "fix": "eslint . --fix",
     "prepare": "npm run compile",
     "test:physics": "vitest run test/",
     "test": "vitest run",
-    "test:node": "vitest run server/tests/RoomStore.test.js server/tests/socket.test.js server/tests/reconnect.test.js server/tests/bowling.test.js server/tests/soundControl.test.js server/tests/manualPause.test.js server/tests/gameOptions.test.js server/tests/returnToLobby.test.js server/tests/hitFeedback.test.js server/tests/swingDelivery.test.js",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:server": "npm --prefix server test",
+    "test:motion": "node scripts/replay-motion.mjs",
+    "test:node": "vitest run server/tests/RoomStore.test.js server/tests/socket.test.js server/tests/reconnect.test.js server/tests/bowling.test.js server/tests/soundControl.test.js server/tests/manualPause.test.js server/tests/gameOptions.test.js server/tests/returnToLobby.test.js server/tests/hitFeedback.test.js server/tests/swingDelivery.test.js"
   },
   "devDependencies": {
-    "@types/node": "^26.6.6",
+    "@eslint/js": "^9.39.5",
+    "@types/node": "^24.19.2",
     "@types/three": "^0.187.0",
     "@vitejs/plugin-react": "^6.2.1",
+    "eslint": "^9.39.5",
+    "globals": "^16.5.0",
     "gts": "^7.0.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.14.0",
@@ -32,6 +43,7 @@
   },
   "dependencies": {
     "cannon-es": "0.20.0",
+    "jsqr": "1.4.0",
     "qrcode-generator": "^2.0.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -47,5 +59,8 @@
     "cross-spawn": "^7.0.6",
     "rimraf": "^5.0.0",
     "@humanwhocodes/config-array": "npm:@eslint/config-array@^0.18.0"
-  }
+  },
+  "workspaces": [
+    "shared"
+  ]
 }

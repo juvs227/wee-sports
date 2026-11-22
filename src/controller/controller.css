@@ -10,7 +10,7 @@
 .controller-page .play-state { text-align: center; padding: 24px 20px 18px; margin-top: 4px; }
 .controller-page .play-state h2 { font-size: clamp(1.7rem, 8vw, 2.25rem); line-height: 1.15; margin: 18px 0 12px; letter-spacing: -.03em; }
 .controller-page .play-state #play-help { max-width: 30ch; margin: 0 auto 16px; }
-.controller-page .play-state #latest { overflow-wrap: anywhere; color: #e00; font-size: 3rem; font-weight: 900; margin: 12px 0; text-align: center; letter-spacing: .02em; }
+.controller-page .play-state #latest { overflow-wrap: anywhere; color: var(--accent-ink); font-size: 1rem; font-weight: 800; margin: 12px 0; }
 .controller-page #play-notice { padding: 12px; border-radius: var(--radius-sm); color: var(--warn-ink); background: var(--warn-soft); }
 .controller-page .controller-toolbar { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; }
 .controller-page .settings-toggle { background: transparent; border-color: transparent; color: var(--text-muted); padding: 8px 4px; font-size: .85rem; }
@@ -43,3 +43,19 @@
 @media (prefers-reduced-motion: reduce) {
   .controller-page .motion-object { transition: none; transform: none; }
 }
+
+/* A single, spacious play surface; diagnostics stay in Settings. */
+.controller-page .play-state { border-radius: var(--radius-lg); padding: 26px 20px 24px; background: linear-gradient(180deg, var(--accent-soft), var(--surface) 72%); }
+.controller-page .play-state h2 { max-width: 13ch; margin: 22px auto 12px; color: var(--accent-ink); }
+.controller-page .play-state #play-help { font-size: 1.1rem; color: var(--text); }
+.controller-page .play-state[data-state="playing"] .play-pill { background: #dbf48b; color: #2e4516; }
+.controller-page .grip-cue { max-width: 29ch; margin: 14px auto 0; color: var(--text-muted); font-size: .78rem; line-height: 1.6; }
+.controller-page #enable { width: 100%; margin-top: 20px; }
+.controller-page #use-buttons { color: var(--accent-ink); font-weight: 800; }
+.controller-page .motion-visual[data-sport="bowling"] { width: 220px; height: 208px; margin-top: 28px; }
+.controller-page .motion-visual[data-sport="bowling"] .motion-object { width: 140px; height: 180px; left: calc(50% - 70px); filter: drop-shadow(0 14px 10px rgb(10 100 153 / .16)); }
+.controller-page .motion-readout { background: var(--surface); border: 1px solid var(--border); }
+.controller-page #bowling-buttons { margin-top: 12px; }
+html:has(.controller-page), body:has(.controller-page) { overscroll-behavior-y: none; }
+
+.controller-page .controller-back { width: 100%; min-height: 58px; margin: 0 0 18px; padding: 16px 20px; font-size: 1.15rem; font-weight: 850; border-radius: 16px; }

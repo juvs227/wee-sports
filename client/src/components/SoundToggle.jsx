@@ -1,6 +1,6 @@
 /** One quiet, accessible control; no test panel or confirmation sound. */
-export function SoundToggle({ muted, onClick, disabled, busy, title }) {
-  const label = muted ? 'Unmute game sound' : 'Mute game sound';
+export function SoundToggle({ muted, ready = true, onClick, disabled, busy, title }) {
+  const label = !ready ? 'Enable game sound' : muted ? 'Unmute game sound' : 'Mute game sound';
   return <button type="button" className="sports-sound-toggle sports-sound-toggle--icon"
     aria-label={label} aria-pressed={muted} aria-busy={busy || undefined}
     title={title || `${label} on the TV`} disabled={disabled || busy} onClick={onClick}>

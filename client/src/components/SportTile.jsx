@@ -21,11 +21,13 @@ export function SportTile({ sport, state = 'idle', error = null, onPlay }) {
   const { Icon } = sport;
   const errorId = `${sport.id}-error`;
   const label = ACTION_LABEL[state];
+  const canPlay = sport.open && (state === 'idle' || state === 'retry');
 
   return (
     <article
       className="tile"
       data-open={sport.open}
+      data-interactive={canPlay}
       style={{ '--tint-a': sport.tint[0], '--tint-b': sport.tint[1] }}
     >
       <div className="tile__art">
@@ -42,7 +44,7 @@ export function SportTile({ sport, state = 'idle', error = null, onPlay }) {
             type="button"
             className="btn btn--primary tile__action"
             onClick={onPlay}
-            disabled={state !== 'idle' && state !== 'retry'}
+            disabled={!canPlay}
             aria-label={`${label}: ${sport.name}`}
             aria-describedby={error ? errorId : undefined}
           >

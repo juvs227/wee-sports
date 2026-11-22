@@ -4,9 +4,11 @@
   display: flex;
   flex-direction: column;
   width: 100%;
+  height: min(860px, 94vh);
   height: min(860px, 94dvh);
   min-height: 320px;
   max-width: 1600px;
+  margin: 3vh auto;
   margin: 3dvh auto;
   overflow: hidden;
   background: #081a20;
@@ -18,6 +20,7 @@
   inset: 0;
   z-index: 30;
   width: 100%;
+  height: 100vh;
   height: 100dvh;
   min-height: 0;
   max-width: none;
@@ -43,10 +46,8 @@
 .game-session__identity h1 { margin: 0; font-size: 1rem; font-weight: 800; }
 .game-session__room { font-size: 0.7rem; letter-spacing: 0.16em; color: #e4f2df; text-shadow: 0 1px 4px #132c27; }
 .game-session__display { pointer-events: auto; }
-.game-session__display > summary { width: 34px; min-height: 34px; padding: 0; opacity: 0; transition: opacity 150ms; }
-.game-session__bar:hover .game-session__display > summary,
-.game-session__display:focus-within > summary,
-.game-session__display[open] > summary { opacity: 1; }
+.game-session .game-session__fullscreen { pointer-events: auto; gap: 8px; min-height: 44px; background: #d5f487; color: #102c34; border-color: #d5f487; }
+.game-session .game-session__fullscreen:hover { background: #e4ffad; }
 .game-session__menu-panel button + button { margin-top: 8px; }
 .game-session__menu-panel button { width: 100%; }
 .game-session__return { margin: 8px 0; }
@@ -76,6 +77,9 @@
 .game-countdown__view:focus-visible { outline: 3px solid #d5f487; outline-offset: 3px; }
 .game-session summary { list-style: none; }
 .game-session summary::-webkit-details-marker { display: none; }
+.game-session .game-session__display > summary { min-width: 44px; min-height: 44px; gap: 8px; padding: 8px 12px; background: #102c34; color: #f3f7ef; border-color: #8fb8b0; box-shadow: 0 2px 8px #0003; }
+.game-session .game-session__display > summary:hover,
+.game-session .game-session__display[open] > summary { background: #20434b; border-color: #d5f487; }
 .game-session__menu-panel {
   position: absolute;
   top: calc(100% + 8px);
@@ -89,10 +93,10 @@
 }
 .game-session__menu-panel p { margin: 0 0 16px; font-size: 0.9rem; line-height: 1.6; }
 .game-session__error { position: absolute; z-index: 7; top: 48px; left: 16px; right: 16px; margin: 0; padding: 8px 16px; background: #542820; color: #fff1e9; border-radius: 10px; }
-.game-session .prototype-frame { flex: 1 1 auto; min-height: 0; margin: 0; }
-.game-session .prototype-frame iframe { width: 100%; height: 100%; min-height: 0; border: 0; border-radius: 0; box-shadow: none; }
-.game-session .prototype-frame > p { position: absolute; z-index: 2; top: 16px; left: 16px; margin: 0; padding: 12px 16px; background: #102c34; border-radius: 10px; }
-.game-session .prototype-frame__pause { border-radius: 0; color: var(--text); }
+.game-session .game-frame { flex: 1 1 auto; min-height: 0; margin: 0; }
+.game-session .game-frame iframe { width: 100%; height: 100%; min-height: 0; border: 0; border-radius: 0; box-shadow: none; }
+.game-session .game-frame > p { position: absolute; z-index: 2; top: 16px; left: 16px; margin: 0; padding: 12px 16px; background: #102c34; border-radius: 10px; }
+.game-session .game-frame__pause { border-radius: 0; color: var(--text); }
 .game-countdown { position: relative; background: var(--bg, #f3f7ef); }
 .game-countdown--immersive { position: fixed; }
 .game-countdown__view { position: absolute; z-index: 1; top: 16px; right: 16px; background: #102c34; }
@@ -100,11 +104,20 @@
   .game-session__bar { gap: 6px; padding-inline: 12px; }
   .game-session__identity, .game-session__actions { gap: 8px; }
 }
-@media (hover: none) { .game-session__display > summary { opacity: 1; } }
 @media (max-height: 450px) {
   .game-session__bar { min-height: 44px; padding-block: 2px; }
   .game-session button, .game-session summary { min-height: 36px; padding-block: 6px; }
 }
+
+.game-session .game-frame > .game-save-issue { top: auto; bottom: 12px; left: auto; right: 12px; max-width: min(360px, calc(100% - 24px)); padding: 10px 14px; font-size: .875rem; color: #fff1e9; background: #542820; }
+
+/* Keep the original rounded countdown type and tick, scaled for the whole TV. */
+.game-countdown {display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(12px,3vmin,28px);isolation:isolate;background:repeating-linear-gradient(0deg,transparent,transparent 3px,var(--bg-stripe) 4px),var(--bg);color:var(--text);text-align:center;overflow:hidden;}
+.game-countdown__sport {display:flex;align-items:center;justify-content:center;gap:14px;font-size:clamp(20px,3vmin,40px);font-weight:900;margin:0;}
+.game-countdown__sport svg {width:clamp(30px,4vmin,50px);height:clamp(30px,4vmin,50px);color:var(--accent-ink);}
+.game-countdown .game-countdown__number {display:block;font-size:clamp(128px,42vmin,480px);line-height:1;font-weight:900;letter-spacing:-.035em;color:var(--text);}
+.game-countdown__hint {font-size:clamp(14px,2.2vmin,28px);color:var(--text-muted);margin:0;}
+
 .tv-debug-toggle {
   position: absolute;
   top: 8px;
@@ -141,3 +154,5 @@
   white-space: nowrap;
   letter-spacing: .02em;
 }
+
+.tv-swing-vectors { display: block; max-width: 100%; margin-top: .5rem; background: #101821; border-radius: .5rem; }

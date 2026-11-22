@@ -18,7 +18,7 @@ function readyBowling(count = 4) {
       assert.equal(store.setSetup(`p${index + 1}`, { setup: index % 2 ? 'motion' : 'buttons' }).ok, true);
       assert.equal(store.setReady(`p${index + 1}`, { ready: true }).ok, true);
     }
-    store.calibrationDone('tv');
+    store.startGame('p1');
     clock.now += 5000;
     assert.deepEqual(store.finishCountdown(room.code), { code: room.code });
     return store.lobby(room.code).gameId;
@@ -72,7 +72,7 @@ test('bowling result validation accepts ties and legacy completion, rejects inco
   assert.equal(isBowlingState({ ...complete, winners: [1], winnerScore: 300 }), true);
   for (const change of [{ winners: [] }, { winners: [1] }, { winnerScore: 100 },
     { winners: [1, 1], winnerScore: 100 }, { winners: [0], winnerScore: 100 },
-    { winners: [5], winnerScore: 100 }, { winners: ['1'], winnerScore: 100 },
+    { winners: [9], winnerScore: 100 }, { winners: ['1'], winnerScore: 100 },
     { winners: [1.5], winnerScore: 100 }, { winners: null, winnerScore: 100 },
     { winners: [1], winnerScore: -1 }, { winners: [1], winnerScore: 301 },
     { winners: [1], winnerScore: 1.5 }, { winners: [1], winnerScore: NaN },
@@ -135,7 +135,8 @@ test('bowling stamps authenticated seat and game, locks pending delivery and rej
   assert.equal(store.rollTarget('tv', roll()).error, 'not-controller');
   assert.equal(store.rollTarget('unknown', roll()).error, 'not-controller');
   assert.equal(store.rollTarget('p1', roll()).error, 'not-your-turn');
-  const delivered = store.rollTarget('p4', roll('own-seat', { player: 1, gameId: 'forged', code: 'OTHER', untrusted: true }));
+  assert.equal(store.rollTarget('p4', roll('stale', {gameId:'forged'})).error, 'not-playing');
+  const delivered = store.rollTarget('p4', roll('own-seat', { player: 1, gameId, code: 'OTHER', untrusted: true }));
   assert.equal(delivered.hostSocketId, 'tv');
   assert.deepEqual(delivered.event, { ...roll('own-seat'), player: 4, gameId });
   assert.equal(store.rollTarget('p4', roll('next')).error, 'not-ready-to-roll');
@@ -188,7 +189,7 @@ async function socketFixture(t) {
       assert.equal((await send(phone, EVENTS.PLAYER_SETUP, { setup: 'buttons' })).ok, true);
       assert.equal((await send(phone, EVENTS.PLAYER_READY, { ready: true })).ok, true);
     }
-    await send(host, EVENTS.HOST_CALIBRATION_DONE, {});
+    await send(phones[0], EVENTS.PLAYER_START, {});
     clock.now += 5000; store.finishCountdown(created.code);
     const gameId = store.lobby(created.code).gameId;
     const state = (currentPlayer = 1, phase = 'ready') => send(host, EVENTS.HOST_GAME_STATE, { gameId, phase, currentPlayer, frame: 1 });
@@ -214,7 +215,9 @@ test('real bowling sockets use the actual game acknowledgement and isolate rooms
   assert.equal((await send(first.phones[1], EVENTS.HOST_GAME_STATE, { gameId: first.gameId, phase: 'ready', currentPlayer: 2, frame: 1 })).error, 'not-host');
   assert.equal((await send(first.phones[1], EVENTS.PLAYER_ROLL, roll('wrong-turn'))).error, 'not-your-turn');
   const forged = roll('denied', { code: other.created.code, player: 2, gameId: other.gameId });
-  assert.equal((await send(first.phones[0], EVENTS.PLAYER_ROLL, forged)).error, 'not-ready-to-roll');
+  assert.equal((await send(first.phones[0], EVENTS.PLAYER_ROLL, forged)).error, 'not-playing');
+  assert.equal(received.length, 0, 'a stale or other-room game ID must never become a current roll');
+  assert.equal((await send(first.phones[0], EVENTS.PLAYER_ROLL, {...forged, gameId:first.gameId})).error, 'not-ready-to-roll');
   assert.deepEqual(received[0], { ...roll('denied'), player: 1, gameId: first.gameId });
   assert.equal(otherReceived.length, 0);
   first.host.off(EVENTS.GAME_ROLL);
