@@ -5,6 +5,7 @@ import { io } from 'socket.io-client';
 import { EVENTS, PROTOCOL_VERSION, PHASES, isRoll, isBowlingState } from '@wee/shared/protocol.js';
 import { createGameServer } from '@server/src/app.js';
 import { RoomStore } from '@server/src/RoomStore.js';
+import { finishAvatarScene } from './finishAvatarScene.js';
 
 const v = PROTOCOL_VERSION;
 const roll = (id = 'delivery-1', extra = {}) => ({ type: 'roll', id, power: .7, spin: .2, aim: -.1, ...extra });
@@ -23,6 +24,7 @@ function readyBowling(count = 4) {
     assert.equal(store.finishCountdown(room.code).code, room.code);
     // Everyone skips the tutorial so the game starts.
     for (const index of seats.keys()) store.vote(`p${index + 1}`, { watch: false });
+    finishAvatarScene(store, room.code, seats.map((_, index) => `p${index + 1}`));
     assert.equal(store.lobby(room.code).phase, PHASES.GAME);
     return store.lobby(room.code).gameId;
   };
@@ -196,6 +198,7 @@ async function socketFixture(t) {
     clock.now += 5000; store.finishCountdown(created.code);
     // Everyone skips the tutorial so the game starts.
     for (const phone of phones) assert.equal((await send(phone, EVENTS.TUTORIAL_VOTE, { watch: false })).ok, true);
+    for (const phone of phones) assert.equal((await send(phone, EVENTS.PLAYER_READY, { ready: true })).ok, true);
     const gameId = store.lobby(created.code).gameId;
     const state = (currentPlayer = 1, phase = 'ready') => send(host, EVENTS.HOST_GAME_STATE, { gameId, phase, currentPlayer, frame: 1 });
     assert.equal((await state()).ok, true);

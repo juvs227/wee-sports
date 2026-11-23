@@ -15,6 +15,7 @@ import {
   playerCapacity,
 } from '@wee/shared/protocol.js';
 import { RoomStore } from '@server/src/RoomStore.js';
+import { finishAvatarScene } from './finishAvatarScene.js';
 
 const v = PROTOCOL_VERSION;
 
@@ -338,6 +339,7 @@ test('a bowling Yes teaches aim, a straight roll, and both curves before the gam
     assert.equal(store.lobby(code).phase, PHASES.TUTORIAL);
     assert.equal(store.tutorialMove('p0', { step }).ok, true);
   }
+  finishAvatarScene(store, code, Array.from({length: MAX_PLAYERS}, (_, i) => `p${i}`));
   assert.equal(store.lobby(code).phase, PHASES.GAME);
 });
 
@@ -358,6 +360,7 @@ test('a player leaving during the countdown cancels it and clears the ready flag
     assert.equal(store.lobby(code).phase, PHASES.TUTORIAL);
     assert.equal(store.tutorialMove('p0', { step }).ok, true);
   }
+  finishAvatarScene(store, code, Array.from({length: MAX_PLAYERS}, (_, i) => `p${i}`));
   assert.equal(store.lobby(code).phase, PHASES.GAME);
 });
 

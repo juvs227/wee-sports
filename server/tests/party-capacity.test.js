@@ -35,6 +35,7 @@ test('eight bowling phones have unique seats, a ninth is rejected, and the leade
   expect(store.startGame('p1').countdownStarted).toBe(true);
   advance(5000); store.finishCountdown(host.code);
   advance(VOTE_SECONDS * 1000); store.expireVote(host.code);
+  finishAvatarScene(store, host.code, Array.from({length: 8}, (_, i) => `p${i + 1}`));
   expect(store.lobby(host.code).phase).toBe(PHASES.GAME);
   expect(store.lobby(host.code).leaderSlot).toBe(0);
 });
