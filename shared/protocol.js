@@ -64,8 +64,8 @@ export function hasTutorial(sport) {
 /**
  * Where a lobby is:
  *
- *   'lobby' -> 'ready' -> (everyone ready) -> 'countdown' -> 'vote' -> 'tutorial' | 'game'
- *   'tutorial' -> (every Yes voter did every move) -> 'game'
+ *   'lobby' -> 'ready' -> (everyone ready) -> 'countdown' -> 'vote' -> 'tutorial' | 'avatars'
+ *   'tutorial' -> (every Yes voter did every move) -> 'avatars' -> 'game'
  *
  * Nobody touches the TV: phones press Ready, vote, and do the tutorial moves.
  * A sport without TUTORIAL_MOVES goes from 'countdown' straight to 'game'.

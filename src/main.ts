@@ -508,6 +508,7 @@ async function main(): Promise<void> {
     const players = Array.isArray(event.data.players) ? event.data.players : [];
     const p1 = players.find((player: {slot: number}) => player.slot === 0);
     const p2 = players.find((player: {slot: number}) => player.slot === 1);
+    world.setPlayerColors(parsePlayerColor(p1?.color), parsePlayerColor(p2?.color));
     humanOpponent = Boolean(p2);
     const nextGameId =
       typeof event.data.gameId === 'string' ? event.data.gameId : null;

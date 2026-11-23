@@ -72,6 +72,21 @@ export class World {
     return this.gameLogic.getScore();
   }
 
+  public setPlayerColors(player1Color?: number, player2Color?: number): void {
+    const player1 = player1Color ?? 0x3b82f6;
+    let player2 = player2Color;
+    if (player1Color !== undefined) this.player1.setColor(player1);
+    if (player2 === undefined && player1Color !== undefined && areColorsTooSimilar(player1, this.currentPlayer2Color)) {
+      player2 = pickFallbackColor(this.currentPlayer2Color, player1, PLAYER_COLOR_PALETTE);
+    } else if (player2 !== undefined && areColorsTooSimilar(player1, player2)) {
+      player2 = pickFallbackColor(player2, player1, PLAYER_COLOR_PALETTE);
+    }
+    if (player2 !== undefined) {
+      this.currentPlayer2Color = player2;
+      this.player2.setColor(player2);
+    }
+  }
+
   constructor(container: HTMLElement) {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0xc4d9d3);

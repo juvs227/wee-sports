@@ -211,6 +211,7 @@ export default function HostStub() {
   // The vote, then its reveal for a moment, then the tutorial if anyone asked.
   if (lobby.phase === PHASES.VOTE || revealing) return <TvVote lobby={lobby} />;
   if (lobby.phase === PHASES.TUTORIAL) return <TvTutorial lobby={lobby} />;
+  if (lobby.phase === PHASES.AVATARS) return <TvAvatars lobby={lobby} />;
   if (lobby.phase === PHASES.COUNTDOWN) return <TvCountdown lobby={lobby} onTick={audio.onCountdown} fullscreen={fullscreen} fullscreenAvailable={fullscreenAvailable} onFullscreen={enterGameView} />;
 
   return (

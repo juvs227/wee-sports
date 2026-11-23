@@ -114,6 +114,10 @@ export function createPlayer(
     strikeOffsets: {},
     swingPoses: {},
     movementSpeed: speed,
+    setColor(newColor: number): void {
+      playerColor = newColor;
+      applyColor();
+    },
 
     playAnimation(name: string): void {
       const next = this.actions[name];
