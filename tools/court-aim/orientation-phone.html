@@ -1,0 +1,681 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Phone Orientation</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #0d0d0d; color: #eee; font-family: system-ui, sans-serif; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 16px; min-height: 100dvh; }
+#enable { padding: 14px 32px; font-size: 18px; border-radius: 10px; border: none; background: #f90; color: #000; font-weight: bold; cursor: pointer; }
+#status { font-size: 12px; color: #555; }
+#status.ok { color: #4f4; }
+#status.err { color: #f44; }
+canvas { border-radius: 8px; background: #111; display: block; }
+.panel { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; }
+h2 { font-size: 14px; color: #555; text-transform: uppercase; letter-spacing: 1px; align-self: flex-start; }
+.vals { font-size: 12px; color: #666; font-variant-numeric: tabular-nums; line-height: 1.8; text-align: center; }
+.vals b { color: #aaa; }
+
+#mode-toggle {
+  background: #1a1a1a; border-radius: 10px; padding: 4px;
+  display: none; gap: 4px; width: 100%; max-width: 320px;
+}
+#mode-toggle button {
+  flex: 1; padding: 10px; font-size: 15px; font-weight: bold;
+  border: none; border-radius: 8px; cursor: pointer;
+  background: transparent; color: #555; transition: all 0.15s;
+}
+#mode-toggle button.active { background: #222; color: #eee; }
+#mode-live.active  { color: #4cf; }
+#mode-swing.active { color: #ff6b35; }
+
+
+#accel-bar-wrap {
+  display: none; width: 100%; max-width: 320px; gap: 8px; align-items: center;
+}
+#accel-bar-wrap label { font-size: 11px; color: #444; white-space: nowrap; }
+#accel-bar-bg { flex: 1; height: 6px; background: #1a1a1a; border-radius: 3px; overflow: hidden; }
+#accel-bar { height: 100%; width: 0%; background: #ff6b35; border-radius: 3px; transition: width 0.05s; }
+#accel-val { font-size: 11px; color: #555; font-variant-numeric: tabular-nums; width: 42px; text-align: right; }
+
+#record-wrap { display: none; width: 100%; max-width: 320px; flex-direction: column; align-items: center; gap: 10px; }
+#record-btn {
+  width: 100%; padding: 14px; font-size: 16px; font-weight: bold; font-family: system-ui;
+  border-radius: 10px; border: none; cursor: pointer;
+  background: #ff6b35; color: #000; transition: background 0.15s;
+}
+#record-btn.recording { background: #f44; color: #fff; }
+#record-state { font-size: 13px; color: #555; }
+
+#playback-wrap { display: none; width: 100%; max-width: 320px; flex-direction: column; gap: 8px; }
+#swing-slider { width: 100%; accent-color: #ff6b35; }
+#slider-info { display: flex; justify-content: space-between; font-size: 11px; color: #555; font-variant-numeric: tabular-nums; }
+
+</style>
+</head>
+<body>
+<button id="enable">Enable Sensors</button>
+<div id="status">waiting…</div>
+
+<button id="cal-btn" style="display:none; padding:12px 28px; font-size:16px; border-radius:10px; border:2px solid #4cf; background:transparent; color:#4cf; font-weight:bold; cursor:pointer;">Calibrate — face the net</button>
+<label style="display:none; align-items:center; gap:8px; font-size:13px; color:#555;">
+  <input type="checkbox" id="fake-ios"> fake iOS (Mahony fusion)
+</label>
+
+<div id="mode-toggle">
+  <button id="mode-live" class="active">Live</button>
+  <button id="mode-swing">Swing</button>
+</div>
+
+<div id="record-wrap">
+  <button id="record-btn">Record Swing</button>
+  <div id="record-state"></div>
+</div>
+
+<div id="playback-wrap">
+  <canvas id="swing-graphs" width="320" height="200" style="width:100%;max-width:320px"></canvas>
+  <input type="range" id="swing-slider" min="0" max="0" value="0">
+  <div id="slider-info">
+    <span id="slider-time">0.0s</span>
+    <span id="slider-accel">accel: — &nbsp; rot: —</span>
+  </div>
+</div>
+
+<div id="accel-bar-wrap">
+  <label>accel</label>
+  <div id="accel-bar-bg"><div id="accel-bar"></div></div>
+  <div id="accel-val">0</div>
+</div>
+
+<div class="panel">
+  <h2>Launch Parabola</h2>
+  <canvas id="parabola" width="320" height="200"></canvas>
+</div>
+
+<div class="panel">
+  <h2>Screen Normal</h2>
+  <canvas id="phone3d" width="320" height="200"></canvas>
+  <div class="vals">
+    <div>azimuth: <b id="azval">—</b> &nbsp; elevation: <b id="elval">—</b></div>
+  </div>
+</div>
+
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script>
+// ── Math helpers ──────────────────────────────────────────────────────────────
+function dot(a, b) { return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]; }
+function cross(a, b) { return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
+function normalize(v) { const l = Math.hypot(...v); return l ? v.map(x => x/l) : v; }
+function vadd(a, b) { return [a[0]+b[0], a[1]+b[1], a[2]+b[2]]; }
+function vscale(v, s) { return [v[0]*s, v[1]*s, v[2]*s]; }
+
+function qrot(q, v) {
+  const [qx,qy,qz,qw] = q;
+  const [vx,vy,vz] = v;
+  const tx = 2*(qy*vz - qz*vy);
+  const ty = 2*(qz*vx - qx*vz);
+  const tz = 2*(qx*vy - qy*vx);
+  return [
+    vx + qw*tx + qy*tz - qz*ty,
+    vy + qw*ty + qz*tx - qx*tz,
+    vz + qw*tz + qx*ty - qy*tx,
+  ];
+}
+
+
+// ── Camera ────────────────────────────────────────────────────────────────────
+const CAM   = normalize([1, -1.2, 1.4]);
+const CAM_R = normalize(cross(CAM, [0,0,1]));
+const CAM_U = normalize(cross(CAM_R, CAM));
+function project(v, scale, cx, cy) {
+  return { x: dot(v, CAM_R)*scale + cx, y: -dot(v, CAM_U)*scale + cy };
+}
+
+// ── Draw 3D phone ─────────────────────────────────────────────────────────────
+function drawPhone(canvas, normal) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  const scale = 60, cx = W/2, cy = H/2;
+
+  const pw = 0.45, ph = 0.9, pd = 0.07;
+  const dv = [[-pw,-ph,0],[pw,-ph,0],[pw,ph,0],[-pw,ph,0],[-pw,-ph,-pd],[pw,-ph,-pd],[pw,ph,-pd],[-pw,ph,-pd]];
+  const verts = dv.map(v => project(v, scale, cx, cy));
+
+  ctx.beginPath(); ctx.moveTo(verts[4].x, verts[4].y);
+  for (let i = 5; i < 8; i++) ctx.lineTo(verts[i].x, verts[i].y);
+  ctx.closePath(); ctx.fillStyle = '#1a1a1a'; ctx.fill();
+  ctx.strokeStyle = '#333'; ctx.lineWidth = 1; ctx.stroke();
+  for (let i = 0; i < 4; i++) {
+    ctx.beginPath(); ctx.moveTo(verts[i].x, verts[i].y); ctx.lineTo(verts[i+4].x, verts[i+4].y);
+    ctx.strokeStyle = '#333'; ctx.stroke();
+  }
+  ctx.beginPath(); ctx.moveTo(verts[0].x, verts[0].y);
+  for (let i = 1; i < 4; i++) ctx.lineTo(verts[i].x, verts[i].y);
+  ctx.closePath(); ctx.fillStyle = '#1e3a5f'; ctx.fill(); ctx.strokeStyle = '#4af'; ctx.lineWidth = 1.5; ctx.stroke();
+
+  const inner = dv.slice(0,4).map(v => project([v[0]*0.8, v[1]*0.85, v[2]], scale, cx, cy));
+  ctx.beginPath(); ctx.moveTo(inner[0].x, inner[0].y);
+  for (let i = 1; i < 4; i++) ctx.lineTo(inner[i].x, inner[i].y);
+  ctx.closePath(); ctx.fillStyle = '#0d2a45'; ctx.fill();
+
+  const tip = project(normal.map(n => n*0.75), scale, cx, cy);
+  const tail = project([0,0,0], scale, cx, cy);
+  ctx.beginPath(); ctx.moveTo(tail.x, tail.y); ctx.lineTo(tip.x, tip.y);
+  ctx.strokeStyle = '#ff6b35'; ctx.lineWidth = 3; ctx.stroke();
+  const dx = tip.x-tail.x, dy = tip.y-tail.y, len = Math.hypot(dx,dy);
+  if (len > 1) {
+    const ux = dx/len, uy = dy/len, hx = tip.x-ux*14, hy = tip.y-uy*14;
+    ctx.beginPath(); ctx.moveTo(tip.x,tip.y); ctx.lineTo(hx-uy*7,hy+ux*7); ctx.lineTo(hx+uy*7,hy-ux*7);
+    ctx.closePath(); ctx.fillStyle = '#ff6b35'; ctx.fill();
+  }
+
+  const compR = 24, compX = W-34, compY = 30;
+  ctx.beginPath(); ctx.arc(compX, compY, compR, 0, Math.PI*2);
+  ctx.fillStyle = '#111'; ctx.fill(); ctx.strokeStyle = '#333'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.fillStyle = '#555'; ctx.font = '9px system-ui'; ctx.textAlign = 'center';
+  ctx.fillText('N', compX, compY-compR+10);
+  const az = Math.atan2(normal[0], normal[1]);
+  ctx.beginPath(); ctx.moveTo(compX, compY);
+  ctx.lineTo(compX+Math.sin(az)*compR*0.8, compY-Math.cos(az)*compR*0.8);
+  ctx.strokeStyle = '#ff6b35'; ctx.lineWidth = 2; ctx.stroke();
+
+  const elX = W-34, elY = H-34, elR = 20;
+  const el = Math.asin(Math.max(-1, Math.min(1, normal[2])));
+  ctx.beginPath(); ctx.arc(elX, elY, elR, Math.PI, 0, false);
+  ctx.strokeStyle = '#333'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(elX, elY);
+  ctx.lineTo(elX+Math.cos(el-Math.PI/2)*elR*0.9, elY-Math.sin(el-Math.PI/2)*elR*0.9);
+  ctx.strokeStyle = '#4cf'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = '#555'; ctx.font = '9px system-ui'; ctx.textAlign = 'center';
+  ctx.fillText('el', elX, elY+10); ctx.textAlign = 'left';
+}
+
+// ── Draw parabola ─────────────────────────────────────────────────────────────
+function drawParabola(canvas, normal, frozen) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const g = 9.8, v0 = 12;
+  const el = Math.asin(Math.max(-1, Math.min(1, normal[2])));
+  const elDeg = el * 180 / Math.PI;
+  const PAD = { l: 32, r: 16, t: 20, b: 36 };
+  const pw = W-PAD.l-PAD.r, ph = H-PAD.t-PAD.b;
+
+  const angle = Math.max(0, el);
+  const range = angle > 0.01 ? v0*v0*Math.sin(2*angle)/g : v0*0.3;
+  const maxH  = v0*v0*Math.sin(angle)**2/(2*g);
+  const tFlight = 2*v0*Math.sin(angle)/g || 0.5;
+
+  const pts = [];
+  for (let i = 0; i <= 80; i++) {
+    const t = (i/80)*tFlight;
+    pts.push([v0*Math.cos(angle)*t, Math.max(0, v0*Math.sin(angle)*t-0.5*g*t*t)]);
+  }
+
+  const xMax = Math.max(range*1.05, 1), yMax = Math.max(maxH*1.3, 1);
+  function toCanvas(x, y) { return [PAD.l+(x/xMax)*pw, PAD.t+ph-(y/yMax)*ph]; }
+
+  ctx.beginPath(); ctx.moveTo(PAD.l, PAD.t+ph); ctx.lineTo(PAD.l+pw, PAD.t+ph);
+  ctx.strokeStyle = '#333'; ctx.lineWidth = 1; ctx.stroke();
+
+  if (angle < Math.PI/4-0.05 || angle > Math.PI/4+0.05) {
+    const tOpt = v0*Math.SQRT2/g;
+    ctx.beginPath();
+    for (let i = 0; i <= 40; i++) {
+      const t = (i/40)*tOpt;
+      const [cx2,cy2] = toCanvas(v0/Math.SQRT2*t, Math.max(0, v0/Math.SQRT2*t-0.5*g*t*t));
+      i===0 ? ctx.moveTo(cx2,cy2) : ctx.lineTo(cx2,cy2);
+    }
+    ctx.strokeStyle = '#2a4a2a'; ctx.lineWidth = 1; ctx.setLineDash([4,4]); ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  ctx.beginPath();
+  const [sx,sy] = toCanvas(pts[0][0], pts[0][1]); ctx.moveTo(sx,sy);
+  for (const [x,y] of pts.slice(1)) { const [cx2,cy2] = toCanvas(x,y); ctx.lineTo(cx2,cy2); }
+  const grad = ctx.createLinearGradient(PAD.l, 0, PAD.l+pw, 0);
+  if (frozen) { grad.addColorStop(0,'#ff9955'); grad.addColorStop(1,'#ff995555'); }
+  else        { grad.addColorStop(0,'#ff6b35'); grad.addColorStop(1,'#ff6b3566'); }
+  ctx.strokeStyle = grad; ctx.lineWidth = frozen ? 3 : 2; ctx.stroke();
+
+  const [lx,ly] = toCanvas(0,0);
+  ctx.beginPath(); ctx.arc(lx,ly, frozen?6:4, 0, Math.PI*2);
+  ctx.fillStyle = frozen?'#ff9955':'#ff6b35'; ctx.fill();
+  ctx.fillStyle = el<0?'#f44':(frozen?'#ff9955':'#aaa');
+  ctx.font = `${frozen?14:12}px system-ui`;
+  ctx.fillText(`${elDeg.toFixed(1)}°`, lx+8, ly-8);
+
+  if (range > 0.1) {
+    const [rx,ry] = toCanvas(range, 0);
+    ctx.fillStyle = frozen?'#888':'#555'; ctx.font='10px system-ui'; ctx.textAlign='center';
+    ctx.fillText(`${range.toFixed(1)}m`, rx, ry+14);
+  }
+
+  const aimR=22, aimX=PAD.l+26, aimY=PAD.t+26;
+  ctx.beginPath(); ctx.arc(aimX,aimY,aimR,0,Math.PI*2);
+  ctx.fillStyle='#111'; ctx.fill(); ctx.strokeStyle=frozen?'#555':'#333'; ctx.lineWidth=1; ctx.stroke();
+  const azA = Math.atan2(normal[0], normal[1]);
+  ctx.beginPath(); ctx.moveTo(aimX,aimY);
+  ctx.lineTo(aimX+Math.sin(azA)*aimR*0.85, aimY-Math.cos(azA)*aimR*0.85);
+  ctx.strokeStyle=frozen?'#ff9955':'#4cf'; ctx.lineWidth=2; ctx.stroke();
+  ctx.fillStyle='#555'; ctx.font='8px system-ui'; ctx.textAlign='center';
+  ctx.fillText('aim', aimX, aimY+aimR+10);
+
+  ctx.fillStyle='#333'; ctx.font='10px system-ui'; ctx.textAlign='left';
+  ctx.fillText('↑ height (m)', 2, PAD.t+10);
+  ctx.fillText('distance (m) →', PAD.l, H-6);
+}
+
+
+// ── Quaternion helpers ────────────────────────────────────────────────────────
+function qdot(a, b) { return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]+a[3]*b[3]; }
+function qdeg(a, b) { return 2 * Math.acos(Math.min(1, Math.abs(qdot(a,b)))) * 180/Math.PI; }
+function qnorm(q) { const l = Math.hypot(...q); return q.map(v=>v/l); }
+
+// ── Calibration state machine ─────────────────────────────────────────────────
+let calPhase    = 1;
+let calState    = 'idle';
+let calRefQuat  = null;
+let calSamples  = [];
+let calStart    = null;
+let stillSince  = null;
+let lastCalQuat = null;
+const CAL_DURATION   = 3000;
+const STILL_REQUIRED = 500;
+const STILL_THRESH   = 1.5;
+
+function calTick(quat) {
+  if (calState === 'idle') return;
+  const now = performance.now();
+  const pfx = calPhase === 1 ? 'cal' : 'cal2';
+  const moving = lastCalQuat ? qdeg(lastCalQuat, quat) > STILL_THRESH : false;
+  lastCalQuat = quat;
+
+  if (calState === 'waiting_still') {
+    if (moving) { stillSince = null; }
+    else {
+      if (!stillSince) stillSince = now;
+      if (now - stillSince >= STILL_REQUIRED) {
+        calState = 'calibrating'; calStart = now; calSamples = [quat];
+        socket.emit(`${pfx}_start`);
+      }
+    }
+    return;
+  }
+
+  if (calState === 'calibrating') {
+    if (moving) {
+      calState = 'waiting_still'; stillSince = null; calSamples = [];
+      socket.emit(`${pfx}_restart`); return;
+    }
+    const q0 = calSamples[0];
+    calSamples.push(qdot(q0, quat) >= 0 ? quat : quat.map(v => -v));
+    const pct = Math.min(1, (now - calStart) / CAL_DURATION);
+    socket.emit(`${pfx}_progress`, { pct });
+    if (pct >= 1) {
+      const avg = [0,0,0,0];
+      for (const q of calSamples) { avg[0]+=q[0]; avg[1]+=q[1]; avg[2]+=q[2]; avg[3]+=q[3]; }
+      calRefQuat = qnorm(avg);
+      calState = 'done';
+      socket.emit(`${pfx}_done`, { qref: calRefQuat });
+      advanceCalPhase();
+    }
+  }
+}
+
+function advanceCalPhase() {
+  if (calPhase === 1) {
+    calPhase = 2; calState = 'waiting_still'; stillSince = null;
+    calSamples = []; lastCalQuat = currentQuat;
+    socket.emit('cal2_waiting');
+  }
+  // phase 2 done — complete
+}
+
+// ── Mode / swing state ────────────────────────────────────────────────────────
+let mode = 'live';
+let trajectoryMode = false;
+let swingNormal = null;
+let hasSwing = false;
+
+// Simple detection state
+let inSwing = false;
+const SWING_THRESHOLD = 25;
+const SWING_RESET_THRESHOLD = 12;
+const CONFIRM_THRESH = 35;
+
+let winState       = 'idle'; // 'idle' | 'pending' | 'confirmed'
+let winSamples     = [];     // { timeMs, pos }
+let winPos         = [0,0,0];
+let winVel         = [0,0,0];
+let winPendingStart = null;
+let winLastMs      = null;
+let confirmed      = false;
+
+// ── Recording ─────────────────────────────────────────────────────────────────
+let isRecording   = false;
+let recordFrames  = [];   // { t, normal, quat, accelMag, rotMag }
+let recordStart   = null;
+let currentAccelMag = 0;
+let currentRotMag   = 0;
+
+function startRecording() {
+  isRecording  = true;
+  recordFrames = [];
+  recordStart  = performance.now();
+  document.getElementById('record-btn').textContent = 'Stop Recording';
+  document.getElementById('record-btn').className = 'recording';
+  document.getElementById('record-state').textContent = 'recording…';
+  document.getElementById('playback-wrap').style.display = 'none';
+}
+
+function stopRecording() {
+  isRecording = false;
+  document.getElementById('record-btn').textContent = 'Record Swing';
+  document.getElementById('record-btn').className = '';
+  const n = recordFrames.length;
+  document.getElementById('record-state').textContent = n ? `${n} frames` : 'nothing recorded';
+  if (!n) return;
+  const slider = document.getElementById('swing-slider');
+  slider.min = 0;
+  slider.max = n - 1;
+  slider.value = 0;
+  document.getElementById('playback-wrap').style.display = 'flex';
+  drawSwingGraphs(0);
+  showFrame(0);
+}
+
+function showFrame(i) {
+  const f = recordFrames[i];
+  if (!f) return;
+  const tSec = ((f.t - recordStart) / 1000).toFixed(2);
+  document.getElementById('slider-time').textContent = `${tSec}s`;
+  document.getElementById('slider-accel').textContent =
+    `accel: ${f.accelMag.toFixed(0)}  rot: ${f.rotMag.toFixed(0)}°/s`;
+  const bar = document.getElementById('accel-bar');
+  bar.style.width = Math.min(100, (f.accelMag / 50) * 100) + '%';
+  bar.style.background = f.accelMag > CONFIRM_THRESH ? '#ff9955' : '#ff6b35';
+  document.getElementById('accel-val').textContent = f.accelMag.toFixed(0);
+  render(f.normal, true);
+  emitOrientation(f.normal, f.quat);
+  drawSwingGraphs(i);
+}
+
+function drawSwingGraphs(markerIdx) {
+  const canvas = document.getElementById('swing-graphs');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const n = recordFrames.length;
+  if (!n) return;
+  const t0 = recordFrames[0].t;
+  const tEnd = recordFrames[n - 1].t - t0 || 1;
+
+  const PAD = { l: 36, r: 10, t: 8, b: 8 };
+  const midY = H / 2;
+  const graphH = midY - PAD.t - PAD.b - 6; // height of each sub-graph
+  const pw = W - PAD.l - PAD.r;
+
+  const accelMax = Math.max(...recordFrames.map(f => f.accelMag), 1);
+  const rotMax   = Math.max(...recordFrames.map(f => f.rotMag), 1);
+
+  function toX(t) { return PAD.l + ((t - t0) / tEnd) * pw; }
+
+  function drawMiniGraph(topY, values, maxVal, color, label) {
+    // axis label
+    ctx.fillStyle = '#333'; ctx.font = '9px system-ui'; ctx.textAlign = 'right';
+    ctx.fillText(label, PAD.l - 2, topY + 10);
+    ctx.fillText(Math.round(maxVal), PAD.l - 2, topY + graphH);
+
+    // baseline
+    ctx.beginPath(); ctx.moveTo(PAD.l, topY + graphH); ctx.lineTo(PAD.l + pw, topY + graphH);
+    ctx.strokeStyle = '#1e1e1e'; ctx.lineWidth = 1; ctx.stroke();
+
+    // curve
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const x = toX(recordFrames[i].t);
+      const y = topY + graphH - (values[i] / maxVal) * graphH;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
+
+    // fill
+    ctx.lineTo(toX(recordFrames[n-1].t), topY + graphH);
+    ctx.lineTo(PAD.l, topY + graphH);
+    ctx.closePath();
+    ctx.fillStyle = color + '22'; ctx.fill();
+  }
+
+  const accels = recordFrames.map(f => f.accelMag);
+  const rots   = recordFrames.map(f => f.rotMag);
+
+  drawMiniGraph(PAD.t,          accels, accelMax, '#ff6b35', 'm/s²');
+  drawMiniGraph(midY + PAD.b,   rots,   rotMax,   '#4cf',    '°/s');
+
+  // divider
+  ctx.beginPath(); ctx.moveTo(PAD.l, midY); ctx.lineTo(PAD.l + pw, midY);
+  ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 1; ctx.stroke();
+
+  // marker line
+  const mx = toX(recordFrames[markerIdx].t);
+  ctx.beginPath(); ctx.moveTo(mx, PAD.t); ctx.lineTo(mx, H - PAD.b);
+  ctx.strokeStyle = '#fff4'; ctx.lineWidth = 1.5; ctx.stroke();
+
+  // marker dot on each graph
+  const ay = PAD.t + graphH - (accels[markerIdx] / accelMax) * graphH;
+  const ry = midY + PAD.b + graphH - (rots[markerIdx] / rotMax) * graphH;
+  for (const [dy, col] of [[ay, '#ff6b35'], [ry, '#4cf']]) {
+    ctx.beginPath(); ctx.arc(mx, dy, 4, 0, Math.PI * 2);
+    ctx.fillStyle = col; ctx.fill();
+  }
+}
+
+document.getElementById('record-btn').addEventListener('click', () => {
+  isRecording ? stopRecording() : startRecording();
+});
+document.getElementById('swing-slider').addEventListener('input', e => {
+  showFrame(Number(e.target.value));
+});
+
+// ── Sensor state ──────────────────────────────────────────────────────────────
+let currentNormal = [0, 0, 1];
+let currentQuat   = [0, 0, 0, 1];
+
+const socket = io();
+socket.on('connect', () => setStatus('Connected ✓', false));
+socket.on('disconnect', () => setStatus('Disconnected', true));
+
+function emitOrientation(normal, quat) {
+  const az = Math.atan2(normal[0], normal[1]) * 180/Math.PI;
+  const el = Math.asin(Math.max(-1, Math.min(1, normal[2]))) * 180/Math.PI;
+  socket.emit('orientation', { normal, quat, az, el });
+}
+
+function render(normal, frozen) {
+  const azDeg = Math.atan2(normal[0], normal[1]) * 180/Math.PI;
+  const elDeg = Math.asin(Math.max(-1, Math.min(1, normal[2]))) * 180/Math.PI;
+  document.getElementById('azval').textContent = azDeg.toFixed(1) + '°';
+  document.getElementById('elval').textContent = elDeg.toFixed(1) + '°';
+  drawPhone(document.getElementById('phone3d'), normal);
+  drawParabola(document.getElementById('parabola'), normal, frozen);
+}
+
+function onOrientation(normal, quat) {
+  currentNormal = normal;
+  currentQuat   = quat;
+  calTick(quat);
+  if (mode === 'live') {
+    render(normal, false);
+    emitOrientation(normal, quat);
+  }
+  if (mode === 'swing' && isRecording) {
+    recordFrames.push({ t: performance.now(), normal: [...normal], quat: [...quat], accelMag: currentAccelMag, rotMag: currentRotMag });
+  }
+}
+
+// Called on every devicemotion — accelVec is in phone space, mag is its magnitude
+function onMotion(accelVec, mag, rotMag) {
+  currentAccelMag = mag;
+  currentRotMag   = rotMag;
+  if (mode !== 'swing') return;
+
+  // Update accel bar live (not during playback)
+  if (isRecording || !recordFrames.length) {
+    const bar = document.getElementById('accel-bar');
+    bar.style.width = Math.min(100, (mag / 50) * 100) + '%';
+    bar.style.background = mag > CONFIRM_THRESH ? '#ff9955' : '#ff6b35';
+    document.getElementById('accel-val').textContent = mag.toFixed(0);
+  }
+}
+
+// ── Simple swing detection ────────────────────────────────────────────────────
+function runSimpleDetection(mag) {
+  if (!inSwing && mag > SWING_THRESHOLD) {
+    inSwing = true;
+    swingNormal = [...currentNormal];
+    hasSwing = true;
+    flashSwing();
+    render(swingNormal, true);
+    emitOrientation(swingNormal, [...currentQuat]);
+  } else if (inSwing && mag < SWING_RESET_THRESHOLD) {
+    inSwing = false;
+  }
+}
+
+
+function flashSwing() {
+  const el = document.getElementById('swing-state');
+  el.textContent = 'SWING!';
+  el.className = 'detected';
+  setTimeout(() => {
+    el.textContent = hasSwing ? 'last swing frozen — waiting for next…' : 'waiting for swing…';
+    el.className = 'waiting';
+  }, 800);
+}
+
+// ── Mode toggle ───────────────────────────────────────────────────────────────
+document.getElementById('mode-live').addEventListener('click',  () => setMode('live'));
+document.getElementById('mode-swing').addEventListener('click', () => setMode('swing'));
+function setMode(m) {
+  mode = m;
+  document.getElementById('mode-live').className  = m === 'live'  ? 'active' : '';
+  document.getElementById('mode-swing').className = m === 'swing' ? 'active' : '';
+
+  const recordWrap  = document.getElementById('record-wrap');
+  const accelWrap   = document.getElementById('accel-bar-wrap');
+  const playbackWrap = document.getElementById('playback-wrap');
+
+  if (m === 'swing') {
+    recordWrap.style.display = 'flex';
+    accelWrap.style.display  = 'flex';
+    if (recordFrames.length) playbackWrap.style.display = 'flex';
+  } else {
+    recordWrap.style.display  = 'none';
+    accelWrap.style.display   = 'none';
+    playbackWrap.style.display = 'none';
+    render(currentNormal, false);
+  }
+}
+
+// ── Sensor start ──────────────────────────────────────────────────────────────
+async function startSensors() {
+  document.getElementById('enable').style.display = 'none';
+
+  if (typeof DeviceOrientationEvent?.requestPermission === 'function') {
+    try { await DeviceOrientationEvent.requestPermission(); }
+    catch { return setStatus('Permission denied', true); }
+  }
+  if (typeof DeviceMotionEvent?.requestPermission === 'function') {
+    try { await DeviceMotionEvent.requestPermission(); } catch {}
+  }
+
+  window.addEventListener('devicemotion', e => {
+    const a = e.accelerationIncludingGravity;
+    if (!a) return;
+    const vec = [a.x ?? 0, a.y ?? 0, a.z ?? 0];
+    const mag = Math.hypot(...vec);
+    const r = e.rotationRate;
+    const rotMag = r ? Math.hypot(r.alpha ?? 0, r.beta ?? 0, r.gamma ?? 0) : 0;
+    onMotion(vec, mag, rotMag);
+  });
+
+  let nativeSensor = null;
+  let iosFusion    = null;
+
+  const statusEl = document.getElementById('status');
+  function setStatus(msg, err) {
+    statusEl.textContent = msg;
+    statusEl.className = err ? 'err' : 'ok';
+  }
+
+  async function startNative() {
+    if (!('RelativeOrientationSensor' in window)) {
+      setStatus('RelativeOrientationSensor not available', true);
+      return;
+    }
+    try {
+      if (navigator.permissions) {
+        await Promise.all([
+          navigator.permissions.query({ name: 'accelerometer' }),
+          navigator.permissions.query({ name: 'gyroscope' }),
+        ]);
+      }
+      nativeSensor = new RelativeOrientationSensor({ frequency: 10 });
+      nativeSensor.addEventListener('reading', () => {
+        const q = nativeSensor.quaternion;
+        onOrientation(qrot(q, [0,0,1]), [...q]);
+      });
+      nativeSensor.addEventListener('error', e => setStatus('Sensor error: ' + e.error.message, true));
+      nativeSensor.start();
+      setStatus('Sensors active (native)', false);
+    } catch (e) {
+      setStatus('Sensor error: ' + e.message, true);
+    }
+  }
+
+  async function startFusion() {
+    const { createIOSFusion } = await import('./ios-fusion.js');
+    iosFusion = createIOSFusion({
+      onReading(quat, normal) { onOrientation(normal, quat); },
+    });
+    iosFusion.start();
+    setStatus('Sensors active (iOS fusion)', false);
+  }
+
+  const fakeIosBox = document.getElementById('fake-ios');
+  fakeIosBox.addEventListener('change', async () => {
+    if (fakeIosBox.checked) {
+      nativeSensor?.stop(); nativeSensor = null;
+      await startFusion();
+    } else {
+      iosFusion?.stop(); iosFusion = null;
+      await startNative();
+    }
+  });
+
+  await startNative();
+}
+
+
+document.getElementById('enable').addEventListener('click', async () => {
+  await startSensors();
+  document.getElementById('cal-btn').style.display = 'inline-block';
+  document.getElementById('mode-toggle').style.display = 'flex';
+  document.getElementById('fake-ios').parentElement.style.display = 'flex';
+});
+
+document.getElementById('cal-btn').addEventListener('click', () => {
+  calState = 'waiting_still'; stillSince = null; calSamples = []; lastCalQuat = currentQuat;
+  document.getElementById('cal-btn').style.display = 'none';
+  socket.emit('cal_waiting');
+});
+
+drawPhone(document.getElementById('phone3d'), [0,0,1]);
+drawParabola(document.getElementById('parabola'), [0,0,1], false);
+</script>
+</body>
+</html>
