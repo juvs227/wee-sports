@@ -5,6 +5,7 @@ import { io } from 'socket.io-client';
 import { EVENTS, PHASES, PROTOCOL_VERSION as v, VOTE_SECONDS } from '@wee/shared/protocol.js';
 import { RoomStore } from '@server/src/RoomStore.js';
 import { createGameServer } from '@server/src/app.js';
+import { finishAvatarScene } from './finishAvatarScene.js';
 
 function fixture(sport = 'tennis', count = 2) {
   const clock = { now: 0 };
@@ -21,6 +22,7 @@ function fixture(sport = 'tennis', count = 2) {
     if (!countdown) {
       clock.now += 5000; store.finishCountdown(room.code);
       clock.now += VOTE_SECONDS * 1000; store.expireVote(room.code);
+      finishAvatarScene(store, room.code, Array.from({ length: count }, (_, i) => `p${i + 1}`));
     }
     return store.lobby(room.code).gameId;
   }
@@ -167,6 +169,7 @@ test('real sockets: both return events broadcast to their room, survive TV recon
     await send(p1, EVENTS.PLAYER_START, {});
     now += 5000; store.finishCountdown(room.code);
     now += VOTE_SECONDS * 1000; store.expireVote(room.code);
+    await Promise.all([p1, p2].map(phone => send(phone, EVENTS.PLAYER_READY, { ready: true })));
     return store.lobby(room.code).gameId;
   }
   const gameId = await start();

@@ -620,6 +620,8 @@ test('game input waits until the tutorial is over', () => {
   const stroke = { type: 'swing', id: 'one', gameId: store.lobby(code).gameId, label: 'Forehand', hand: 'Right', netNormal: [0, 0, 1], swingNormal: [1, 0, 0] };
   assert.equal(store.swingTarget('p0', stroke).error, 'not-playing');
   for (let step = 0; step < MOVES.length; step += 1) store.tutorialMove('p0', { step });
+  store.setReady('p0', { ready: true });
+  store.setReady('p1', { ready: true });
   const result = store.swingTarget('p0', stroke);
   assert.equal(result.ok, true);
   assert.deepEqual(result.event.netNormal, stroke.netNormal);
