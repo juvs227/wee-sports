@@ -30,6 +30,9 @@ function fixture(sport = 'bowling', {count = 1, setup = 'motion', playing = true
       now += VOTE_SECONDS * 1000;
       store.expireVote(room.code);
     }
+    if (view().phase === PHASES.AVATARS) {
+      for (let index = 0; index < count; index++) store.setReady(`p${index + 1}`, {ready: true});
+    }
     assert.equal(view().phase, PHASES.GAME);
     const state = view().sport === 'bowling' ? {phase: 'ready', currentPlayer: 1, frame: 1}
       : {phase: 'ready', score: [0, 0], server: 1, winner: null, practice: false};
@@ -224,6 +227,7 @@ test('real sockets retain an unknown lost acknowledgement outcome and never repl
   await send(phone, EVENTS.PLAYER_START, {});
   f.advance(); f.store.finishCountdown(room.code);
   f.advance(VOTE_SECONDS * 1000); f.store.expireVote(room.code);
+  await send(phone, EVENTS.PLAYER_READY, {ready: true});
   const state = f.store.lobby(room.code);
   await send(tv, EVENTS.HOST_GAME_STATE, {gameId: state.gameId, phase: 'ready', currentPlayer: 1, frame: 1});
   const rolls = [];
@@ -246,6 +250,7 @@ test('real sockets cannot accept a late roll reply from a replaced host epoch', 
   await send(phone, EVENTS.PLAYER_START, {});
   f.advance(); f.store.finishCountdown(room.code);
   f.advance(VOTE_SECONDS * 1000); f.store.expireVote(room.code);
+  await send(phone, EVENTS.PLAYER_READY, {ready: true});
   const state = f.store.lobby(room.code);
   await send(tv, EVENTS.HOST_GAME_STATE, {gameId: state.gameId, phase: 'ready', currentPlayer: 1, frame: 1});
   const roll = {type: 'roll', id: 'old-host-reply', gameId: state.gameId, generation: state.inputGeneration,
