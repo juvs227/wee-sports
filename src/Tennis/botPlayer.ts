@@ -7,9 +7,9 @@ export interface BotStroke {
 }
 
 const CONTACT_START = 0.2;
-const CONTACT_END = 0.7;
-const POSITION_TOLERANCE_X = 0.75;
-const POSITION_TOLERANCE_Y = 0.7;
+const CONTACT_END = 0.8;
+const POSITION_TOLERANCE_X = 1.05;
+const POSITION_TOLERANCE_Y = 0.95;
 
 // Player 2 tries one timed stroke when an incoming ball is about to reach the
 // strike pose. It must still make ordinary racket contact; no guaranteed hit.

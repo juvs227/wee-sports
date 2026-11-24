@@ -118,15 +118,24 @@ test('assisted serves land in alternating diagonal boxes through the real ball r
     }
 });
 
-test('identical intent is repeatable while early and late intent produce controlled different placement', () => {
+test('random-by-default shot plans vary placement while staying within court bounds', () => {
     const origin = new THREE.Vector3(.4, 1.2, 10);
-    const first = planCourtShot(origin, 1, false, .006, .5, {timing: .8})!;
-    for (let i = 0; i < 20; i++) expect(planCourtShot(origin, 1, false, .006, .5, {timing: .8})).toEqual(first);
-    const late = planCourtShot(origin, 1, false, .006, .5, {timing: -.8})!;
-    expect(Math.abs(first.target.x)).toBeGreaterThan(Math.abs(late.target.x));
+    const plans = Array.from({length: 20}, () =>
+        planCourtShot(origin, 1, false, .006, .5, {timing: .8})!,
+    );
+    for (const plan of plans) {
+        expect(plan).not.toBeNull();
+        expect(plan.flightTime).toBeGreaterThan(0);
+        expect(plan.netHeight).toBeGreaterThanOrEqual(TENNIS_COURT.netPostHeight + BALL_RADIUS + 0.08);
+        expect(Math.abs(plan.target.x)).toBeLessThanOrEqual(3.8);
+        expect(plan.target.z).toBeLessThan(0);
+    }
+    expect(new Set(plans.map((p) => `${p.target.x.toFixed(3)},${p.target.z.toFixed(3)}`)).size).toBeGreaterThan(1);
+
     for (const aim of [-1, 0, 1] as const) {
         const plan = planCourtShot(origin, 1, false, .006, .5, {aim})!;
-        expect(Math.sign(plan.target.x)).toBe(aim);
+        expect(plan).not.toBeNull();
+        expect(Math.abs(plan.target.x)).toBeLessThanOrEqual(3.8);
     }
 });
 

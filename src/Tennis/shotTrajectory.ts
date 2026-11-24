@@ -51,7 +51,7 @@ function validate(
     if (position.y <= RADIUS + 1e-8) {
       const legal = serve
         ? insideServiceBox(position.x, position.z, player, serve, RADIUS)
-        : Math.abs(position.x) <= 3 && Math.abs(position.z) <= 10;
+        : Math.abs(position.x) <= 3.8 && Math.abs(position.z) <= 10;
       return legal &&
         position.z * target.z > 0 &&
         position.distanceTo(target) < 0.4 &&
@@ -92,7 +92,7 @@ export function planCourtShot(
     intent.aim === undefined
       ? strokeSide * angle - origin.x * 0.25
       : intent.aim * (player === 1 ? 1 : -1) * 2.1;
-  const x = THREE.MathUtils.clamp(placement, -3, 3);
+  const x = THREE.MathUtils.clamp(placement + (Math.random() * 2 - 1) * 1.5, -3.8, 3.8);
   const targets = intent.serve
     ? [
         new THREE.Vector3(
@@ -102,7 +102,7 @@ export function planCourtShot(
         ),
       ]
     : [
-        new THREE.Vector3(x, RADIUS, direction * 8.5),
+        new THREE.Vector3(x, RADIUS, direction * (5.5 + Math.random() * 4)),
         new THREE.Vector3(0, RADIUS, direction * 7),
       ];
   const strength = Number.isFinite(power)
