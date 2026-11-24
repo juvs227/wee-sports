@@ -177,6 +177,11 @@ export class RoomStore {
     }
     if (room.phase === PHASES.AVATARS && [...room.players.values()].every((seat) => seat.ready)) {
       this.#clearReady(room);
+      // Phones that skipped the vote at setup can vote once everyone confirms a color.
+      if (!room.vote && hasTutorial(room.sport) && [...room.players.values()].some(seat => !seat.skipTutorial)) {
+        this.#openVote(room, PHASES.GAME);
+        return { ok: true, code: room.code };
+      }
       room.phase = PHASES.GAME;
       room.deadline = null;
       return { ok: true, code: room.code, gameStarted: true };
@@ -778,9 +783,7 @@ export class RoomStore {
       room.deadline = null;
       return { code };
     }
-    room.phase = PHASES.VOTE;
-    room.deadline = this.#now() + VOTE_MS;
-    room.vote = { picks: new Map() };
+    this.#openVote(room, PHASES.AVATARS);
     return { code, msLeft: VOTE_MS };
   }
 
@@ -1014,6 +1017,12 @@ export class RoomStore {
     room.phase = room.players.size >= READY_AT_PLAYERS ? PHASES.READY : PHASES.LOBBY;
   }
 
+  #openVote(room, nextPhase) {
+    room.phase = PHASES.VOTE;
+    room.deadline = this.#now() + VOTE_MS;
+    room.vote = { picks: new Map(), nextPhase };
+  }
+
   /** Any Yes means the tutorial. Picks are frozen by slot for the reveal. */
   #resolveVote(room) {
     const { picks } = room.vote;
@@ -1024,11 +1033,10 @@ export class RoomStore {
       })
       .sort((a, b) => a.slot - b.slot);
     const learners = new Set([...picks.keys()].filter((id) => picks.get(id) && room.players.has(id)));
-    room.vote = { picks: frozen };
+    room.vote.picks = frozen;
     room.deadline = null;
     if (learners.size === 0) {
-      room.phase = PHASES.AVATARS;
-      room.deadline = null;
+      room.phase = room.vote.nextPhase;
       return;
     }
     room.phase = PHASES.TUTORIAL;
@@ -1047,7 +1055,7 @@ export class RoomStore {
     tutorial.step += 1;
     tutorial.done.clear();
     if (tutorial.learners.size === 0 || tutorial.step >= TUTORIAL_MOVES[room.sport].length) {
-      room.phase = PHASES.AVATARS;
+      room.phase = room.vote.nextPhase;
       room.deadline = null;
       room.tutorial = null;
     }

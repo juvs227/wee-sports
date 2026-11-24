@@ -34,6 +34,7 @@ test('relay diagnostics require membership, are rate-limited and expose only opt
   await send(phone, EVENTS.PLAYER_START, {});
   now += 5000; store.finishCountdown(room.code);
   await send(phone, EVENTS.PLAYER_READY, {ready: true});
+  await send(phone, EVENTS.TUTORIAL_VOTE, {watch: false});
   assert.equal((await send(phone, DIAGNOSTICS_PROBE, {enabled: true})).ok, true);
   assert.equal((await send(phone, DIAGNOSTICS_PROBE, {enabled: true})).error, 'rate-limited');
   const lobby = store.lobby(room.code);
