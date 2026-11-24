@@ -57,9 +57,11 @@ export function createThresholdSwingStream(hand = 'Right', accelThreshold = 25) 
       if (!aboveThreshold && accelMag >= accelThreshold) {
         aboveThreshold = true;
         const label = classify(sample.rotationAlpha, sample.rotationBeta, sample.rotationGamma);
-        const detectionDelayMs = motionStart !== null ? sample.timeMs - motionStart : 0;
-        pending.push({ label: label === 'Unknown' ? 'Forehand' : label, early: true, complete: false, detectionDelayMs, threshold: true });
-        recovering = true; recoveryStarted = sample.timeMs; quietSince = null; aboveThreshold = false; motionStart = null;
+        if (label !== 'Unknown') {
+          const detectionDelayMs = motionStart !== null ? sample.timeMs - motionStart : 0;
+          pending.push({ label, early: true, complete: false, detectionDelayMs, threshold: true });
+          recovering = true; recoveryStarted = sample.timeMs; quietSince = null; aboveThreshold = false; motionStart = null;
+        }
       } else if (accelMag < accelThreshold * 0.6) {
         aboveThreshold = false;
       }
