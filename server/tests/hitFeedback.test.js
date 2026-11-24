@@ -5,6 +5,7 @@ import { io } from 'socket.io-client';
 import { EVENTS, PROTOCOL_VERSION, VOTE_SECONDS, isTennisHit, isGameHit } from '@wee/shared/protocol.js';
 import { RoomStore } from '@server/src/RoomStore.js';
 import { createGameServer } from '@server/src/app.js';
+import { finishAvatarScene } from './finishAvatarScene.js';
 
 const v = PROTOCOL_VERSION;
 const send = (socket, event, payload = {}) => socket.timeout(2000).emitWithAck(event, payload);
@@ -21,6 +22,7 @@ function game(sport = 'tennis') {
   store.finishCountdown(host.code);
   now += VOTE_SECONDS * 1000;
   store.expireVote(host.code);
+  finishAvatarScene(store, host.code, ['phone']);
   const hit = { id: 'contact-one', gameId: store.lobby(host.code).gameId, player: 1 };
   return { store, host, phone, hit, advance: milliseconds => { now += milliseconds; } };
 }
@@ -114,6 +116,7 @@ for (const sport of ['tennis', 'bowling']) test(`${sport}: real socket feedback 
   await send(phone, EVENTS.PLAYER_START, {});
   now = 5000; store.finishCountdown(room.code);
   now += VOTE_SECONDS * 1000; store.expireVote(room.code);
+  await send(phone, EVENTS.PLAYER_READY, { ready: true });
   const hit = { id: 'actual-contact', gameId: store.lobby(room.code).gameId, player: 1 };
   if (sport === 'bowling') await send(host, EVENTS.HOST_GAME_STATE,
     { gameId: hit.gameId, phase: 'rolling', frame: 1, currentPlayer: 1 });

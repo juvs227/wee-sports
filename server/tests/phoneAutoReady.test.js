@@ -57,7 +57,7 @@ test('the current leader explicitly starts a ready roster and duplicate taps are
   expect(h.request).not.toHaveBeenCalled();
   const action = f.button('Start now').props.onClick;
   const first = action(); action();
-  expect(h.request).toHaveBeenCalledExactlyOnceWith(EVENTS.PLAYER_START, {});
+  expect(h.request).toHaveBeenCalledExactlyOnceWith(EVENTS.PLAYER_START, {color: '#3b82f6'});
   finish({ok: true}); await first;
 });
 
@@ -80,7 +80,7 @@ test('returning from a match restores readiness and waits for a new explicit Sta
   f.render({lobby: lobby({players: [{slot: 0, setup: 'motion', ready: true}]})});
   f.button('Start game').props.onClick(); f.render();
   await f.button('Start now').props.onClick();
-  expect(h.request).toHaveBeenLastCalledWith(EVENTS.PLAYER_START, {});
+  expect(h.request).toHaveBeenLastCalledWith(EVENTS.PLAYER_START, {color: '#3b82f6'});
 });
 
 test('a stale Start reply cannot put an error on the returned lobby', async () => {
@@ -109,5 +109,5 @@ test('cancelling or changing the roster invalidates a start confirmation', async
   expect(h.request).not.toHaveBeenCalled();
   f.render();f.button('Start game').props.onClick();f.render();
   await f.button('Start now').props.onClick();
-  expect(h.request).toHaveBeenCalledExactlyOnceWith(EVENTS.PLAYER_START,{});
+  expect(h.request).toHaveBeenCalledExactlyOnceWith(EVENTS.PLAYER_START, {color: '#3b82f6'});
 });

@@ -8,6 +8,7 @@ import {sendSwingRequest} from '@wee/src/network/swingRequest.js';
 import {createGameServer} from '@server/src/app.js';
 import {RoomStore} from '@server/src/RoomStore.js';
 import {createDirectInput} from '@client/lib/directInput.js';
+import {finishAvatarScene} from './finishAvatarScene.js';
 
 const send = (socket, event, data = {}) => socket.timeout(2000).emitWithAck(event, data);
 function transportTrace(transports) {
@@ -43,6 +44,7 @@ async function fixture(t, transport = 'websocket') {
     await send(phone, EVENTS.PLAYER_START, {});
     now += 5000; store.finishCountdown(room.code);
     now += VOTE_SECONDS * 1000; store.expireVote(room.code);
+    finishAvatarScene(store, room.code, [phone.id]);
     return store.lobby(room.code).gameId;
   };
   const gameId = await start();

@@ -5,6 +5,7 @@ import { io } from 'socket.io-client';
 import { EVENTS, PHASES, PROTOCOL_VERSION as v, VOTE_SECONDS } from '@wee/shared/protocol.js';
 import { RoomStore } from '@server/src/RoomStore.js';
 import { createGameServer } from '@server/src/app.js';
+import { finishAvatarScene } from './finishAvatarScene.js';
 
 function fixture(sport = 'tennis') {
   let now = 0;
@@ -19,6 +20,7 @@ function fixture(sport = 'tennis') {
     store.startGame('p1');
     now += 5000; store.finishCountdown(room.code);
     now += VOTE_SECONDS * 1000; store.expireVote(room.code);
+    finishAvatarScene(store, room.code, ['p1', 'p2']);
     return store.lobby(room.code).gameId;
   };
   const gameId = start();
@@ -142,6 +144,7 @@ for (const sport of ['tennis', 'bowling']) test(`real sockets: ${sport} phone/TV
   for (const phone of [p1, p2]) await send(phone, EVENTS.PLAYER_READY, { ready: true });
   await send(p1, EVENTS.PLAYER_START, {});
   now += 5000; store.finishCountdown(room.code); now += VOTE_SECONDS * 1000; store.expireVote(room.code);
+  await Promise.all([p1, p2].map(client => send(client, EVENTS.PLAYER_READY, { ready: true })));
   const gameId = store.lobby(room.code).gameId;
   assert.equal((await send(p2, EVENTS.PLAYER_PAUSE, { gameId, paused: true })).error, 'not-game-leader');
   assert.equal((await send(p1, EVENTS.HOST_PAUSE, { gameId, paused: true })).error, 'not-host');

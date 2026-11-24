@@ -2,6 +2,7 @@ import { expect, test } from 'vitest';
 import { RoomStore } from '@server/src/RoomStore.js';
 import { PROTOCOL_VERSION as v, VOTE_SECONDS, isStrokeResult, isGameSoundEvent } from '@wee/shared/protocol.js';
 import { createTimingStats } from '@wee/src/network/timingStats.js';
+import { finishAvatarScene } from './finishAvatarScene.js';
 
 function game() {
   let now = 0;
@@ -10,6 +11,7 @@ function game() {
   store.join('phone', { v, code, name: 'Player' });
   store.setSetup('phone', { setup: 'motion' }); store.setReady('phone', { ready: true }); store.startGame('phone');
   now = 5000; store.finishCountdown(code); now += VOTE_SECONDS * 1000; store.expireVote(code);
+  finishAvatarScene(store, code, ['phone']);
   const gameId = store.lobby(code).gameId;
   const input = id => store.swingTarget('phone', { type: 'swing', id, gameId, label: 'Forehand', hand: 'Right', power: .5 });
   const result = { id: 'stroke', gameId, player: 1, result: 'hit', reason: 'Good contact', receivedToContactMs: 84 };

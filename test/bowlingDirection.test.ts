@@ -1,4 +1,4 @@
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
 import * as THREE from 'three';
 import {BowlingWorld} from '../src/bowling/World';
 import {BowlingMatch} from '../src/bowling/match';
@@ -51,4 +51,22 @@ test.each([-1, 1])('curve %s hooks to its named screen side after travelling thr
   expect(Math.sign(screenX(ball.x, ball.y, ball.z))).toBe(direction);
   aimLine.geometry.dispose();
   (aimLine.material as THREE.Material).dispose();
+});
+
+test('active bowling ball color follows the player taking the next turn', () => {
+  const players = [
+    {player: 1, name: 'Player 1', color: '#123456'},
+    {player: 2, name: 'Player 2', color: '#abcdef'},
+  ];
+  const match = new BowlingMatch(players);
+  const ballController = {setColor: vi.fn()};
+  const world = Object.create(BowlingWorld.prototype) as BowlingWorld;
+  Object.assign(world, {match, players, ballController});
+  const syncBallColor = (world as unknown as {syncBallColor: () => void}).syncBallColor;
+
+  syncBallColor.call(world);
+  expect(ballController.setColor).toHaveBeenLastCalledWith('#123456');
+  match.record([]);
+  syncBallColor.call(world);
+  expect(ballController.setColor).toHaveBeenLastCalledWith('#abcdef');
 });

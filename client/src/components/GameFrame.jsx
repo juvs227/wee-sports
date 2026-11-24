@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import {EVENTS, isRoll, isSwing, isGameHit, isTennisState, isBowlingState, isStrokeResult, isGameSoundEvent, isGameCommand, isGameOptions, isAim} from '@wee/shared/protocol.js';
+import {EVENTS, PHASES, isRoll, isSwing, isGameHit, isTennisState, isBowlingState, isStrokeResult, isGameSoundEvent, isGameCommand, isGameOptions, isAim} from '@wee/shared/protocol.js';
 import { request, requestSwing, requestRoll, socket, useConnection } from '../lib/socket.js';
 import { createInputId } from '../../../src/network/inputId.js';
 import {createControllerSetupRelay} from '../lib/controllerSetupRelay.js';
@@ -10,7 +10,7 @@ const NO_PLAYERS = [];
 /** Authenticated bridge between the lobby and an isolated WebGL game/controller.
  * Owns input delivery, lifecycle gating, checkpoint recovery, and feedback.
  */
-export function GameFrame({ code, controller = false, controllerIntent = null, onControllerMode, player = 1, players = NO_PLAYERS, sport = 'tennis', gameId, gameState, generation = 0, hostEpoch = 1, matchRound = 0, playing = true, paused = false, manuallyPaused = false, showPause = paused, pauseMessage, onAudio, onPauseToggle, onSwing }) {
+export function GameFrame({ code, controller = false, controllerIntent = null, onControllerMode, player = 1, players = NO_PLAYERS, sport = 'tennis', gameId, gameState, generation = 0, hostEpoch = 1, matchRound = 0, playing = true, paused = false, manuallyPaused = false, showPause = paused, pauseMessage, phase = null, tutorialStep = null, tutorialMove = null, onTutorialAttempt, onAudio, onPauseToggle, onSwing }) {
   const frame = useRef(null);
   const diagnosticScope = `bridge.${controller ? 'phone' : 'tv'}.${sport}`;
   const diagnosticRef = useRef(null);
@@ -106,7 +106,10 @@ export function GameFrame({ code, controller = false, controllerIntent = null, o
   useEffect(() => {setupLifecycle.current++; setupRelay.current.reset();}, [connection, src, attempt, sport]);
   function publishState() {
     const post = message => frame.current?.contentWindow?.postMessage(message, window.location.origin);
-    post({ type: 'wee:lobby-state', paused: paused || connection !== 'online' || (!controller && recovering.current), manuallyPaused, connected: connection === 'online', players, playing, sport, gameId, generation, inputGeneration: generation, hostEpoch });
+    // tutorial names the move this phone is learning, so the controller can watch for it.
+    const tutorial = controller && phase === PHASES.TUTORIAL && Number.isInteger(tutorialStep) && tutorialMove
+      ? { step: tutorialStep, move: tutorialMove } : null;
+    post({ type: 'wee:lobby-state', paused: paused || connection !== 'online' || (!controller && recovering.current), manuallyPaused, connected: connection === 'online', players, playing, sport, gameId, generation, inputGeneration: generation, hostEpoch, phase, tutorial });
     if (controller && controllerIntent) post({type:'wee:controller-intent', ...controllerIntent});
     if (controller && sport === 'bowling') post({ type: 'wee:bowling-state', ...gameState,
       canRoll: playing && !paused && connection === 'online' && gameState?.phase === 'ready' && gameState.currentPlayer === player });
@@ -282,6 +285,9 @@ export function GameFrame({ code, controller = false, controllerIntent = null, o
           ['left', 'right'].includes(data.handedness)) {
         const result = await request(EVENTS.PLAYER_HANDEDNESS, { handedness: data.handedness });
         if (!result?.ok) console.error('Failed to update bowling player handedness:', result?.error);
+      } else if (controller && data?.type === 'wee:tutorial-attempt' && phase === PHASES.TUTORIAL &&
+          Number.isInteger(data.step) && typeof data.detected === 'string' && typeof data.matched === 'boolean') {
+        onTutorialAttempt?.({ step: data.step, detected: data.detected, matched: data.matched });
       } else if (controller && data?.type === 'wee:controller-mode' && ['motion', 'touch'].includes(data.mode)) {
         onControllerMode?.(data.mode);
       } else if (controller && data?.type === 'wee:controller-focus' &&
@@ -375,7 +381,7 @@ export function GameFrame({ code, controller = false, controllerIntent = null, o
       socket.off(EVENTS.GAME_HIT, hit);
       socket.off(EVENTS.GAME_STROKE_RESULT, strokeResult);
     };
-  }, [paused, manuallyPaused, connection, src, controller, controllerIntent, onControllerMode, attempt, players, playing, sport, gameId, gameState, generation, hostEpoch, matchRound, player, onAudio, onPauseToggle, onSwing]);
+  }, [paused, manuallyPaused, connection, src, controller, controllerIntent, onControllerMode, attempt, players, playing, sport, gameId, gameState, generation, hostEpoch, matchRound, player, phase, tutorialStep, tutorialMove, onTutorialAttempt, onAudio, onPauseToggle, onSwing]);
   return (
     <div className={`game-frame ${controller ? 'game-frame--phone' : ''}`}>
       {loading ? <p role="status">{failed ? 'Taking too long to load.' : `Loading ${controller ? 'controller' : sport}…`}

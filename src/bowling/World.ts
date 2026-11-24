@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import {BowlingMatch, BowlingPlayer, BowlingState} from './match';
+import {createBall, type BallController} from './ball';
 import {BowlingPhysics, LANE, PIN_COM, pinSpot, RollControls, RollSettlement, validRoll} from './physics';
-import {createBowlingBallVisual, createPlayer as createBowlingPlayer, type PlayerController} from './player';
+import {createPlayer as createBowlingPlayer, type PlayerController} from './player';
 
-import {Line2} from 'three/addons/lines/Line2.js';
-import {LineGeometry} from 'three/addons/lines/LineGeometry.js';
-import {LineMaterial} from 'three/addons/lines/LineMaterial.js';
+import { Line2 } from 'three/addons/lines/Line2.js';
+import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 
-export type {BowlingPlayer, BowlingState} from './match';
+export type { BowlingPlayer, BowlingState } from './match';
 export interface BowlingRoll extends RollControls {
   player: number;
 }
@@ -36,7 +37,8 @@ export class BowlingWorld {
   private pins = new Map<number, THREE.Group>();
   private bowlingPlayers = new Map<number, PlayerController>();
   private activePlayer: number | null = null;
-  private ball = new THREE.Group();
+  private ballController!: BallController;
+  private ball!: THREE.Group;
   private aimLine: Line2;
   private trail: THREE.Line;
   private trailPositions = new Float32Array(512 * 3);
@@ -60,11 +62,11 @@ export class BowlingWorld {
     private container: HTMLElement,
     players: BowlingPlayer[],
   ) {
-    this.players = players.map(player => ({...player}));
+    this.players = players.map(player => ({ ...player }));
     this.match = new BowlingMatch(players);
     this.physics.onPinHit = () => this.pinContact();
     this.physics.onGutter = () => this.gutterContact();
-    this.renderer = new THREE.WebGLRenderer({antialias: true, alpha: false});
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -101,6 +103,7 @@ export class BowlingWorld {
     this.buildPins();
     this.buildBall();
     this.ball.visible = false;
+    this.syncBallColor();
     this.syncPlayerModels(this.players);
     this.setActivePlayer(this.match.getState().currentPlayer);
     const geometry = new LineGeometry();
@@ -151,6 +154,11 @@ export class BowlingWorld {
     return this.match.getState(this.rolling);
   }
 
+  setBallColor(color: THREE.ColorRepresentation): void {
+    this.ballController.setColor(color);
+    if (!this.running) this.render();
+  }
+
   start(): void {
     if (this.disposed || this.running) return;
     this.running = true;
@@ -165,7 +173,7 @@ export class BowlingWorld {
     // Neither physical time nor the result-reveal timer advances while paused.
   }
 
-  roll(roll: BowlingRoll): {ok: boolean; error?: string} {
+  roll(roll: BowlingRoll): { ok: boolean; error?: string } {
     if (this.disposed || !this.running)
       return {
         ok: false,
@@ -178,11 +186,11 @@ export class BowlingWorld {
         error: 'This match is finished. Start a new match in game options.',
       };
     if (state.currentPlayer !== roll.player)
-      return {ok: false, error: 'Wait for your turn.'};
+      return { ok: false, error: 'Wait for your turn.' };
     if (this.rolling)
-      return {ok: false, error: 'Wait for the ball and pins to settle.'};
+      return { ok: false, error: 'Wait for the ball and pins to settle.' };
     if (!validRoll(roll))
-      return {ok: false, error: 'Choose a valid aim, power, and spin.'};
+      return { ok: false, error: 'Choose a valid aim, power, and spin.' };
     // Inputs use the player's left/right. This camera faces world +Z, so
     // screen-right is world -X. Keep the physics' world coordinates unchanged.
     this.pendingRoll = {...roll, aim: -roll.aim, spin: -roll.spin};
@@ -194,7 +202,7 @@ export class BowlingWorld {
     this.trail.visible = false;
     this.aimLine.visible = false;
     this.onState?.(this.getState());
-    return {ok: true};
+    return { ok: true };
   }
 
   /** Optional TV preview; the phone's authenticated roll remains authoritative. */
@@ -214,7 +222,7 @@ export class BowlingWorld {
 
   reset(players: BowlingPlayer[] = this.players): void {
     this.endRollingSound();
-    this.players = players.map(player => ({...player}));
+    this.players = players.map(player => ({ ...player }));
     this.match = new BowlingMatch(players);
     if (this.bowlingPlayers) {
       this.syncPlayerModels(this.players);
@@ -228,6 +236,7 @@ export class BowlingWorld {
     this.revealTime = 0;
     this.aimLine.visible = true;
     this.trail.visible = false;
+    this.syncBallColor();
     this.syncBodies();
     this.render();
     this.onState?.(this.getState());
@@ -369,6 +378,7 @@ export class BowlingWorld {
         this.setActivePlayer(this.match.getState().currentPlayer);
         this.trail.visible = false;
         this.aimLine.visible = !this.match.getState().complete;
+        this.syncBallColor();
         this.onState?.(this.getState());
         this.onSoundEvent?.(
           this.match.getState().complete
@@ -383,10 +393,19 @@ export class BowlingWorld {
     }
   }
 
+  private syncBallColor(): void {
+    const currentPlayer = this.match.getState().currentPlayer;
+    const color =
+      currentPlayer !== null
+        ? this.players.find(player => player.player === currentPlayer)?.color
+        : undefined;
+    this.ballController.setColor(color ?? '#6e47ad');
+  }
+
   private syncBodies(): void {
     const visible = new Set(this.physics.pins.map(pin => pin.id));
     for (const [id, mesh] of this.pins) mesh.visible = visible.has(id);
-    for (const {id, body} of this.physics.pins) {
+    for (const { id, body } of this.physics.pins) {
       const mesh = this.pins.get(id)!;
       mesh.position.copy(body.position as unknown as THREE.Vector3);
       mesh.quaternion.copy(body.quaternion as unknown as THREE.Quaternion);
@@ -401,7 +420,7 @@ export class BowlingWorld {
 
   /** Draw the measured path, so players can read their wrist-created hook. */
   private updateTrail(): void {
-    const {x, z} = this.physics.ball.position;
+    const { x, z } = this.physics.ball.position;
     if (
       !this.rolling ||
       z > LANE.length ||
@@ -434,15 +453,19 @@ export class BowlingWorld {
       this.bowlingPlayers.delete(id);
     }
 
-    const colors = [0x2f80ed, 0xe5484d, 0x2b9a66, 0xe0a100];
+    const colors = [0x3b82f6, 0xef4444, 0x2b9a66, 0xe0a100];
     for (const player of players) {
       const existing = this.bowlingPlayers.get(player.player);
       if (existing) {
         existing.setHandedness(player.handedness ?? 'right');
         continue;
       }
-      const model = createBowlingPlayer(0.4, 0, -0.35, colors[player.player - 1], {
+      const color = player.color
+        ? new THREE.Color(player.color).getHex()
+        : colors[player.player - 1] ?? 0x6e47ad;
+      const model = createBowlingPlayer(0.4, 0, -0.35, color, {
         handedness: player.handedness ?? 'right',
+        ballColor: color,
         onLoad: () => this.render(),
       });
       model.group.rotation.y = Math.PI;
@@ -538,7 +561,7 @@ export class BowlingWorld {
     });
     this.mesh(
       new THREE.BoxGeometry(18, 0.15, 34),
-      new THREE.MeshStandardMaterial({color: '#344c40', roughness: 0.9}),
+      new THREE.MeshStandardMaterial({ color: '#344c40', roughness: 0.9 }),
       0,
       -0.475,
       10,
@@ -635,7 +658,7 @@ export class BowlingWorld {
     signTexture.colorSpace = THREE.SRGBColorSpace;
     const signMesh = this.mesh(
       new THREE.PlaneGeometry(4, 1),
-      new THREE.MeshBasicMaterial({map: signTexture}),
+      new THREE.MeshBasicMaterial({ map: signTexture }),
       0,
       1.25,
       20.39,
@@ -659,7 +682,7 @@ export class BowlingWorld {
       map.colorSpace = THREE.SRGBColorSpace;
       const number = this.mesh(
         new THREE.PlaneGeometry(0.32, 0.32),
-        new THREE.MeshBasicMaterial({map, transparent: true}),
+        new THREE.MeshBasicMaterial({ map, transparent: true }),
         (lane - 2) * 1.6,
         0.33,
         20.38,
@@ -673,7 +696,7 @@ export class BowlingWorld {
       0.004,
       0.02,
     );
-    const arrowMaterial = new THREE.MeshBasicMaterial({color: '#716038'});
+    const arrowMaterial = new THREE.MeshBasicMaterial({ color: '#716038' });
     for (let index = -3; index <= 3; index++) {
       const shape = new THREE.Shape();
       shape.moveTo(-0.019, 0);
@@ -754,7 +777,8 @@ export class BowlingWorld {
   }
 
   private buildBall(): void {
-    this.ball.add(createBowlingBallVisual());
+    this.ballController = createBall();
+    this.ball = this.ballController.group;
     this.scene.add(this.ball);
   }
 }

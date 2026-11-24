@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {io} from 'socket.io-client';
-import {EVENTS, PHASES, PROTOCOL_VERSION as v} from '../../shared/protocol.js';
+import {EVENTS, PHASES, PROTOCOL_VERSION as v, VOTE_SECONDS} from '../../shared/protocol.js';
 import {createControllerCapabilities} from '../../shared/controllerCapabilities.js';
 import {RoomStore} from './RoomStore.js';
 const capabilities = createControllerCapabilities();
@@ -26,6 +26,13 @@ function fixture(sport = 'bowling', {count = 1, setup = 'motion', playing = true
     store.startGame('p1');
     now += 5000;
     store.finishCountdown(room.code);
+    if (store.lobby(room.code).phase === PHASES.VOTE) {
+      now += VOTE_SECONDS * 1000;
+      store.expireVote(room.code);
+    }
+    if (view().phase === PHASES.AVATARS) {
+      for (let index = 0; index < count; index++) store.setReady(`p${index + 1}`, {ready: true});
+    }
     assert.equal(view().phase, PHASES.GAME);
     const state = view().sport === 'bowling' ? {phase: 'ready', currentPlayer: 1, frame: 1}
       : {phase: 'ready', score: [0, 0], server: 1, winner: null, practice: false};
@@ -163,6 +170,7 @@ test('negotiated modern tennis swings cannot bypass generation checks with a leg
   store.setReady('phone', {ready: true}); store.startGame('phone');
   now = 5000; store.finishCountdown(room.code);
   store.vote('phone', {watch: false});
+  store.setReady('phone', {ready:true});
   const state = store.lobby(room.code);
   assert.equal(state.phase, PHASES.GAME);
   const swing = {type: 'swing', id: 'current-swing', label: 'Forehand', hand: 'Right',
@@ -199,7 +207,7 @@ async function networkFixture(t) {
   t.after(async () => { for (const client of clients) client.disconnect(); await app.close(); });
   app.http.listen(0, '127.0.0.1');
   await once(app.http, 'listening');
-  return {store, advance: () => {now += 5000;}, client: async () => {
+  return {store, advance: (ms = 5000) => {now += ms;}, client: async () => {
     const socket = io(`http://127.0.0.1:${app.http.address().port}`, {transports: ['websocket'], reconnection: false});
     clients.push(socket);
     await once(socket, 'connect', {signal: AbortSignal.timeout(2000)});
@@ -236,6 +244,8 @@ test('real sockets retain an unknown lost acknowledgement outcome and never repl
   await send(phone, EVENTS.PLAYER_READY, {ready: true});
   await send(phone, EVENTS.PLAYER_START, {});
   f.advance(); f.store.finishCountdown(room.code);
+  f.advance(VOTE_SECONDS * 1000); f.store.expireVote(room.code);
+  await send(phone, EVENTS.PLAYER_READY, {ready: true});
   const state = f.store.lobby(room.code);
   await send(tv, EVENTS.HOST_GAME_STATE, {gameId: state.gameId, phase: 'ready', currentPlayer: 1, frame: 1});
   const rolls = [];
@@ -257,6 +267,8 @@ test('real sockets cannot accept a late roll reply from a replaced host epoch', 
   await send(phone, EVENTS.PLAYER_READY, {ready: true});
   await send(phone, EVENTS.PLAYER_START, {});
   f.advance(); f.store.finishCountdown(room.code);
+  f.advance(VOTE_SECONDS * 1000); f.store.expireVote(room.code);
+  await send(phone, EVENTS.PLAYER_READY, {ready: true});
   const state = f.store.lobby(room.code);
   await send(tv, EVENTS.HOST_GAME_STATE, {gameId: state.gameId, phase: 'ready', currentPlayer: 1, frame: 1});
   const roll = {type: 'roll', id: 'old-host-reply', gameId: state.gameId, generation: state.inputGeneration,

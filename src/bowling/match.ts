@@ -3,6 +3,7 @@ export interface BowlingPlayer {
   player: number;
   name: string;
   handedness?: 'left' | 'right';
+  color?: string;
 }
 export interface BowlingScore extends BowlingPlayer {
   frames: number[][];

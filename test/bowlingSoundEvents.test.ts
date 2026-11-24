@@ -14,6 +14,7 @@ function deliveryHarness(match = new BowlingMatch([{player: 1, name: 'Player 1'}
   const world = Object.create(BowlingWorld.prototype) as BowlingWorld;
   Object.assign(world, {
     match, physics, players: [{player: 1, name: 'Player 1'}],
+    ballController: {setColor: vi.fn()},
     running: true, disposed: false, rolling: false, settlement: null, revealTime: 0,
     trail: {geometry: {setDrawRange: vi.fn()}, visible: false}, aimLine: {visible: true},
     onSoundEvent: (event: BowlingSoundEvent) => events.push(event),

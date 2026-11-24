@@ -15,6 +15,7 @@ import {
 } from './bowlingAim.js';
 import {readLegacyWebMotion} from './webMotionAdapter.js';
 import {createControllerPreferences} from './preferences.js';
+import {createTutorialDetector} from './tutorialMoves.js';
 import {tennisPower, tennisStrength} from './tennisPower.js';
 import {createStrengthRehearsal} from './strengthRehearsal.js';
 import {connectSwings} from '../network/swingConnection.js';
@@ -25,7 +26,7 @@ import {
   createCalibrationResume,
 } from './calibrationMemory.js';
 import {createPhoneFeedback, createScreenAwake} from './phoneExperience.js';
-import {isTennisState, isStrokeResult} from '../../shared/protocol.js';
+import {isTennisState, isStrokeResult, PHASES} from '../../shared/protocol.js';
 import {createTimingStats} from '../network/timingStats.js';
 import {createTennisAim} from '../../shared/tennisAim.js';
 import {browserDiagnostics} from '../../shared/diagnostics.js';
@@ -163,6 +164,10 @@ const aimStream = createBowlingAimStream(event =>
 let lockedAim = null;
 let bowlingReadout = null;
 let pageActive = true;
+let lobbyPhase = null;
+// The move this player is learning right now, and the detector watching for it.
+let tutorial = null;
+let tutorialDetector = null;
 const timingStats = {
   recognition: createTimingStats(),
   delivery: createTimingStats(),
@@ -321,6 +326,10 @@ function cancelArmedRoll() {
   bowlingDetector = null;
   lockedAim = null;
 }
+// Tutorial motion is watched outside a match and never sent to the game.
+function tutorialActive() {
+  return Boolean(tutorial) && connected && !lobbyPaused && !gameActive;
+}
 // One calm play screen; setup remains mounted so switching views preserves
 // calibration, sensor permission and the lobby connection.
 function renderPlayState() {
@@ -414,6 +423,22 @@ function renderPlayState() {
     status = 'Match complete';
     title = tennisState.winner === player ? 'You won!' : 'Good match!';
     help = 'See the set scores on the TV. The host can start another match.';
+  } else if (tutorialActive()) {
+    state = 'playing';
+    status = buttonMode
+      ? 'Button controls'
+      : recording
+        ? 'Motion on'
+        : 'Waiting for sensors';
+    title = 'Tutorial';
+    help = buttonMode
+      ? 'Try the move shown above, then tap Done.'
+      : 'Do the move shown above. Your phone checks it for you.';
+  } else if (!gameActive && lobbyPhase === PHASES.TUTORIAL) {
+    state = 'waiting';
+    status = 'Tutorial';
+    title = 'Tutorial';
+    help = 'Follow along on the TV. The match starts when everyone is done.';
   } else if (gameActive && !buttonMode && !recentReadings()) {
     state = 'paused';
     status = 'Motion interrupted';
@@ -569,7 +594,7 @@ function renderPlayState() {
   );
   const activeController =
     setup &&
-    gameActive &&
+    (gameActive || tutorialActive()) &&
     connected &&
     !lobbyPaused &&
     !settingsOpen &&
@@ -842,7 +867,7 @@ function startMotion() {
     buttonMode ||
     calibration ||
     !enabled ||
-    !gameActive ||
+    !(gameActive || tutorialActive()) ||
     lobbyPaused ||
     !connected ||
     !pageActive ||
@@ -866,9 +891,11 @@ function startMotion() {
   if (!bowling) void swingOrientation.start({bias});
   element('latest').textContent = '';
   playNotice = '';
-  element('motion').textContent = bowling
-    ? 'Swing forward to bowl. Turn your wrist to curve.'
-    : 'Motion is live. Swing to play; use Stop motion to pause your detector.';
+  element('motion').textContent = tutorialActive()
+    ? 'Motion is live. Do the move shown above.'
+    : bowling
+      ? 'Swing forward to bowl. Turn your wrist to curve.'
+      : 'Motion is live. Swing to play; use Stop motion to pause your detector.';
   controls();
 }
 function finishRehearsal(message, profile = null) {
@@ -1159,11 +1186,31 @@ window.addEventListener('message', event => {
   gameActive = data.playing === true;
   lobbyPaused = data.paused;
   manuallyPaused = data.manuallyPaused === true;
+  lobbyPhase = typeof data.phase === 'string' ? data.phase : null;
+  const nextTutorial =
+    !gameActive &&
+    lobbyPhase === PHASES.TUTORIAL &&
+    Number.isInteger(data.tutorial?.step) &&
+    typeof data.tutorial?.move === 'string'
+      ? {step: data.tutorial.step, move: data.tutorial.move}
+      : null;
+  if (
+    nextTutorial?.step !== tutorial?.step ||
+    nextTutorial?.move !== tutorial?.move
+  ) {
+    // A new step starts from a clean detector, so no half-finished swing carries over.
+    tutorial = nextTutorial;
+    tutorialDetector = tutorial
+      ? createTutorialDetector(bowling ? 'bowling' : 'tennis', tutorial.move, {
+          hand: element('hand').value,
+        })
+      : null;
+  }
   if (lobbyPaused || !connected) {
     pendingTimings.clear();
     strokeNoticeUntil = 0;
   }
-  if (lobbyPaused || !connected || !gameActive)
+  if (lobbyPaused || !connected || (!gameActive && !tutorialActive()))
     stop('Paused. Motion will resume when the match is ready.');
   startMotion();
   controls();
@@ -1259,6 +1306,21 @@ function motion(event) {
     return;
   }
   phoneFeedback.motion(sample, now);
+  if (tutorialActive()) {
+    // Never sent to the game: the phone page only learns which move was seen.
+    const attempt = tutorialDetector?.push(
+      sample,
+      event.accelerationIncludingGravity,
+    );
+    if (attempt)
+      post({
+        type: 'wee:tutorial-attempt',
+        step: tutorial.step,
+        move: tutorial.move,
+        ...attempt,
+      });
+    return;
+  }
   if (bowling) {
     // Capture the last positioning line before the first forward-pitch sample
     // can move its gravity vector. Delivery recognition owns the aim lock.

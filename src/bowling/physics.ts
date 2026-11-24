@@ -10,6 +10,7 @@ import {
   World,
 } from 'cannon-es';
 import {FULL_RACK} from './match';
+import {BALL_RADIUS} from './ball';
 
 // SI dimensions from the USBC Equipment Specifications manual (October 2025).
 export const LANE = Object.freeze({
@@ -18,7 +19,7 @@ export const LANE = Object.freeze({
   deckEnd: 19.18,
   gutterWidth: 0.235,
 });
-export const BALL_RADIUS = 0.1085;
+
 export const PIN_HEIGHT = 0.381;
 export const PIN_COM = 0.145;
 export const FIXED_STEP = 1 / 240;

@@ -1,29 +1,11 @@
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader.js';
-import {BALL_RADIUS} from './physics';
+import {BALL_RADIUS, createBall} from './ball';
 
 export type PlayerHandedness = 'left' | 'right';
 
-export function createBowlingBallVisual(): THREE.Group {
-  const ball = new THREE.Group();
-  const sphere = new THREE.Mesh(
-    new THREE.SphereGeometry(BALL_RADIUS, 32, 24),
-    new THREE.MeshStandardMaterial({color: '#6e47ad', roughness: 0.16, metalness: 0.35}),
-  );
-  sphere.castShadow = true;
-  ball.add(sphere);
-
-  const holeMaterial = new THREE.MeshStandardMaterial({color: '#171526', roughness: 0.85});
-  for (const [x, z, radius] of [
-    [-0.024, -0.023, 0.009],
-    [0.024, -0.023, 0.009],
-    [0, 0.028, 0.012],
-  ]) {
-    const hole = new THREE.Mesh(new THREE.SphereGeometry(radius, 12, 8), holeMaterial);
-    hole.position.set(x, Math.sqrt(BALL_RADIUS ** 2 - x ** 2 - z ** 2) - radius * 0.4, z);
-    ball.add(hole);
-  }
-  return ball;
+export function createBowlingBallVisual(color: THREE.ColorRepresentation = '#6e47ad'): THREE.Group {
+  return createBall(0, 0, 0, color).group;
 }
 
 export interface PlayerController {
@@ -44,6 +26,7 @@ export interface PlayerOptions {
   scale?: number;
   onLoad?: () => void;
   handedness?: PlayerHandedness;
+  ballColor?: THREE.ColorRepresentation;
 }
 
 export function createPlayer(
@@ -59,6 +42,7 @@ export function createPlayer(
     scale = 0.2,
     onLoad,
     handedness: initialHandedness = 'right',
+    ballColor = '#6e47ad',
   } = options;
   let handedness = initialHandedness;
   const group = new THREE.Group();
@@ -174,7 +158,7 @@ export function createPlayer(
 
       const handSocket = model.getObjectByName('HandSocket');
       if (handSocket) {
-        heldBall = createBowlingBallVisual();
+        heldBall = createBowlingBallVisual(ballColor);
         const socketScale = handSocket.getWorldScale(new THREE.Vector3());
         heldBall.scale.set(1 / socketScale.x, 1 / socketScale.y, 1 / socketScale.z);
         heldBall.position.set(

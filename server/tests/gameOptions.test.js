@@ -5,6 +5,7 @@ import { io } from 'socket.io-client';
 import { EVENTS, PROTOCOL_VERSION as v, VOTE_SECONDS, isGameCommand, isGameOptions } from '@wee/shared/protocol.js';
 import { RoomStore } from '@server/src/RoomStore.js';
 import { createGameServer } from '@server/src/app.js';
+import { finishAvatarScene } from './finishAvatarScene.js';
 
 const tennisOptions = gameId => ({ gameId, sport: 'tennis', settings: {
   assistance: 'standard', botDifficulty: 'standard', autoMove: true,
@@ -21,6 +22,7 @@ function fixture(sport = 'tennis', count = 1) {
   }
   store.startGame('p1');
   now += 5000; store.finishCountdown(room.code); now += VOTE_SECONDS * 1000; store.expireVote(room.code);
+  finishAvatarScene(store, room.code, Array.from({ length: count }, (_, i) => `p${i + 1}`));
   const gameId = store.lobby(room.code).gameId;
   const options = sport === 'tennis' ? tennisOptions(gameId) : { gameId, sport };
   const command = (id = 'command-1', extra = {}) => ({ id, gameId, action: 'new-match', ...(sport === 'tennis' ? { format: 'full' } : {}), ...extra });
@@ -150,6 +152,7 @@ test('real sockets deliver actual game results, publish applied settings and iso
     await send(phone, EVENTS.PLAYER_READY, { ready: true });
     await send(phone, EVENTS.PLAYER_START, {});
   now += 5000; store.finishCountdown(room.code); now += VOTE_SECONDS * 1000; store.expireVote(room.code);
+    await send(phone, EVENTS.PLAYER_READY, { ready: true });
     const gameId = store.lobby(room.code).gameId;
     await send(tv, EVENTS.HOST_GAME_OPTIONS, tennisOptions(gameId));
     return { tv, phone, room, gameId };

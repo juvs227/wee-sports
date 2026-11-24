@@ -25,10 +25,11 @@ import {CODE_ALPHABET, CODE_LENGTH, COUNTDOWN_SECONDS, ERRORS, MAX_PLAYERS, NAME
 const MAX_CODE_ATTEMPTS = 50;
 const COUNTDOWN_MS = COUNTDOWN_SECONDS * 1000;
 const VOTE_MS = VOTE_SECONDS * 1000;
+const PLAYER_COLORS = ['#3b82f6', '#ef4444', '#2b9a66', '#e0a100'];
 
 const BEFORE_PLAY = new Set([PHASES.LOBBY, PHASES.READY]);
 /** After the countdown and before the game: the vote and the tutorial. */
-const PREGAME = new Set([PHASES.VOTE, PHASES.TUTORIAL]);
+const PREGAME = new Set([PHASES.VOTE, PHASES.TUTORIAL, PHASES.AVATARS]);
 /** Phases where a controller without setup pauses everyone. */
 const NEEDS_SETUP = new Set([PHASES.VOTE, PHASES.TUTORIAL, PHASES.GAME]);
 
@@ -37,6 +38,7 @@ export function randomCode(random = Math.random) {
   for (let i = 0; i < CODE_LENGTH; i += 1) {
     code += CODE_ALPHABET[Math.floor(random() * CODE_ALPHABET.length)];
   }
+
   return code;
 }
 
@@ -135,7 +137,14 @@ export class RoomStore {
     const unique = this.#uniqueName(room, cleaned);
     const memberId = this.#addSession(playerId, code, 'player');
     this.#members.get(memberId).capabilities = negotiation.capabilities;
-    room.players.set(memberId, { slot, name: unique, ready: false, setup: null, handedness: 'right' });
+    room.players.set(memberId, {
+      slot,
+      name: unique,
+      ready: false,
+      setup: null,
+      color: PLAYER_COLORS[slot],
+      handedness: 'right',
+    });
     room.savedMatch = null; // A different roster must start its own match.
     // Existing phones have already confirmed Play; a new guest only readies their own seat.
     if (room.phase !== PHASES.READY) this.#resetReady(room);
@@ -152,7 +161,7 @@ export class RoomStore {
     const member = this.#members.get(playerId);
     if (member?.role !== 'player') return { ok: false, error: ERRORS.NOT_PLAYER };
     const room = this.#rooms.get(member.code);
-    if (room?.phase !== PHASES.READY && room?.phase !== PHASES.COUNTDOWN) {
+    if (room?.phase !== PHASES.READY && room?.phase !== PHASES.COUNTDOWN && room?.phase !== PHASES.AVATARS) {
       return { ok: false, error: ERRORS.NO_READY_CHECK };
     }
     if (room.pausedAt !== null) return { ok: false, error: ERRORS.PAUSED };
@@ -173,6 +182,40 @@ export class RoomStore {
       room.inputGeneration++;
       return { ok: true, code: room.code, countdownCancelled: true };
     }
+    if (room.phase === PHASES.AVATARS && [...room.players.values()].every((seat) => seat.ready)) {
+      this.#clearReady(room);
+      room.phase = PHASES.GAME;
+      room.deadline = null;
+      return { ok: true, code: room.code, gameStarted: true };
+    }
+    return { ok: true, code: room.code };
+  }
+
+  setPlayerColor(socketId, payload) {
+    const playerId = this.#sockets.get(socketId);
+    const member = this.#members.get(playerId);
+    const room = member && this.#rooms.get(member.code);
+    const player = room?.players.get(playerId);
+    if (member?.role !== 'player' || !room || !player) return { ok: false, error: ERRORS.NOT_PLAYER };
+    if (room.phase !== PHASES.AVATARS) return { ok: false, error: ERRORS.NO_READY_CHECK };
+    if (typeof payload?.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(payload.color)) {
+      return { ok: false, error: 'bad-color' };
+    }
+    player.color = payload.color.toLowerCase();
+    return { ok: true, code: room.code };
+  }
+
+  setHostedPlayerColor(socketId, payload) {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    const room = member?.role === 'host' && this.#rooms.get(member.code);
+    if (!room) return { ok: false, error: ERRORS.NO_ROOM };
+    if (room.phase !== PHASES.AVATARS) return { ok: false, error: ERRORS.NO_READY_CHECK };
+    if (!Number.isInteger(payload?.slot) || typeof payload?.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(payload.color)) {
+      return { ok: false, error: 'bad-color' };
+    }
+    const player = [...room.players.values()].find((seat) => seat.slot === payload.slot);
+    if (!player) return { ok: false, error: 'no-player' };
+    player.color = payload.color.toLowerCase();
     return { ok: true, code: room.code };
   }
 
@@ -741,9 +784,8 @@ export class RoomStore {
   }
 
   /**
-   * Opens the tutorial vote once the countdown's deadline has passed, or starts
-   * the game for a sport without a tutorial. Returns null and changes nothing
-   * otherwise, so a stale or early tick is harmless.
+   * Opens the tutorial vote after the countdown, or the avatar selection when
+   * no tutorial is needed. Returns null for a stale or early tick.
    */
   finishCountdown(code) {
     const room = this.#rooms.get(code);
@@ -752,7 +794,7 @@ export class RoomStore {
     room.savedMatch = null;
     if (!hasTutorial(room.sport) || [...room.players.values()].every(player => player.skipTutorial)) {
       if (room.recoverySource) room.recoverySource.payload = null;
-      room.phase = PHASES.GAME;
+      room.phase = PHASES.AVATARS;
       room.deadline = null;
       return { code };
     }
@@ -767,8 +809,8 @@ export class RoomStore {
     const room = this.#rooms.get(code);
     if (!room) return null;
     const players = [...room.players.values()]
-      .map(({ slot, name, ready, setup, handedness }) => ({
-        slot, name, ready, setup,
+      .map(({ slot, name, ready, setup, color, handedness }) => ({
+        slot, name, ready, setup, color,
         ...(room.sport === 'bowling' && handedness === 'left' ? { handedness } : {}),
       }))
       .sort((a, b) => a.slot - b.slot);
@@ -1008,7 +1050,8 @@ export class RoomStore {
     room.vote = { picks: frozen };
     room.deadline = null;
     if (learners.size === 0) {
-      room.phase = PHASES.GAME;
+      room.phase = PHASES.AVATARS;
+      room.deadline = null;
       return;
     }
     room.phase = PHASES.TUTORIAL;
@@ -1027,7 +1070,8 @@ export class RoomStore {
     tutorial.step += 1;
     tutorial.done.clear();
     if (tutorial.learners.size === 0 || tutorial.step >= TUTORIAL_MOVES[room.sport].length) {
-      room.phase = PHASES.GAME;
+      room.phase = PHASES.AVATARS;
+      room.deadline = null;
       room.tutorial = null;
     }
     return true;
