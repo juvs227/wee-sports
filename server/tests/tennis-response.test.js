@@ -3,6 +3,7 @@ import { createSwingStream } from '@wee/src/controller/swingStream.js';
 import { tennisPower } from '@wee/src/controller/tennisPower.js';
 import { isSwing, PROTOCOL_VERSION, COUNTDOWN_SECONDS, VOTE_SECONDS } from '@wee/shared/protocol.js';
 import { RoomStore } from '@server/src/RoomStore.js';
+import { finishAvatarScene } from './finishAvatarScene.js';
 
 function detect(ratesAt, fast = true) {
   const stream = createSwingStream('Right', { fast });
@@ -54,6 +55,7 @@ test('the lobby forwards bounded strength only from the authenticated playing se
   store.finishCountdown(code);
   now += VOTE_SECONDS * 1000;
   store.expireVote(code);
+  finishAvatarScene(store, code, ['phone']);
   const event = { type: 'swing', id: 'one', gameId: store.lobby(code).gameId, label: 'Forehand', hand: 'Right' };
   expect(isSwing(event)).toBe(true); // Old clients still work.
   expect(store.swingTarget('phone', { ...event, power: .3, player: 2 }).event)

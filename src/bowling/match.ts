@@ -2,6 +2,7 @@
 export interface BowlingPlayer {
   player: number;
   name: string;
+  color?: string;
 }
 export interface BowlingScore extends BowlingPlayer {
   frames: number[][];

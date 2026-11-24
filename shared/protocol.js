@@ -64,8 +64,8 @@ export function hasTutorial(sport) {
 /**
  * Where a lobby is:
  *
- *   'lobby' -> 'ready' -> (everyone ready) -> 'countdown' -> 'vote' -> 'tutorial' | 'game'
- *   'tutorial' -> (every Yes voter did every move) -> 'game'
+ *   'lobby' -> 'ready' -> (everyone ready) -> 'countdown' -> 'vote' -> 'tutorial' | 'avatars'
+ *   'tutorial' -> (every Yes voter did every move) -> 'avatars' -> 'game'
  *
  * Nobody touches the TV: phones press Ready, vote, and do the tutorial moves.
  * A sport without TUTORIAL_MOVES goes from 'countdown' straight to 'game'.
@@ -78,13 +78,14 @@ export const PHASES = {
   COUNTDOWN: 'countdown',
   VOTE: 'vote',
   TUTORIAL: 'tutorial',
+  AVATARS: 'avatars',
   GAME: 'game',
 };
 
 /**
  * Every lobby snapshot below has this shape:
  *
- *   { code, sport, phase, players: [{ slot, name, ready, setup }], countdown,
+ *   { code, sport, phase, players: [{ slot, name, ready, setup, color }], countdown,
  *     vote, tutorial, paused, reconnecting: [{ name, msLeft }], setupPending: [name] }
  *
  * Create/join/resume acknowledgements additionally contain a private token
@@ -140,6 +141,10 @@ export const EVENTS = {
    * un-readying during the countdown cancels it. Ack: { ok }.
    */
   PLAYER_READY: 'player:ready',
+  /** Phone -> server: set this player's avatar color during the avatar screen. */
+  PLAYER_COLOR_SET: 'player:color-set',
+  /** TV -> server: set a player's color during the avatar screen. */
+  HOST_PLAYER_COLOR_SET: 'host:player-color-set',
   /** Phone -> server: { watch: boolean }. One final vote per player. Ack: { ok }. */
   TUTORIAL_VOTE: 'tutorial:vote',
   /**

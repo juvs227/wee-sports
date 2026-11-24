@@ -281,9 +281,10 @@ function receive(event: MessageEvent): void {
     }
     if (!world || gameId !== data.gameId) {
       const players = (Array.isArray(data.players) ? data.players : []).map(
-        (p: {slot: number; name: string}) => ({
+        (p: {slot: number; name: string; color?: string}) => ({
           player: p.slot + 1,
           name: p.name,
+          color: p.color,
         }),
       );
       if (!players.length) return;

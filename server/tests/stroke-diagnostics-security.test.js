@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import { RoomStore } from '@server/src/RoomStore.js';
 import { COUNTDOWN_SECONDS, PROTOCOL_VERSION as v, VOTE_SECONDS } from '@wee/shared/protocol.js';
+import { finishAvatarScene } from './finishAvatarScene.js';
 
 function fixture() {
   let now = 0;
@@ -14,6 +15,7 @@ function fixture() {
     store.finishCountdown(host.code);
     now += VOTE_SECONDS * 1000;
     store.expireVote(host.code);
+    finishAvatarScene(store, host.code, [`${prefix}-phone`]);
     const gameId = store.lobby(host.code).gameId;
     return { host, phone, gameId,
       input: id => store.swingTarget(`${prefix}-phone`, { type: 'swing', id, gameId, label: 'Forehand', hand: 'Right' }),

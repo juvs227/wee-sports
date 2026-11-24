@@ -9,6 +9,7 @@ import { TvGame } from '../components/TvGame.jsx';
 import { TvReady } from '../components/TvReady.jsx';
 import { TvTutorial } from '../components/TvTutorial.jsx';
 import { TvVote } from '../components/TvVote.jsx';
+import { TvAvatars } from '../components/TvAvatars.jsx';
 import { ThemeToggle } from '../components/ThemeToggle.jsx';
 import { LobbyBackdrop } from '../components/LobbyBackdrop.jsx';
 import { errorText } from '../lib/errors.js';
@@ -210,6 +211,7 @@ export default function HostStub() {
   // The vote, then its reveal for a moment, then the tutorial if anyone asked.
   if (lobby.phase === PHASES.VOTE || revealing) return <TvVote lobby={lobby} />;
   if (lobby.phase === PHASES.TUTORIAL) return <TvTutorial lobby={lobby} />;
+  if (lobby.phase === PHASES.AVATARS) return <TvAvatars lobby={lobby} />;
   if (lobby.phase === PHASES.COUNTDOWN) return <TvCountdown lobby={lobby} onTick={audio.onCountdown} fullscreen={fullscreen} fullscreenAvailable={fullscreenAvailable} onFullscreen={enterGameView} />;
 
   return (

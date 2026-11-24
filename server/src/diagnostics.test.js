@@ -18,7 +18,7 @@ test('relay diagnostics require membership, are rate-limited and expose only opt
   app.http.listen(0, '127.0.0.1'); await once(app.http, 'listening');
   const connect = async () => {
     const client = io(`http://127.0.0.1:${app.http.address().port}`, {transports: ['websocket'], reconnection: false});
-    clients.push(client); await once(client, 'connect'); return client;
+    clients.push(client); await once(client, 'connect', {signal: AbortSignal.timeout(2000)}); return client;
   };
   const send = (client, name, value) => client.timeout(2000).emitWithAck(name, value);
   const tv = await connect(), phone = await connect(), stranger = await connect();
@@ -33,13 +33,14 @@ test('relay diagnostics require membership, are rate-limited and expose only opt
   await send(phone, EVENTS.PLAYER_READY, {ready: true, skipTutorial: true});
   await send(phone, EVENTS.PLAYER_START, {});
   now += 5000; store.finishCountdown(room.code);
+  await send(phone, EVENTS.PLAYER_READY, {ready: true});
   assert.equal((await send(phone, DIAGNOSTICS_PROBE, {enabled: true})).ok, true);
   assert.equal((await send(phone, DIAGNOSTICS_PROBE, {enabled: true})).error, 'rate-limited');
   const lobby = store.lobby(room.code);
   const aim = {gameId: lobby.gameId, generation: lobby.inputGeneration, hostEpoch: lobby.hostEpoch, seq: 1,
     aim: .2, locked: false};
   store.setGameState(tv.id, {gameId:lobby.gameId, phase:'ready',currentPlayer:1,frame:1});
-  const delivered = once(tv, EVENTS.GAME_AIM);
+  const delivered = once(tv, EVENTS.GAME_AIM, {signal: AbortSignal.timeout(2000)});
   phone.emit(EVENTS.PLAYER_AIM, aim); await delivered;
   phone.emit(EVENTS.PLAYER_AIM, {...aim, seq: 2}); // Same server tick: deliberately rate-limited.
   await delay(1050);
