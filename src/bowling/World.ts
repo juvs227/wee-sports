@@ -218,7 +218,6 @@ export class BowlingWorld {
     this.match = new BowlingMatch(players);
     if (this.bowlingPlayers) {
       this.syncPlayerModels(this.players);
-      this.setActivePlayer(this.match.getState().currentPlayer);
     }
     this.pendingRoll = null;
     this.releaseDelay = 0;
@@ -232,6 +231,13 @@ export class BowlingWorld {
     this.syncBodies();
     this.render();
     this.onState?.(this.getState());
+  }
+
+  setPlayerHandedness(playerNumber: number, handedness: 'left' | 'right'): void {
+    const player = this.players.find(candidate => candidate.player === playerNumber);
+    if (!player || player.handedness === handedness) return;
+    player.handedness = handedness;
+    this.bowlingPlayers.get(playerNumber)?.setHandedness(handedness);
   }
 
   dispose(): void {
@@ -430,8 +436,13 @@ export class BowlingWorld {
 
     const colors = [0x2f80ed, 0xe5484d, 0x2b9a66, 0xe0a100];
     for (const player of players) {
-      if (this.bowlingPlayers.has(player.player)) continue;
+      const existing = this.bowlingPlayers.get(player.player);
+      if (existing) {
+        existing.setHandedness(player.handedness ?? 'right');
+        continue;
+      }
       const model = createBowlingPlayer(0.4, 0, -0.35, colors[player.player - 1], {
+        handedness: player.handedness ?? 'right',
         onLoad: () => this.render(),
       });
       model.group.rotation.y = Math.PI;

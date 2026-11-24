@@ -60,6 +60,32 @@ test('players take the lowest seat and every join returns the lobby', () => {
   ]);
 });
 
+test('bowling players can update only their own handedness', () => {
+  const { store, code } = openRoom(new RoomStore(), 'bowling');
+  store.join('a', { v, code, name: 'Ada' });
+  store.join('b', { v, code, name: 'Bo' });
+
+  assert.deepEqual(store.lobby(code).players.map(({ handedness, ...player }) => player), [
+    { slot: 0, name: 'Ada', ready: false, setup: null },
+    { slot: 1, name: 'Bo', ready: false, setup: null },
+  ]);
+  assert.deepEqual(store.setHandedness('a', { handedness: 'left' }), {
+    ok: true,
+    code,
+    changed: true,
+  });
+  assert.deepEqual(store.lobby(code).players.map(player => player.handedness ?? 'right'), [
+    'left',
+    'right',
+  ]);
+  assert.deepEqual(store.setHandedness('a', { handedness: 'left' }), {
+    ok: true,
+    code,
+    changed: false,
+  });
+  assert.equal(store.setHandedness('a', { handedness: 'Left' }).error, 'bad-handedness');
+});
+
 for (const sport of ['tennis', 'bowling']) test(`${sport} rejects joins beyond its playing seats, including reserved seats`, () => {
   const { store, code } = openRoom(new RoomStore(), sport);
   let first;

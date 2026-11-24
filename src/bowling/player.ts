@@ -30,6 +30,7 @@ export interface PlayerController {
   group: THREE.Group;
   mixer: THREE.AnimationMixer | null;
   handedness: PlayerHandedness;
+  setHandedness: (handedness: PlayerHandedness) => void;
   holdBall: () => void;
   releaseBall: () => void;
   playSwing: () => void;
@@ -57,12 +58,18 @@ export function createPlayer(
     animationPath = '/assets/animations/bowling.glb',
     scale = 0.2,
     onLoad,
-    handedness = 'right',
+    handedness: initialHandedness = 'right',
   } = options;
+  let handedness = initialHandedness;
   const group = new THREE.Group();
-  group.position.set(x, y, z);
+  group.position.set(
+    Math.abs(x) * (handedness === 'left' ? -1 : 1),
+    y,
+    z,
+  );
   let swingAction: THREE.AnimationAction | null = null;
   let swingRequested = false;
+  let animations: THREE.AnimationClip[] = [];
   let heldBall: THREE.Group | null = null;
   let holdingBall = false;
   let disposed = false;
@@ -80,10 +87,33 @@ export function createPlayer(
     swingAction.clampWhenFinished = false;
     swingAction.play();
   };
+  const selectSwingAction = (): void => {
+    if (!controller.mixer) return;
+    swingAction?.stop();
+    swingAction = null;
+    const clipName = handedness === 'right' ? 'BowlRight' : 'BowlLeft';
+    const clip = animations.find(animation => animation.name === clipName);
+    if (!clip) {
+      swingRequested = false;
+      console.error(`Animation "${clipName}" not found in bowling animation asset.`);
+      return;
+    }
+    swingAction = controller.mixer.clipAction(clip);
+    if (swingRequested) playSwingAction();
+  };
   const controller: PlayerController = {
     group,
     mixer: null,
-    handedness,
+    get handedness() {
+      return handedness;
+    },
+    setHandedness(nextHandedness): void {
+      const changed = nextHandedness !== handedness;
+      handedness = nextHandedness;
+      group.position.x = Math.abs(group.position.x) * (handedness === 'left' ? -1 : 1);
+      if (!changed) return;
+      selectSwingAction();
+    },
     holdBall(): void {
       holdingBall = true;
       if (heldBall) heldBall.visible = true;
@@ -163,15 +193,9 @@ export function createPlayer(
         animationPath,
         animationGltf => {
           if (disposed) return;
-          const clipName = handedness === 'right' ? 'BowlRight' : 'BowlLeft';
-          const clip = animationGltf.animations.find(animation => animation.name === clipName);
-          if (!clip) {
-            console.error(`Animation "${clipName}" not found in bowling animation asset.`);
-            return;
-          }
+          animations = animationGltf.animations;
           controller.mixer = new THREE.AnimationMixer(model);
-          swingAction = controller.mixer.clipAction(clip);
-          if (swingRequested) playSwingAction();
+          selectSwingAction();
         },
         undefined,
         error => console.error('Failed to load bowling player animation:', error),

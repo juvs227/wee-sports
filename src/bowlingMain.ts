@@ -279,13 +279,19 @@ function receive(event: MessageEvent): void {
       if (world && wasPaused !== paused) render(world.getState());
       return;
     }
+    const players = (Array.isArray(data.players) ? data.players : []).map(
+      (p: {slot: number; name: string; handedness?: 'left' | 'right'}) => ({
+        player: p.slot + 1,
+        name: p.name,
+        handedness: p.handedness === 'left' ? 'left' : 'right',
+      }),
+    );
+    if (world && gameId === data.gameId) {
+      for (const player of players) {
+        world.setPlayerHandedness(player.player, player.handedness);
+      }
+    }
     if (!world || gameId !== data.gameId) {
-      const players = (Array.isArray(data.players) ? data.players : []).map(
-        (p: {slot: number; name: string}) => ({
-          player: p.slot + 1,
-          name: p.name,
-        }),
-      );
       if (!players.length) return;
       audioEvent('roll-end');
       world?.dispose();

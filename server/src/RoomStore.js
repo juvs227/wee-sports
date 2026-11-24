@@ -135,7 +135,7 @@ export class RoomStore {
     const unique = this.#uniqueName(room, cleaned);
     const memberId = this.#addSession(playerId, code, 'player');
     this.#members.get(memberId).capabilities = negotiation.capabilities;
-    room.players.set(memberId, { slot, name: unique, ready: false, setup: null });
+    room.players.set(memberId, { slot, name: unique, ready: false, setup: null, handedness: 'right' });
     room.savedMatch = null; // A different roster must start its own match.
     // Existing phones have already confirmed Play; a new guest only readies their own seat.
     if (room.phase !== PHASES.READY) this.#resetReady(room);
@@ -576,6 +576,19 @@ export class RoomStore {
     return { ok: true, code: room.code };
   }
 
+  setHandedness(socketId, payload) {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    const room = member && this.#rooms.get(member.code);
+    const player = member?.role === 'player' && room?.sport === 'bowling'
+      ? room.players.get(member.id)
+      : null;
+    if (!player) return { ok: false, error: 'not-bowling-player' };
+    if (!['left', 'right'].includes(payload?.handedness)) return { ok: false, error: 'bad-handedness' };
+    const changed = player.handedness !== payload.handedness;
+    player.handedness = payload.handedness;
+    return { ok: true, code: room.code, changed };
+  }
+
   /** Resolve the target from the authenticated seat; clients cannot choose another room. */
   swingTarget(socketId, event) {
     const member = this.#members.get(this.#sockets.get(socketId));
@@ -754,7 +767,10 @@ export class RoomStore {
     const room = this.#rooms.get(code);
     if (!room) return null;
     const players = [...room.players.values()]
-      .map(({ slot, name, ready, setup }) => ({ slot, name, ready, setup }))
+      .map(({ slot, name, ready, setup, handedness }) => ({
+        slot, name, ready, setup,
+        ...(room.sport === 'bowling' && handedness === 'left' ? { handedness } : {}),
+      }))
       .sort((a, b) => a.slot - b.slot);
     const countdown =
       room.phase === PHASES.COUNTDOWN ? { msLeft: Math.max(0, room.deadline - (room.pausedAt ?? this.#now())) } : null;

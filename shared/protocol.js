@@ -148,6 +148,7 @@ export const EVENTS = {
   TUTORIAL_MOVE: 'tutorial:move',
   /** Controller setup is reported by each phone before it can become ready. */
   PLAYER_SETUP: 'player:setup',
+  PLAYER_HANDEDNESS: 'player:handedness',
   /** Current TV or seated phone -> shared TV sound preference for this lobby. */
   SOUND_SET: 'sound:set',
   /** P1 phone -> its TV: validated match options, with an actual game acknowledgement. */

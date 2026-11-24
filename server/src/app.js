@@ -229,6 +229,11 @@ export function createGameServer({ store = new RoomStore(), origins = [], tickMs
       reply(ack, result);
       if (result.ok) broadcast(result.code);
     });
+    socket.on(EVENTS.PLAYER_HANDEDNESS, (payload, ack) => {
+      const result = store.setHandedness(socket.id, payload);
+      reply(ack, result);
+      if (result.ok && result.changed) broadcast(result.code);
+    });
     // Phones drive the vote and the tutorial; everyone sees each vote and check mark.
     for (const [event, method] of [[EVENTS.TUTORIAL_VOTE, 'vote'], [EVENTS.TUTORIAL_MOVE, 'tutorialMove']]) {
       socket.on(event, (payload, ack) => {

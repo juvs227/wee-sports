@@ -1,6 +1,25 @@
+import { accessSync, constants as fsConstants } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { delimiter, join } from 'node:path';
 import { phoneBuildEnvironment, waitForGameServer, waitForTunnelOrigin } from './phone-session.mjs';
+
+function findCloudflared() {
+  const executable = process.platform === 'win32' ? 'cloudflared.exe' : 'cloudflared';
+  const inPath = (process.env.PATH ?? '').split(delimiter).filter(Boolean).map(directory => join(directory, executable));
+  const commonInstallPaths = process.platform === 'darwin'
+    ? ['/opt/homebrew/bin/cloudflared', '/usr/local/bin/cloudflared']
+    : process.platform === 'win32' ? [] : ['/usr/local/bin/cloudflared', '/usr/bin/cloudflared'];
+  for (const candidate of [...inPath, ...commonInstallPaths]) {
+    try {
+      accessSync(candidate, fsConstants.X_OK);
+      return candidate;
+    } catch {
+      // Try the next standard location.
+    }
+  }
+  return executable;
+}
 
 // One command builds the app, creates an HTTPS tunnel and serves the game.
 // Serve the production build so the public URL does not expose Vite's file API.
@@ -32,7 +51,8 @@ try {
   const existing = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(500) }).catch(() => null);
   if (existing?.ok) throw new Error(`Port ${port} already has a game running. Stop that session first, then run npm run dev.`);
   const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-  const check = launch('cloudflared', ['--version'], { stdio: 'ignore' });
+  const cloudflared = findCloudflared();
+  const check = launch(cloudflared, ['--version'], { stdio: 'ignore' });
   await new Promise((resolve, reject) => {
     const timer = setTimeout(() => { check.kill('SIGTERM'); reject(new Error('cloudflared did not respond. Check your installation.')); }, 5000);
     check.once('error', () => { clearTimeout(timer); reject(new Error('Install the official cloudflared client once (macOS: brew install cloudflared), then run npm run dev again. See README for other systems.')); });
@@ -46,7 +66,9 @@ try {
   });
   // Tunnel provisioning and the build are independent. Serve nothing until
   // both finish, then verify HTTPS reachability before advertising the QR.
-  const tunnel = launch('cloudflared', ['tunnel', '--no-autoupdate', '--protocol', 'http2', '--url', `http://127.0.0.1:${port}`], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const tunnel = launch(cloudflared, ['tunnel', '--no-autoupdate', '--protocol', 'http2', '--url', `http://127.0.0.1:${port}`], { stdio: ['ignore', 'pipe', 'pipe'] });
+  tunnel.stdout.on('data', chunk => process.stdout.write(chunk));
+  tunnel.stderr.on('data', chunk => process.stderr.write(chunk));
   const tunnelOrigin = waitForTunnelOrigin(tunnel, { signal: shutdown.signal });
   let server;
   let tunnelRunning = true;

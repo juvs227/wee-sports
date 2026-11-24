@@ -8,6 +8,7 @@ vi.mock('@wee/src/bowling/World', () => ({BowlingWorld: class {
     runtime.world = this;
     this.rolling = false;
     this.start = vi.fn(); this.stop = vi.fn(); this.dispose = vi.fn(); this.setAim = vi.fn();
+    this.setPlayerHandedness = vi.fn();
     this.roll = vi.fn(() => { this.rolling = true; this.onState(this.getState()); return {ok: true}; });
     this.reset = vi.fn(() => {
       runtime.match = new BowlingMatch([{player: 1, name: 'Yit'}]);
@@ -57,6 +58,12 @@ test('current phone aim reaches the TV precisely without rebuilding scorecards p
   expect(getState).not.toHaveBeenCalled();
   aim({seq: 2, aim: -.8}); aim({seq: 0});
   expect(runtime.world.setAim).toHaveBeenCalledTimes(2);
+});
+
+test('live player handedness updates reach the bowling world', async () => {
+  await import('@wee/src/bowlingMain.ts'); state();
+  state({players: [{slot: 0, name: 'Yit', handedness: 'left'}]});
+  expect(runtime.world.setPlayerHandedness).toHaveBeenCalledWith(1, 'left');
 });
 
 test('stale, wrong-player and inactive aim cannot move the lane guide', async () => {
