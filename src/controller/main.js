@@ -1,8 +1,9 @@
 import {createSwingOrientation} from './swingOrientation.js';
-import {focusControllerSection} from './focusSection.js';
 import {createSwingStream} from './swingStream.js';
+import {focusControllerSection} from './focusSection.js';
 import {
   createSimpleSwingStream,
+  createThresholdSwingStream,
   createBowlingDeliveryGate,
 } from './motionGestures.js';
 import {
@@ -872,11 +873,7 @@ function startMotion() {
   stream = bowling
     ? null
     : mode === 'auto'
-      ? createSwingStream(element('hand').value, {
-          early: element('response').value === 'early',
-          fast: element('response').value === 'fast',
-          suppressReturns: element('suppress-returns').checked,
-        })
+      ? createThresholdSwingStream(element('hand').value)
       : createSimpleSwingStream(mode);
   tennisAim = createTennisAim({sensitivity: motionSensitivity});
   started = performance.now();
