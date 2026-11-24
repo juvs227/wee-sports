@@ -107,6 +107,7 @@ export function toLegacyMotionSample(sample, {timeOriginSeconds = 0, bias} = {})
     rotationBeta: rate.y / DEG_TO_RAD - (bias?.beta ?? 0),
     rotationGamma: rate.z / DEG_TO_RAD - (bias?.gamma ?? 0)};
   if (sample.acceleration) legacy.acceleration = {...sample.acceleration};
+  if (sample.accelerationIncludingGravity) legacy.accelerationIncludingGravity = {...sample.accelerationIncludingGravity};
   return legacy;
 }
 /** Exact first-order response over elapsed time; cadence does not alter tuning. */
