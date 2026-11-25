@@ -37,7 +37,7 @@ Buttons:
 A touch control is also available for phones without motion detection, with the following UI controls.
 ![6_touch](user_manual_pictures/6_touch.png)
 
-Note that the movement control in tennis is done by automatic tracking, player need not control in-game movement other than serving and hitting.
+Note that for tennis, player positioning is done by computer control with automatic tracking, player need not control it.
 
 ## Bowling
 ![7_bowling](user_manual_pictures/7_bowling.png)

@@ -52,10 +52,6 @@ assets; provide a trusted HTTPS origin for phone sensors when using that command
 ## Play
 Check out [User Manual](manuals/USER_MANUAL.md)
 
-
-Player positioning is assisted by default; manual movement keys do not override
-that assistance.
-
 ## Check changes
 
 ```sh
