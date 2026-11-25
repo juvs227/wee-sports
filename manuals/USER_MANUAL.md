@@ -1,38 +1,56 @@
+# User Manual
 
-1. Choose Tennis or Bowling on the TV.
-2. Join from a phone with a playing name. Use motion or touch controls.
-3. Player one starts the game when the controllers are ready. Motion setup
-   completes automatically after fresh sensor readings. Settings, pause, sound
-   and changing sports are in the controller tools.
+## Choose Tennis or Bowling on the TV
+Select the game you want to play.
+![1_start](user_manual_pictures/1_start.png)
+## Join from a phone with a playing name
+You will see a QR code displayed on the website.
+![2_qr](user_manual_pictures/2_qr.png)
+Use your phone to scan it, and you will be able to type your name and enter the game lobby.
+![2_phone](user_manual_pictures/2_phone.png)
 
-To exit, tap **Go home** on the phone and confirm. **Keep playing** cancels the
-exit. Confirming releases that player's seat and returns an active match to the
-TV's lobby, where its QR can be used to join another game. Remaining players stay
-in the room. Temporary connection drops still use the reconnect grace period;
-an intentional exit does not wait for that timer. A saved room on the phone
-homepage can also be released with **Leave room**.
+## Game lobby
+This is the game lobby interface and others may join.
+![3_lobby](user_manual_pictures/3_lobby.png)
+When everyone join the host may start the game on his/her phone.
+![3_phone_lobby](user_manual_pictures/3_phone_lobby.png)
 
-During a temporary disconnect, the TV and phone notices show the remaining
-reconnect time for each missing player. An offline phone labels its local timer
-as an estimate until server updates return. Expiry is decided by the server;
-host sessions held without a deadline display a waiting message instead.
+## Customise avatar
+You may change the avatar of the player on your phone, and a preview is available on the screen
+![4_color](user_manual_pictures/4_color.png)
 
-Tennis supports one player against a bot or two players, with assisted positioning,
-racket contact detection and court-targeted shots. This foundation branch preserves
-the team's current tennis rules; PR 2 adds the scoring upgrade. Bowling supports
-one to eight players and uses ten-frame scoring. Aim with the phone, then swing to
-release the ball, or use the touch controls. Post-release spin is disabled for now;
-there is no extra steering step after the ball leaves your hand.
+## Tutorial
+All avilable games are equipped with a simple tutorial, new players may opt in for it. It will be skipped if everyone voted "no" for the tutorial. Otherwise, only the people who voted "yes" would need to do the tutorial. The following is a snapshot of tennis tutorial:
+![5_tutorial](user_manual_pictures/5_tutorial.png)
+In case a player struggle to pass a tutorial, he/she may also press "skip this move" to progress.
+![5_phone](user_manual_pictures/5_phone.png)
 
-Shared room membership authenticates input; old or duplicate actions cannot
-become a new swing or roll after reconnect. The browser tennis controller can use
-a private WebRTC data channel with the same server-authorized room boundaries and
-a Socket.IO fallback.
+## Tennis
+![6_tennis](user_manual_pictures/6_tennis.png)
+The scoreboard is shown in the tennis game. With the green colored ball indicate who is the current server. Game round and scores are displayed on the scoreboard.
 
-### Tennis keyboard controls
+Buttons:
+1. Mute button for game audio.
+2. Full screen
+3. Options to quit or pause the game.
+   
+A touch control is also available for phones without motion detection, with the following UI controls.
+![6_touch](user_manual_pictures/6_touch.png)
 
-- **J / K:** backhand / forehand swing.
-- **Space:** serve when it is your turn.
-- **B / Shift+B:** feed a practice ball.
-- **N / Shift+N:** feed the bot.
-- **H:** toggle debug hitboxes and location indicators.
+Note that the movement control in tennis is done by automatic tracking, player need not control in-game movement other than serving and hitting.
+
+## Bowling
+![7_bowling](user_manual_pictures/7_bowling.png)
+The scoreboard will show all scores of all players. The display buttons are same as tennis. (subject to change).
+
+A dotted line is shown to assist player bowl.
+
+A touch control is also available for phones without motion detection, with the following UI controls.
+![7_touch](user_manual_pictures/7_touch.png)
+
+## Settings
+If the user feel the motion feels strange, they may make use of settings on the phone to adjust some settings and retunr the motion calibration.
+
+## Notes
+If a player disconnects, the screen shows how long they have to reconnect.
+
