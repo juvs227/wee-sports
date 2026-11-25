@@ -9,9 +9,8 @@ import {WebSocketServer, WebSocket} from 'ws';
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const FILES = new Set([
   '/tools/orientation-test/index.html',
-  '/src/controller/orientationCalibration.js',
-  '/src/controller/androidCalibration.js',
-  '/src/controller/iosCalibration.js',
+  '/src/controller/orientationSource.js',
+  '/src/controller/iosFusion.js',
 ]);
 
 // This diagnostic server serves only its four public files, never repo data.
