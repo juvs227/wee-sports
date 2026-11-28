@@ -132,7 +132,10 @@ for (const sport of ['tennis', 'bowling']) {
     const view = f.store.lobby(f.host.code);
     expect(view).toMatchObject({phase: PHASES.READY, gameId: null, leaderSlot: 0});
     expect(view.inputGeneration).toBeGreaterThan(game.inputGeneration);
-    expect(view.players).toEqual([{slot: 0, name: 'Player 2', ready: false, setup: 'buttons', color: '#ef4444'}]);
+    expect(view.players).toEqual([{
+      slot: 0, name: 'Player 2', ready: false, setup: 'buttons',
+      color: '#ef4444', racketColor: '#ef4444', ballColor: '#ef4444',
+    }]);
     expect(f.store.lobbyForSocket('p2', view)).toMatchObject({slot: 0, name: 'Player 2'});
     expect(f.store.resume('p2-back', {v, code: f.host.code, role: 'player', token: f.phones[1].token}).slot).toBe(0);
     expect(f.store.setReady('p2-back', {ready: true}).countdownStarted).toBeUndefined();

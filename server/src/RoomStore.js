@@ -27,6 +27,14 @@ const COUNTDOWN_MS = COUNTDOWN_SECONDS * 1000;
 const VOTE_MS = VOTE_SECONDS * 1000;
 const PLAYER_COLORS = ['#3b82f6', '#ef4444', '#2b9a66', '#e0a100'];
 
+function colorField(sport, target) {
+  const resolvedTarget = target ?? (sport === 'bowling' ? 'ball' : 'player');
+  if (resolvedTarget === 'player') return 'color';
+  if (sport === 'tennis' && resolvedTarget === 'racket') return 'racketColor';
+  if (sport === 'bowling' && resolvedTarget === 'ball') return 'ballColor';
+  return null;
+}
+
 const BEFORE_PLAY = new Set([PHASES.LOBBY, PHASES.READY]);
 /** After the countdown and before the game: the vote and the tutorial. */
 const PREGAME = new Set([PHASES.VOTE, PHASES.TUTORIAL, PHASES.AVATARS]);
@@ -137,7 +145,16 @@ export class RoomStore {
     const unique = this.#uniqueName(room, cleaned);
     const memberId = this.#addSession(playerId, code, 'player');
     this.#members.get(memberId).capabilities = negotiation.capabilities;
-    room.players.set(memberId, { slot, name: unique, ready: false, setup: null, color: PLAYER_COLORS[slot] });
+    room.players.set(memberId, {
+      slot,
+      name: unique,
+      ready: false,
+      setup: null,
+      color: PLAYER_COLORS[slot],
+      racketColor: PLAYER_COLORS[slot],
+      ballColor: PLAYER_COLORS[slot],
+      handedness: 'right',
+    });
     room.savedMatch = null; // A different roster must start its own match.
     // Existing phones have already confirmed Play; a new guest only readies their own seat.
     if (room.phase !== PHASES.READY) this.#resetReady(room);
@@ -178,7 +195,7 @@ export class RoomStore {
     if (room.phase === PHASES.AVATARS && [...room.players.values()].every((seat) => seat.ready)) {
       this.#clearReady(room);
       // Phones that skipped the vote at setup can vote once everyone confirms a color.
-      if (!room.vote && hasTutorial(room.sport) && [...room.players.values()].some(seat => !seat.skipTutorial)) {
+      if (!room.vote && hasTutorial(room.sport) && [...room.players.values()].some((seat) => !seat.skipTutorial)) {
         this.#openVote(room, PHASES.GAME);
         return { ok: true, code: room.code };
       }
@@ -196,10 +213,11 @@ export class RoomStore {
     const player = room?.players.get(playerId);
     if (member?.role !== 'player' || !room || !player) return { ok: false, error: ERRORS.NOT_PLAYER };
     if (room.phase !== PHASES.AVATARS) return { ok: false, error: ERRORS.NO_READY_CHECK };
-    if (typeof payload?.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(payload.color)) {
+    const field = colorField(room.sport, payload?.target);
+    if (!field || typeof payload?.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(payload.color)) {
       return { ok: false, error: 'bad-color' };
     }
-    player.color = payload.color.toLowerCase();
+    player[field] = payload.color.toLowerCase();
     return { ok: true, code: room.code };
   }
 
@@ -208,12 +226,13 @@ export class RoomStore {
     const room = member?.role === 'host' && this.#rooms.get(member.code);
     if (!room) return { ok: false, error: ERRORS.NO_ROOM };
     if (room.phase !== PHASES.AVATARS) return { ok: false, error: ERRORS.NO_READY_CHECK };
-    if (!Number.isInteger(payload?.slot) || typeof payload?.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(payload.color)) {
+    const field = colorField(room.sport, payload?.target);
+    if (!Number.isInteger(payload?.slot) || !field || typeof payload?.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(payload.color)) {
       return { ok: false, error: 'bad-color' };
     }
     const player = [...room.players.values()].find((seat) => seat.slot === payload.slot);
     if (!player) return { ok: false, error: 'no-player' };
-    player.color = payload.color.toLowerCase();
+    player[field] = payload.color.toLowerCase();
     return { ok: true, code: room.code };
   }
 
@@ -617,6 +636,19 @@ export class RoomStore {
     return { ok: true, code: room.code };
   }
 
+  setHandedness(socketId, payload) {
+    const member = this.#members.get(this.#sockets.get(socketId));
+    const room = member && this.#rooms.get(member.code);
+    const player = member?.role === 'player' && room?.sport === 'bowling'
+      ? room.players.get(member.id)
+      : null;
+    if (!player) return { ok: false, error: 'not-bowling-player' };
+    if (!['left', 'right'].includes(payload?.handedness)) return { ok: false, error: 'bad-handedness' };
+    const changed = player.handedness !== payload.handedness;
+    player.handedness = payload.handedness;
+    return { ok: true, code: room.code, changed };
+  }
+
   /** Resolve the target from the authenticated seat; clients cannot choose another room. */
   swingTarget(socketId, event) {
     const member = this.#members.get(this.#sockets.get(socketId));
@@ -792,7 +824,10 @@ export class RoomStore {
     const room = this.#rooms.get(code);
     if (!room) return null;
     const players = [...room.players.values()]
-      .map(({ slot, name, ready, setup, color }) => ({ slot, name, ready, setup, color }))
+      .map(({ slot, name, ready, setup, color, racketColor, ballColor, handedness }) => ({
+        slot, name, ready, setup, color, racketColor, ballColor,
+        ...(room.sport === 'bowling' && handedness === 'left' ? { handedness } : {}),
+      }))
       .sort((a, b) => a.slot - b.slot);
     const countdown =
       room.phase === PHASES.COUNTDOWN ? { msLeft: Math.max(0, room.deadline - (room.pausedAt ?? this.#now())) } : null;

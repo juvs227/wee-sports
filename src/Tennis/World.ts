@@ -87,6 +87,14 @@ export class World {
     }
   }
 
+  public setPlayerRacketColors(
+    player1Color?: number,
+    player2Color?: number,
+  ): void {
+    if (player1Color !== undefined) this.player1.setRacketColor(player1Color);
+    if (player2Color !== undefined) this.player2.setRacketColor(player2Color);
+  }
+
   constructor(container: HTMLElement) {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0xc4d9d3);

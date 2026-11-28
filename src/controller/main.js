@@ -113,6 +113,13 @@ let motionAcquired = false;
 // partial gestures and resume from fresh samples. Backgrounding resets below.
 const automaticMotion = createAutomaticMotionSetup({readyGapSeconds: 1.5});
 element('hand').value = savedSetup?.hand ?? controllerPreferences.values.hand;
+function publishHandedness() {
+  if (embedded && bowling)
+    post({
+      type: 'wee:controller-handedness',
+      handedness: element('hand').value.toLowerCase(),
+    });
+}
 let strengthProfile = null;
 let rehearsal = null;
 let rehearsalStream = null;
@@ -948,6 +955,7 @@ element('skip-strength').onclick = () => {
 element('hand').onchange = () => {
   setupIntent++;
   controllerPreferences.update({hand: element('hand').value});
+  publishHandedness();
   strengthProfile = null;
   // Gyro bias is hand-independent once verified, but an unverified stored
   // setup must never restore another hand's power profile or selection.
@@ -1144,6 +1152,7 @@ window.addEventListener('message', event => {
     // already verified controller mode without dropping it to an unset state.
     lastSetup = undefined;
   }
+  publishHandedness();
   if (data.gameId !== tennisGameId || (gameActive && !data.playing)) {
     // A returned match cannot keep a pending roll or an open tuning panel
     // attached to the next game. Verified controller setup stays available.

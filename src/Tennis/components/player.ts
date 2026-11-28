@@ -30,6 +30,7 @@ export interface PlayerController {
   move: (dx: number, dz: number, delta: number) => void;
   setPosition: (x: number, z: number) => void;
   setColor: (color: number) => void;
+  setRacketColor: (color: THREE.ColorRepresentation) => void;
 }
 
 export interface PlayerOptions {
@@ -72,6 +73,7 @@ export function createPlayer(
   let model: THREE.Object3D | null = null;
   let racketObject: THREE.Object3D | null = null;
   let playerColor = color;
+  let racketColor: THREE.ColorRepresentation = color;
   let handBone: THREE.Object3D | null = null;
   const appliedHandOffset = new THREE.Vector3();
   function isRacketDescendant(obj: THREE.Object3D): boolean {
@@ -91,6 +93,16 @@ export function createPlayer(
         if ('color' in material) {
           (material as THREE.MeshStandardMaterial).color.setHex(playerColor);
         }
+      });
+    });
+  }
+  function applyRacketColor(): void {
+    const frame = racketObject?.getObjectByName('RacketFrame');
+    frame?.traverse(child => {
+      if (!(child instanceof THREE.Mesh)) return;
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      materials.forEach(material => {
+        if ('color' in material) material.color.set(racketColor);
       });
     });
   }
@@ -231,6 +243,10 @@ export function createPlayer(
       playerColor = newColor;
       applyColor();
     },
+    setRacketColor(newColor: THREE.ColorRepresentation): void {
+      racketColor = newColor;
+      applyRacketColor();
+    },
   };
 
   loader.load(
@@ -310,7 +326,15 @@ export function createPlayer(
           racketGltf => {
             const racketScene = racketGltf.scene;
             racketScene.scale.set(racketScale, racketScale, racketScale);
-          racketObject = racketScene;
+            racketScene.rotation.y = Math.PI / 4;
+            racketScene.traverse(child => {
+              if (!(child instanceof THREE.Mesh)) return;
+              child.material = Array.isArray(child.material)
+                ? child.material.map(material => material.clone())
+                : child.material.clone();
+            });
+            racketObject = racketScene;
+            applyRacketColor();
 
             handSocket.add(racketScene);
             controller.racket = racketScene;

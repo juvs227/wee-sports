@@ -110,4 +110,4 @@ still require device testing.
 See the [test-writing walkthrough](TESTING.md), [testing guide](manuals/TESTING.md),
 [version-control guide](manuals/VERSION_CONTROL.md),
 [bug-tracking guide](manuals/BUG_TRACKING.md), [build guide](manuals/BUILD.md),
-[CI guide](manuals/CI.md) and [four-branch plan](docs/pr-stack.md).
+[CI guide](manuals/CI.md), [assets guide](manuals/ASSETS.md) and [four-branch plan](docs/pr-stack.md).

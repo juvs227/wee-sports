@@ -56,16 +56,47 @@ test('players take the lowest seat and every join returns the lobby', () => {
   assert.equal(first.slot, 0);
   assert.equal(second.slot, 1);
   assert.deepEqual(second.players, [
-    { slot: 0, name: 'Ada', ready: false, setup: null, color: '#3b82f6' },
-    { slot: 1, name: 'Bo', ready: false, setup: null, color: '#ef4444' },
+    { slot: 0, name: 'Ada', ready: false, setup: null, color: '#3b82f6', racketColor: '#3b82f6', ballColor: '#3b82f6' },
+    { slot: 1, name: 'Bo', ready: false, setup: null, color: '#ef4444', racketColor: '#ef4444', ballColor: '#ef4444' },
   ]);
 });
 
-test('players can change avatar color during the avatar screen', () => {
+test('tennis player and racket colors start alike and change independently', () => {
   const { store, code } = openTutorial([false, true]);
   for (const step of MOVES) store.tutorialMove('p1', { step: MOVES.indexOf(step) });
-  assert.deepEqual(store.setPlayerColor('p1', { color: '#12AB34' }), { ok: true, code });
-  assert.equal(store.lobby(code).players.find((player) => player.slot === 1).color, '#12ab34');
+  assert.deepEqual(store.setPlayerColor('p1', { target: 'player', color: '#12AB34' }), { ok: true, code });
+  assert.equal(store.lobby(code).players.find((player) => player.slot === 1).racketColor, '#ef4444');
+  assert.deepEqual(store.setPlayerColor('p1', { target: 'racket', color: '#abcdef' }), { ok: true, code });
+  assert.deepEqual(store.lobby(code).players.find((player) => player.slot === 1), {
+    slot: 1, name: 'P1', ready: false, setup: 'motion', color: '#12ab34',
+    racketColor: '#abcdef', ballColor: '#ef4444',
+  });
+});
+
+test('bowling players can update only their own handedness', () => {
+  const { store, code } = openRoom(new RoomStore(), 'bowling');
+  store.join('a', { v, code, name: 'Ada' });
+  store.join('b', { v, code, name: 'Bo' });
+
+  assert.deepEqual(store.lobby(code).players.map(({ handedness, ...player }) => player), [
+    { slot: 0, name: 'Ada', ready: false, setup: null, color: '#3b82f6', racketColor: '#3b82f6', ballColor: '#3b82f6' },
+    { slot: 1, name: 'Bo', ready: false, setup: null, color: '#ef4444', racketColor: '#ef4444', ballColor: '#ef4444' },
+  ]);
+  assert.deepEqual(store.setHandedness('a', { handedness: 'left' }), {
+    ok: true,
+    code,
+    changed: true,
+  });
+  assert.deepEqual(store.lobby(code).players.map(player => player.handedness ?? 'right'), [
+    'left',
+    'right',
+  ]);
+  assert.deepEqual(store.setHandedness('a', { handedness: 'left' }), {
+    ok: true,
+    code,
+    changed: false,
+  });
+  assert.equal(store.setHandedness('a', { handedness: 'Left' }).error, 'bad-handedness');
 });
 
 for (const sport of ['tennis', 'bowling']) test(`${sport} rejects joins beyond its playing seats, including reserved seats`, () => {
@@ -124,6 +155,24 @@ test('leaving frees the seat for the next player', () => {
   assert.deepEqual(store.lobby(code).players.map((p) => p.name), ['Bo', 'Cy']);
 });
 
+test('bowling players can independently change player and ball colors', () => {
+  const { store, code, clock } = startReadyCheck('bowling');
+  everyoneReady(store);
+  clock.t += COUNTDOWN_MS;
+  store.finishCountdown(code);
+  for (let i = 0; i < playerCapacity('bowling'); i += 1) {
+    store.vote(`p${i}`, { watch: false });
+  }
+  assert.equal(store.lobby(code).phase, PHASES.AVATARS);
+  assert.deepEqual(store.setPlayerColor('p0', { target: 'player', color: '#123456' }), { ok: true, code });
+  assert.deepEqual(store.setPlayerColor('p0', { target: 'ball', color: '#654321' }), { ok: true, code });
+  assert.equal(store.setPlayerColor('p0', { target: 'racket', color: '#ffffff' }).error, 'bad-color');
+  assert.deepEqual(store.lobby(code).players[0], {
+    slot: 0, name: 'P0', ready: false, setup: 'buttons', color: '#123456',
+    racketColor: '#3b82f6', ballColor: '#654321',
+  });
+});
+
 test('the host leaving closes the room and lists who to tell', () => {
   const { store, code } = openRoom();
   store.join('a', { v, code, name: 'Ada' });
@@ -175,7 +224,7 @@ for (const sport of ['tennis', 'bowling']) {
     clock.t += COUNTDOWN_MS;
     store.finishCountdown(code);
     assert.equal(store.lobby(code).phase, PHASES.AVATARS);
-    assert.equal(store.setPlayerColor('p0', { color: '#12ab34' }).ok, true);
+    assert.equal(store.setPlayerColor('p0', { target: 'player', color: '#12ab34' }).ok, true);
     for (const phone of phones.slice(1)) store.setReady(phone, { ready: true });
     clock.t += VOTE_MS;
     assert.equal(store.lobby(code).vote, null);

@@ -1,4 +1,4 @@
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
 import * as THREE from 'three';
 import {BowlingWorld} from '../src/bowling/World';
 import {BowlingMatch} from '../src/bowling/match';
@@ -15,21 +15,23 @@ function lane() {
     running: true, disposed: false, rolling: false,
     trail: {geometry: {setDrawRange: () => {}}, visible: false},
   });
+  const lifecycle = world as unknown as {advanceDelivery(dt: number): void};
   // The game's lane runs toward +Z. Looking down it makes -X screen-right.
   const camera = new THREE.PerspectiveCamera(42, 1, 0.03, 80);
   camera.position.set(0, 2.25, -4);
   camera.lookAt(0, 0.05, 7.8);
   camera.updateMatrixWorld();
   const screenX = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z).project(camera).x;
-  return {world, physics, aimLine, screenX};
+  return {world, physics, aimLine, screenX, lifecycle};
 }
 
 test.each([-1, 1])('aim %s moves the preview and delivered ball to the same screen side', direction => {
-  const {world, physics, aimLine, screenX} = lane();
+  const {world, physics, aimLine, screenX, lifecycle} = lane();
   world.setAim(direction * 0.5);
   const points = aimLine.geometry.getAttribute('instanceEnd');
   expect(Math.sign(screenX(points.getX(0), points.getY(0), points.getZ(0)))).toBe(direction);
   expect(world.roll({player: 1, power: 0.65, aim: direction * 0.5, spin: 0}).ok).toBe(true);
+  for (let frame = 0; frame < 5; frame++) lifecycle.advanceDelivery(1 / 60);
   for (let frame = 0; frame < 480 && physics.ball.position.z < 8; frame++) physics.step(FIXED_STEP);
   const ball = physics.ball.position;
   expect(ball.z).toBeGreaterThanOrEqual(8);
@@ -39,8 +41,9 @@ test.each([-1, 1])('aim %s moves the preview and delivered ball to the same scre
 });
 
 test.each([-1, 1])('curve %s hooks to its named screen side after travelling through the oil', direction => {
-  const {world, physics, aimLine, screenX} = lane();
+  const {world, physics, aimLine, screenX, lifecycle} = lane();
   expect(world.roll({player: 1, power: 0.65, aim: 0, spin: direction * 0.4}).ok).toBe(true);
+  for (let frame = 0; frame < 5; frame++) lifecycle.advanceDelivery(1 / 60);
   for (let frame = 0; frame < 1400 && physics.ball.position.z < 16; frame++) physics.step(FIXED_STEP);
   const ball = physics.ball.position;
   expect(ball.z).toBeGreaterThanOrEqual(16);
@@ -48,4 +51,22 @@ test.each([-1, 1])('curve %s hooks to its named screen side after travelling thr
   expect(Math.sign(screenX(ball.x, ball.y, ball.z))).toBe(direction);
   aimLine.geometry.dispose();
   (aimLine.material as THREE.Material).dispose();
+});
+
+test('active bowling ball color follows the player taking the next turn', () => {
+  const players = [
+    {player: 1, name: 'Player 1', color: '#123456', ballColor: '#112233'},
+    {player: 2, name: 'Player 2', color: '#abcdef', ballColor: '#aabbcc'},
+  ];
+  const match = new BowlingMatch(players);
+  const ballController = {setColor: vi.fn()};
+  const world = Object.create(BowlingWorld.prototype) as BowlingWorld;
+  Object.assign(world, {match, players, ballController});
+  const syncBallColor = (world as unknown as {syncBallColor: () => void}).syncBallColor;
+
+  syncBallColor.call(world);
+  expect(ballController.setColor).toHaveBeenLastCalledWith('#112233');
+  match.record([]);
+  syncBallColor.call(world);
+  expect(ballController.setColor).toHaveBeenLastCalledWith('#aabbcc');
 });

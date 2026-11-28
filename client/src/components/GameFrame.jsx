@@ -281,6 +281,10 @@ export function GameFrame({ code, controller = false, controllerIntent = null, o
         const lifecycle = setupLifecycle.current;
         const result = await setupRelay.current.submit(data.setup, {immediate: data.reason === 'background' || data.reason === 'reset'});
         if (lifecycle === setupLifecycle.current) post({ type: 'wee:setup-ack', requestId: data.requestId, result });
+      } else if (controller && sport === 'bowling' && data?.type === 'wee:controller-handedness' &&
+          ['left', 'right'].includes(data.handedness)) {
+        const result = await request(EVENTS.PLAYER_HANDEDNESS, { handedness: data.handedness });
+        if (!result?.ok) console.error('Failed to update bowling player handedness:', result?.error);
       } else if (controller && data?.type === 'wee:tutorial-attempt' && phase === PHASES.TUTORIAL &&
           Number.isInteger(data.step) && typeof data.detected === 'string' && typeof data.matched === 'boolean') {
         onTutorialAttempt?.({ step: data.step, detected: data.detected, matched: data.matched });

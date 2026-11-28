@@ -3,21 +3,72 @@ import { EVENTS } from '@wee/shared/protocol.js';
 import { request } from '../lib/socket.js';
 import { TennisPlayerAvatar } from './PlayerAvatar.jsx';
 
+function EquipmentAvatar({ bowling, color, name, slot, style }) {
+  const label = bowling ? `${name}'s bowling ball` : `${name}'s tennis racket`;
+  if (bowling) {
+    const gradientId = `bowling-ball-gradient-${slot}`;
+    return (
+      <svg viewBox="0 0 160 160" role="img" aria-label={label} style={{ width: 92, height: 'auto', flex: 'none', ...style }}>
+        <defs>
+          <radialGradient id={gradientId} cx="32%" cy="24%" r="78%">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity=".72" />
+            <stop offset="30%" stopColor={color} />
+            <stop offset="100%" stopColor={color} />
+          </radialGradient>
+        </defs>
+        <circle cx="80" cy="80" r="68" fill={`url(#${gradientId})`} />
+        <circle cx="62" cy="59" r="8" fill="#171526" />
+        <circle cx="89" cy="55" r="8" fill="#171526" />
+        <circle cx="78" cy="84" r="9" fill="#171526" />
+      </svg>
+    );
+  }
+
+  const stringsId = `racket-strings-${slot}`;
+  return (
+    <svg viewBox="0 0 160 160" role="img" aria-label={label} style={{ width: 92, height: 'auto', flex: 'none', ...style }}>
+      <defs>
+        <clipPath id={stringsId}>
+          <ellipse cx="70" cy="56" rx="26" ry="37" />
+        </clipPath>
+      </defs>
+      <g fill="none" stroke={color} strokeLinecap="round" strokeLinejoin="round">
+        <ellipse cx="70" cy="56" rx="32" ry="44" strokeWidth="9" />
+        <path d="M70 100v45" strokeWidth="13" />
+      </g>
+      <g clipPath={`url(#${stringsId})`} fill="none" stroke="#deded7" strokeWidth="2">
+        <path d="M47 10v92M58 10v92M69 10v92M80 10v92M91 10v92" />
+        <path d="M25 29h90M25 41h90M25 53h90M25 65h90M25 77h90" />
+      </g>
+    </svg>
+  );
+}
+
 /** Brief laptop-only player reveal between the tutorial and the match. */
 export function TvAvatars({ lobby }) {
   const readyCount = lobby.players.filter((player) => player.ready).length;
   const bowling = lobby.sport === 'bowling';
   const [colors, setColors] = useState({});
   const [colorError, setColorError] = useState(null);
+  const objectTarget = bowling ? 'ball' : 'racket';
+  const objectColorField = bowling ? 'ballColor' : 'racketColor';
 
   useEffect(() => {
-    setColors(Object.fromEntries(lobby.players.map((player) => [player.slot, player.color])));
-  }, [lobby.players]);
+    setColors(Object.fromEntries(lobby.players.map((player) => [player.slot, {
+      player: player.color,
+      object: player[objectColorField]
+        ?? player.color
+        ?? '#3b82f6',
+    }])));
+  }, [lobby.players, objectColorField, bowling]);
 
-  async function changeColor(slot, color) {
-    setColors((current) => ({ ...current, [slot]: color }));
+  async function changeColor(slot, target, color) {
+    setColors((current) => ({
+      ...current,
+      [slot]: { ...current[slot], [target === 'player' ? 'player' : 'object']: color },
+    }));
     setColorError(null);
-    const result = await request(EVENTS.HOST_PLAYER_COLOR_SET, { slot, color });
+    const result = await request(EVENTS.HOST_PLAYER_COLOR_SET, { slot, target, color });
     if (!result?.ok) setColorError(result?.error ?? 'disconnected');
   }
 
@@ -40,52 +91,71 @@ export function TvAvatars({ lobby }) {
       </div>
       {colorError ? <p role="alert">Could not save color. Try again.</p> : null}
       <div style={{ display: 'flex', justifyContent: 'center', gap: '2rem', flexWrap: 'wrap' }}>
-        {lobby.players.map((player) => (
-          <section
-            key={player.slot}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '0.5rem',
-              width: '22rem',
-              minHeight: 'calc(100dvh - 18rem)',
-              padding: '2rem',
-              overflow: 'hidden',
-              border: '2px solid var(--p' + (player.slot + 1) + ')',
-              borderRadius: '1rem',
-            }}
-          >
-            {bowling ? (
+        {lobby.players.map((player) => {
+          const playerColor = colors[player.slot]?.player ?? player.color ?? '#3b82f6';
+          const defaultObjectColor = player[objectColorField]
+            ?? player.color
+            ?? '#3b82f6';
+          const objectColor = colors[player.slot]?.object ?? defaultObjectColor;
+          return (
+            <section
+              key={player.slot}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '0.5rem',
+                width: '24rem',
+                minHeight: 'calc(100dvh - 18rem)',
+                padding: '1.5rem',
+                overflow: 'hidden',
+                border: '2px solid var(--p' + (player.slot + 1) + ')',
+                borderRadius: '1rem',
+              }}
+            >
               <div
-                role="img"
-                aria-label={`${player.name}'s bowling ball, ${colors[player.slot] || player.color}`}
                 style={{
-                  position: 'relative',
-                  width: 180,
-                  height: 180,
-                  margin: 30,
-                  borderRadius: '50%',
-                  background: `radial-gradient(circle at 32% 25%, #ffffff88, transparent 24%), ${colors[player.slot] || player.color || '#6e47ad'}`,
-                  boxShadow: 'inset -18px -20px 28px #0007, 0 14px 22px #0004',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '.35rem',
+                  width: '100%',
+                  minHeight: 230,
+                  transform: 'translate(-16px, 28px)',
                 }}
               >
-                <span aria-hidden="true" style={{ position: 'absolute', width: 15, height: 15, borderRadius: '50%', background: '#171526', top: '36%', left: '37%' }} />
-                <span aria-hidden="true" style={{ position: 'absolute', width: 15, height: 15, borderRadius: '50%', background: '#171526', top: '36%', left: '53%' }} />
-                <span aria-hidden="true" style={{ position: 'absolute', width: 19, height: 19, borderRadius: '50%', background: '#171526', top: '53%', left: '46%' }} />
+                <div style={{ display: 'grid', placeItems: 'center', width: '68%', flex: 'none' }}>
+                  <TennisPlayerAvatar slot={player.slot} name={player.name} color={playerColor} size={220} />
+                </div>
+                <EquipmentAvatar
+                  bowling={bowling}
+                  color={objectColor}
+                  name={player.name}
+                  slot={player.slot}
+                  style={{ transform: 'translateX(-8px)' }}
+                />
               </div>
-            ) : <TennisPlayerAvatar slot={player.slot} name={player.name} color={colors[player.slot] || player.color} size={240} />}
-            <strong>{player.name}</strong>
-            <span>P{player.slot + 1}</span>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
-              {bowling ? 'Ball color' : 'Player color'}
-              <input type="color" value={colors[player.slot] || player.color || '#3b82f6'}
-                aria-label={`Choose ${player.name}'s ${bowling ? 'ball' : 'player'} color`}
-                onChange={(event) => changeColor(player.slot, event.target.value)} />
-            </label>
-            <span>{player.ready ? 'Ready' : 'Waiting for Ready'}</span>
-          </section>
-        ))}
+              <div style={{ display: 'grid', justifyItems: 'center', gap: '.5rem', marginTop: 'auto' }}>
+                <strong>{player.name}</strong>
+                <span>P{player.slot + 1}</span>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
+                  Player color
+                  <input type="color" value={playerColor}
+                    aria-label={`Choose ${player.name}'s player color`}
+                    onChange={(event) => changeColor(player.slot, 'player', event.target.value)} />
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
+                  {bowling ? 'Ball color' : 'Racket color'}
+                  <input type="color" value={objectColor}
+                    aria-label={`Choose ${player.name}'s ${objectTarget} color`}
+                    onChange={(event) => changeColor(player.slot, objectTarget, event.target.value)} />
+                </label>
+                <span>{player.ready ? 'Ready' : 'Waiting for Ready'}</span>
+              </div>
+            </section>
+          );
+        })}
       </div>
     </main>
   );

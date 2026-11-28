@@ -215,6 +215,24 @@ async function networkFixture(t) {
   }};
 }
 
+test('real sockets broadcast a bowling controller handedness change to the TV', async t => {
+  const f = await networkFixture(t);
+  const tv = await f.client(), phone = await f.client();
+  const room = await send(tv, EVENTS.HOST_CREATE, {v, sport: 'bowling'});
+  await send(phone, EVENTS.PLAYER_JOIN, {v, code: room.code, name: 'Player', capabilities});
+  const update = new Promise(resolve => {
+    const receive = snapshot => {
+      if (snapshot.players[0]?.handedness !== 'left') return;
+      tv.off(EVENTS.LOBBY_UPDATE, receive);
+      resolve(snapshot);
+    };
+    tv.on(EVENTS.LOBBY_UPDATE, receive);
+  });
+
+  assert.equal((await send(phone, EVENTS.PLAYER_HANDEDNESS, {handedness: 'left'})).changed, true);
+  const snapshot = await update;
+  assert.equal(snapshot.players[0].handedness, 'left');
+});
 
 
 test('real sockets retain an unknown lost acknowledgement outcome and never replay its roll ID', async t => {

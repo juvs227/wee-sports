@@ -11,7 +11,8 @@ export function PhoneReady({ lobby, slot, disabled = false }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
   const [attempt, setAttempt] = useState(0);
-  const [color, setColor] = useState('#3b82f6');
+  const [playerColor, setPlayerColor] = useState('#3b82f6');
+  const [objectColor, setObjectColor] = useState('#ffffff');
   const pending = useRef(false);
   const dialog = useRef(null);
   const [confirmation, setConfirmation] = useState(null);
@@ -31,6 +32,9 @@ export function PhoneReady({ lobby, slot, disabled = false }) {
   const count = lobby.players.length;
   const readyCount = lobby.players.filter(player => player.ready).length;
   const supportsColorPicker = lobby.sport === 'tennis' || lobby.sport === 'bowling';
+  const objectTarget = lobby.sport === 'bowling' ? 'ball' : 'racket';
+  const objectColorField = lobby.sport === 'bowling' ? 'ballColor' : 'racketColor';
+  const defaultObjectColor = playerColor;
 
   useEffect(() => {
     if (confirmation && confirmation === confirmationKey && isLeader) dialog.current?.showModal();
@@ -38,8 +42,10 @@ export function PhoneReady({ lobby, slot, disabled = false }) {
   }, [confirmation, confirmationKey, isLeader]);
 
   useEffect(() => {
-    if (ownSeat?.color) setColor(ownSeat.color);
-  }, [ownSeat?.color]);
+    if (ownSeat?.color) setPlayerColor(ownSeat.color);
+    const savedObjectColor = ownSeat?.[objectColorField] ?? ownSeat?.color;
+    if (savedObjectColor) setObjectColor(savedObjectColor);
+  }, [ownSeat?.color, ownSeat?.[objectColorField], objectColorField]);
 
   useEffect(() => {
     setError(null);
@@ -56,7 +62,7 @@ export function PhoneReady({ lobby, slot, disabled = false }) {
     return () => { live = false; };
   }, [lobby.code, lobby.sport, lobby.gameId, lobby.inputGeneration, lobby.phase, slot, ready, needsSetup, disabled, attempt]);
 
-  async function start(ballColor = color) {
+  async function start() {
     if (pending.current || disabled || !isLeader || !lobby.canStart || counting || !confirmation || confirmation !== confirmationKey) return;
     setConfirmation(null);
     dialog.current?.close();
@@ -64,22 +70,18 @@ export function PhoneReady({ lobby, slot, disabled = false }) {
     pending.current = true;
     setSending(true);
     setError(null);
-    const result = await request(EVENTS.PLAYER_START, { color: ballColor });
+    const result = await request(EVENTS.PLAYER_START, { color: playerColor });
     if (current.current !== scope) return;
     pending.current = false;
     setSending(false);
     if (!result?.ok) setError(result?.error ?? 'disconnected');
   }
 
-  async function startWithBall(ballColor) {
-    setColor(ballColor);
-    await start(ballColor);
-  }
-
-  async function changeColor(event) {
+  async function changeColor(target, event) {
     const nextColor = event.target.value;
-    setColor(nextColor);
-    const result = await request(EVENTS.PLAYER_COLOR_SET, { color: nextColor });
+    if (target === 'player') setPlayerColor(nextColor);
+    else setObjectColor(nextColor);
+    const result = await request(EVENTS.PLAYER_COLOR_SET, { target, color: nextColor });
     if (!result?.ok) setError(result?.error ?? 'disconnected');
   }
 
@@ -101,10 +103,17 @@ export function PhoneReady({ lobby, slot, disabled = false }) {
     ) : null}
     {lobby.phase === PHASES.AVATARS && supportsColorPicker ? (
       <div className="phone-ready__color-picker">
-        <label htmlFor="phone-player-color">{lobby.sport === 'bowling' ? 'Choose ball color' : 'Choose player color'}</label>
-        <input id="phone-player-color" type="color" value={color} onChange={changeColor}
-          aria-label={lobby.sport === 'bowling' ? 'Choose ball color' : 'Choose player color'} disabled={disabled || sending} />
-        <p>Pick a color before pressing Ready. The TV preview updates as you choose.</p>
+        <label htmlFor="phone-player-color">Choose player color</label>
+        <input id="phone-player-color" type="color" value={playerColor}
+          onChange={event => changeColor('player', event)}
+          aria-label="Choose player color" disabled={disabled || sending} />
+        <label htmlFor={`phone-${objectTarget}-color`}>
+          Choose {objectTarget === 'ball' ? 'ball' : 'racket'} color
+        </label>
+        <input id={`phone-${objectTarget}-color`} type="color" value={objectColor || defaultObjectColor}
+          onChange={event => changeColor(objectTarget, event)}
+          aria-label={`Choose ${objectTarget} color`} disabled={disabled || sending} />
+        <p>Pick both colors before pressing Ready. The TV preview updates as you choose.</p>
       </div>
     ) : null}
     {counting ? <h2 className="phone-ready__title" role="timer">{secondsLeft > 0 ? `Starting in ${secondsLeft}…` : 'Go!'}</h2> : null}
@@ -134,7 +143,7 @@ export function PhoneReady({ lobby, slot, disabled = false }) {
     <dialog ref={dialog} className="phone-start-confirm" aria-labelledby="phone-start-title" onCancel={() => setConfirmation(null)}>
       <h2 id="phone-start-title">Start {sportName(lobby.sport)}?</h2>
       <p>{count === 1 ? 'Solo play' : `${count} players`} · Everyone ready?</p>
-      <button type="button" className="btn btn--primary" disabled={sending || !confirmationKey} onClick={() => startWithBall(color)}>Start now</button>
+      <button type="button" className="btn btn--primary" disabled={sending || !confirmationKey} onClick={start}>Start now</button>
       <button type="button" className="btn btn--ghost" onClick={() => setConfirmation(null)} autoFocus>Keep waiting</button>
     </dialog>
   </section>;

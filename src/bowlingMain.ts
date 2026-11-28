@@ -221,7 +221,7 @@ function render(state: BowlingState): void {
       : {}),
   });
 }
-function create(players: Array<{player: number; name: string}>): void {
+function create(players: Array<{player: number; name: string; color?: string; ballColor?: string}>): void {
   callouts.reset();
   complete = false;
   clearCallout();
@@ -279,14 +279,21 @@ function receive(event: MessageEvent): void {
       if (world && wasPaused !== paused) render(world.getState());
       return;
     }
+    const players = (Array.isArray(data.players) ? data.players : []).map(
+      (p: {slot: number; name: string; color?: string; ballColor?: string; handedness?: 'left' | 'right'}) => ({
+        player: p.slot + 1,
+        name: p.name,
+        color: p.color,
+        ballColor: p.ballColor ?? p.color,
+        handedness: p.handedness === 'left' ? 'left' : 'right',
+      }),
+    );
+    if (world && gameId === data.gameId) {
+      for (const player of players) {
+        world.setPlayerHandedness(player.player, player.handedness);
+      }
+    }
     if (!world || gameId !== data.gameId) {
-      const players = (Array.isArray(data.players) ? data.players : []).map(
-        (p: {slot: number; name: string; color?: string}) => ({
-          player: p.slot + 1,
-          name: p.name,
-          color: p.color,
-        }),
-      );
       if (!players.length) return;
       audioEvent('roll-end');
       world?.dispose();

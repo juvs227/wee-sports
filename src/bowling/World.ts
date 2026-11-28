@@ -1,15 +1,8 @@
 import * as THREE from 'three';
-import { BowlingMatch, BowlingPlayer, BowlingState } from './match';
-import {
-  BowlingPhysics,
-  LANE,
-  PIN_COM,
-  pinSpot,
-  RollControls,
-  RollSettlement,
-  validRoll,
-} from './physics';
-import { createBall, BallController } from './ball';
+import {BowlingMatch, BowlingPlayer, BowlingState} from './match';
+import {createBall, type BallController} from './ball';
+import {BowlingPhysics, LANE, PIN_COM, pinSpot, RollControls, RollSettlement, validRoll} from './physics';
+import {createPlayer as createBowlingPlayer, type PlayerController} from './player';
 
 import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
@@ -42,8 +35,10 @@ export class BowlingWorld {
   private camera = new THREE.PerspectiveCamera(42, 1, 0.03, 80);
   private renderer: THREE.WebGLRenderer;
   private pins = new Map<number, THREE.Group>();
-  private ballController: BallController;
-  private ball: THREE.Group;
+  private bowlingPlayers = new Map<number, PlayerController>();
+  private activePlayer: number | null = null;
+  private ballController!: BallController;
+  private ball!: THREE.Group;
   private aimLine: Line2;
   private trail: THREE.Line;
   private trailPositions = new Float32Array(512 * 3);
@@ -53,11 +48,13 @@ export class BowlingWorld {
   private disposed = false;
   private rolling = false;
   private rollSoundActive = false;
+  private pendingRoll: BowlingRoll | null = null;
+  private releaseDelay = 0;
   private settlement: RollSettlement | null = null;
   private revealTime = 0;
   private animation = 0;
   private lastTime = 0;
-  private cameraPosition = new THREE.Vector3(0.1, 2.25, -4);
+  private cameraPosition = new THREE.Vector3(0.1, 2.25, -5);
   private cameraTarget = new THREE.Vector3(0, 0.05, 7.8);
   private aim = 0;
 
@@ -104,10 +101,11 @@ export class BowlingWorld {
     this.scene.add(sun, sun.target);
     this.buildAlley();
     this.buildPins();
-    this.ballController = createBall();
-    this.ball = this.ballController.group;
+    this.buildBall();
+    this.ball.visible = false;
     this.syncBallColor();
-    this.scene.add(this.ball);
+    this.syncPlayerModels(this.players);
+    this.setActivePlayer(this.match.getState().currentPlayer);
     const geometry = new LineGeometry();
     const material = new LineMaterial({
       color: 0x496c25,
@@ -195,17 +193,15 @@ export class BowlingWorld {
       return { ok: false, error: 'Choose a valid aim, power, and spin.' };
     // Inputs use the player's left/right. This camera faces world +Z, so
     // screen-right is world -X. Keep the physics' world coordinates unchanged.
-    if (!this.physics.roll({ ...roll, aim: -roll.aim, spin: -roll.spin }))
-      return { ok: false, error: 'This delivery could not start.' };
+    this.pendingRoll = {...roll, aim: -roll.aim, spin: -roll.spin};
+    this.releaseDelay = 5 / 60;
+    this.bowlingPlayers?.get(roll.player)?.playSwing();
     this.rolling = true;
     this.trailCount = 0;
     this.trail.geometry.setDrawRange(0, 0);
-    this.trail.visible = true;
+    this.trail.visible = false;
     this.aimLine.visible = false;
     this.onState?.(this.getState());
-    this.onSoundEvent?.('release');
-    this.rollSoundActive = true;
-    this.onSoundEvent?.('roll');
     return { ok: true };
   }
 
@@ -228,7 +224,13 @@ export class BowlingWorld {
     this.endRollingSound();
     this.players = players.map(player => ({ ...player }));
     this.match = new BowlingMatch(players);
+    if (this.bowlingPlayers) {
+      this.syncPlayerModels(this.players);
+    }
+    this.pendingRoll = null;
+    this.releaseDelay = 0;
     this.physics.resetRack();
+    if (this.ball) this.ball.visible = false;
     this.rolling = false;
     this.settlement = null;
     this.revealTime = 0;
@@ -240,11 +242,19 @@ export class BowlingWorld {
     this.onState?.(this.getState());
   }
 
+  setPlayerHandedness(playerNumber: number, handedness: 'left' | 'right'): void {
+    const player = this.players.find(candidate => candidate.player === playerNumber);
+    if (!player || player.handedness === handedness) return;
+    player.handedness = handedness;
+    this.bowlingPlayers.get(playerNumber)?.setHandedness(handedness);
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.stop();
     this.disposed = true;
     this.observer.disconnect();
+    this.bowlingPlayers.forEach(player => player.dispose());
     this.ballController.dispose();
     const geometries = new Set<THREE.BufferGeometry>();
     const materials = new Set<THREE.Material>();
@@ -307,17 +317,12 @@ export class BowlingWorld {
     if (!this.running) return;
     const dt = Math.min(Math.max((time - this.lastTime) / 1000, 0), 0.1);
     this.lastTime = time;
+    if (this.activePlayer !== null) this.bowlingPlayers?.get(this.activePlayer)?.update(dt);
     this.advanceDelivery(dt);
     this.syncBodies();
     this.updateTrail();
-    const advance = this.rolling
-      ? Math.max(0, Math.min(this.physics.ball.position.z - 2.2, 15.4))
-      : 0;
-    this.cameraPosition.set(
-      0.1,
-      this.rolling ? 2.35 : 2.25,
-      advance - (this.rolling ? 2.9 : 4),
-    );
+    const advance = this.rolling ? Math.max(0, Math.min(this.physics.ball.position.z - 2.2, 15.4)) : 0;
+    this.cameraPosition.set(0.1, this.rolling ? 2.35 : 2.25, advance - (this.rolling ? 3.9 : 5));
     this.cameraTarget.set(0, 0.05, Math.min(advance + 7.8, 18.8));
     this.camera.position.lerp(this.cameraPosition, 1 - Math.exp(-dt * 3));
     const target = new THREE.Vector3();
@@ -334,6 +339,27 @@ export class BowlingWorld {
   /** Advance deliveries independently of rendering; only real transitions produce sound. */
   private advanceDelivery(dt: number): void {
     if (!this.running || this.disposed) return;
+    if (this.pendingRoll) {
+      this.releaseDelay -= dt;
+      if (this.releaseDelay > 1e-6) return;
+      const controls = this.pendingRoll;
+      this.pendingRoll = null;
+      this.releaseDelay = 0;
+      if (!this.physics.roll(controls)) {
+        this.rolling = false;
+        this.bowlingPlayers?.get(controls.player)?.holdBall();
+        this.aimLine.visible = true;
+        this.onState?.(this.getState());
+        console.error('Bowling delivery failed to start after the swing.');
+        return;
+      }
+      this.bowlingPlayers?.get(controls.player)?.releaseBall();
+      if (this.ball) this.ball.visible = true;
+      this.trail.visible = true;
+      this.onSoundEvent?.('release');
+      this.rollSoundActive = true;
+      this.onSoundEvent?.('roll');
+    }
     if (this.rolling && !this.settlement) {
       this.settlement = this.physics.step(dt);
       if (this.settlement) {
@@ -349,6 +375,8 @@ export class BowlingWorld {
           this.physics.sweep(this.settlement.remaining);
         this.settlement = null;
         this.rolling = false;
+        if (this.ball) this.ball.visible = false;
+        this.setActivePlayer(this.match.getState().currentPlayer);
         this.trail.visible = false;
         this.aimLine.visible = !this.match.getState().complete;
         this.syncBallColor();
@@ -364,15 +392,6 @@ export class BowlingWorld {
         );
       }
     }
-  }
-
-  private syncBallColor(): void {
-    const currentPlayer = this.match.getState().currentPlayer;
-    const color =
-      currentPlayer !== null
-        ? this.players.find(player => player.player === currentPlayer)?.color
-        : undefined;
-    this.ballController.setColor(color ?? '#6e47ad');
   }
 
   private syncBodies(): void {
@@ -415,8 +434,56 @@ export class BowlingWorld {
     this.trail.geometry.setDrawRange(0, this.trailCount);
   }
 
-  private render(): void {
-    this.renderer.render(this.scene, this.camera);
+  private render(): void { this.renderer.render(this.scene, this.camera); }
+
+  private syncBallColor(): void {
+    const currentPlayer = this.match.getState().currentPlayer;
+    const player = this.players.find(
+      candidate => candidate.player === currentPlayer,
+    );
+    this.ballController.setColor(
+      player?.ballColor ?? player?.color ?? '#6e47ad',
+    );
+  }
+
+  private syncPlayerModels(players: BowlingPlayer[]): void {
+    const playerIds = new Set(players.map(player => player.player));
+    for (const [id, player] of this.bowlingPlayers) {
+      if (playerIds.has(id)) continue;
+      player.dispose();
+      this.scene.remove(player.group);
+      this.bowlingPlayers.delete(id);
+    }
+
+    const colors = [0x3b82f6, 0xef4444, 0x2b9a66, 0xe0a100];
+    for (const player of players) {
+      const existing = this.bowlingPlayers.get(player.player);
+      if (existing) {
+        existing.setHandedness(player.handedness ?? 'right');
+        continue;
+      }
+      const color = player.color
+        ? new THREE.Color(player.color).getHex()
+        : colors[player.player - 1] ?? 0x6e47ad;
+      const model = createBowlingPlayer(0.4, 0.1, -0.35, color, {
+        handedness: player.handedness ?? 'right',
+        ballColor: player.ballColor ?? player.color ?? '#6e47ad',
+        onLoad: () => this.render(),
+      });
+      model.group.rotation.y = Math.PI;
+      model.group.visible = false;
+      this.scene.add(model.group);
+      this.bowlingPlayers.set(player.player, model);
+    }
+  }
+
+  private setActivePlayer(player: number | null): void {
+    this.activePlayer = player;
+    this.bowlingPlayers?.forEach((model, id) => {
+      model.group.visible = id === player;
+      if (id === player) model.holdBall();
+      else model.releaseBall();
+    });
   }
 
   private mesh(
@@ -709,5 +776,11 @@ export class BowlingWorld {
       this.scene.add(group);
       this.pins.set(id, group);
     }
+  }
+
+  private buildBall(): void {
+    this.ballController = createBall();
+    this.ball = this.ballController.group;
+    this.scene.add(this.ball);
   }
 }
