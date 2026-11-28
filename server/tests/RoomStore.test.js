@@ -214,6 +214,40 @@ const readyFlags = (store, code) => store.lobby(code).players.map((player) => pl
 const COUNTDOWN_MS = COUNTDOWN_SECONDS * 1000;
 const VOTE_MS = VOTE_SECONDS * 1000;
 
+for (const sport of ['tennis', 'bowling']) {
+  test.each(['yes', 'no', 'timeout'])(`${sport} offers the tutorial after avatar choice (%s)`, choice => {
+    const { store, code, clock } = startReadyCheck(sport);
+    const phones = store.lobby(code).players.map(({ slot }) => `p${slot}`);
+    // PhoneReady skips the countdown vote, then sends plain Ready on the avatar screen.
+    for (const phone of phones) store.setReady(phone, { ready: true, skipTutorial: true });
+    store.startGame('p0');
+    clock.t += COUNTDOWN_MS;
+    store.finishCountdown(code);
+    assert.equal(store.lobby(code).phase, PHASES.AVATARS);
+    assert.equal(store.setPlayerColor('p0', { target: 'player', color: '#12ab34' }).ok, true);
+    for (const phone of phones.slice(1)) store.setReady(phone, { ready: true });
+    clock.t += VOTE_MS;
+    assert.equal(store.lobby(code).vote, null);
+    store.setReady('p0', { ready: true });
+    assert.equal(store.lobby(code).phase, PHASES.VOTE);
+    assert.deepEqual(store.lobby(code).vote, { msLeft: VOTE_MS, voted: [] });
+
+    if (choice === 'timeout') {
+      clock.t += VOTE_MS;
+      store.expireVote(code);
+    } else {
+      for (const phone of phones) store.vote(phone, { watch: choice === 'yes' && phone === 'p0' });
+    }
+    if (choice === 'yes') {
+      assert.equal(store.lobby(code).phase, PHASES.TUTORIAL);
+      for (const step of TUTORIAL_MOVES[sport].keys()) store.tutorialMove('p0', { step });
+    }
+    const game = store.lobby(code);
+    assert.equal(game.phase, PHASES.GAME);
+    assert.equal(game.players[0].color, '#12ab34');
+  });
+}
+
 test(`the ready check starts at ${READY_AT_PLAYERS} players and not before`, () => {
   const { store, code } = openRoom();
   assert.equal(store.lobby(code).phase, PHASES.LOBBY);

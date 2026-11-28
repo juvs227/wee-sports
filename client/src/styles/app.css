@@ -1633,7 +1633,8 @@
 .phone-options-section p { margin-bottom: 14px; font-size: .85rem; }
 .phone-options-section .btn { min-height: 44px; padding: 10px 14px; font-size: .85rem; }
 .phone-options-confirm { display: flex; flex-wrap: wrap; gap: 8px; }
-.phone-options-return { padding-top: 16px; }
+.phone-options-return { margin: 8px 0 16px; }
+.phone-options-return .btn { width: 100%; }
 .phone-options-return p { margin: 12px 0; line-height: 1.5; }
 .phone-options-pause { margin: 16px 0; }
 .phone-options-pause .btn { width: 100%; }
@@ -1686,3 +1687,17 @@ html:has(.phone-session), body:has(.phone-session) { overscroll-behavior-y: none
 .phone-start-confirm h2{font-size:1.5rem;margin:0 0 12px;}
 .phone-start-confirm p{margin:0 0 24px;}
 .phone-start-confirm button{width:100%;margin-top:12px;min-height:52px;}
+
+/* Stable-width numerals make reconnect time easy to follow on phone and TV. */
+.reconnect-countdown {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 0;
+  list-style: none;
+  font-variant-numeric: tabular-nums;
+}
+.reconnect-countdown li {
+  font-size: inherit;
+  line-height: 1.5;
+}

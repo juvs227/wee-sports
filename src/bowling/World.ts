@@ -254,7 +254,8 @@ export class BowlingWorld {
     this.stop();
     this.disposed = true;
     this.observer.disconnect();
-    this.bowlingPlayers?.forEach(player => player.dispose());
+    this.bowlingPlayers.forEach(player => player.dispose());
+    this.ballController.dispose();
     const geometries = new Set<THREE.BufferGeometry>();
     const materials = new Set<THREE.Material>();
     const textures = new Set<THREE.Texture>();
@@ -393,16 +394,6 @@ export class BowlingWorld {
     }
   }
 
-  private syncBallColor(): void {
-    const currentPlayer = this.match.getState().currentPlayer;
-    const player = this.players.find(
-      candidate => candidate.player === currentPlayer,
-    );
-    this.ballController.setColor(
-      player?.ballColor ?? player?.color ?? '#6e47ad',
-    );
-  }
-
   private syncBodies(): void {
     const visible = new Set(this.physics.pins.map(pin => pin.id));
     for (const [id, mesh] of this.pins) mesh.visible = visible.has(id);
@@ -444,6 +435,16 @@ export class BowlingWorld {
   }
 
   private render(): void { this.renderer.render(this.scene, this.camera); }
+
+  private syncBallColor(): void {
+    const currentPlayer = this.match.getState().currentPlayer;
+    const player = this.players.find(
+      candidate => candidate.player === currentPlayer,
+    );
+    this.ballController.setColor(
+      player?.ballColor ?? player?.color ?? '#6e47ad',
+    );
+  }
 
   private syncPlayerModels(players: BowlingPlayer[]): void {
     const playerIds = new Set(players.map(player => player.player));
