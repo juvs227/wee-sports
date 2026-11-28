@@ -152,7 +152,6 @@ export class RoomStore {
       setup: null,
       color: PLAYER_COLORS[slot],
       racketColor: PLAYER_COLORS[slot],
-      racketColorCustomized: false,
       ballColor: PLAYER_COLORS[slot],
       handedness: 'right',
     });
@@ -214,15 +213,6 @@ export class RoomStore {
       return { ok: false, error: 'bad-color' };
     }
     player[field] = payload.color.toLowerCase();
-    if (room.sport === 'tennis' && field === 'racketColor') {
-      player.racketColorCustomized = true;
-    } else if (
-      room.sport === 'tennis' &&
-      field === 'color' &&
-      !player.racketColorCustomized
-    ) {
-      player.racketColor = payload.color.toLowerCase();
-    }
     return { ok: true, code: room.code };
   }
 
@@ -238,15 +228,6 @@ export class RoomStore {
     const player = [...room.players.values()].find((seat) => seat.slot === payload.slot);
     if (!player) return { ok: false, error: 'no-player' };
     player[field] = payload.color.toLowerCase();
-    if (room.sport === 'tennis' && field === 'racketColor') {
-      player.racketColorCustomized = true;
-    } else if (
-      room.sport === 'tennis' &&
-      field === 'color' &&
-      !player.racketColorCustomized
-    ) {
-      player.racketColor = payload.color.toLowerCase();
-    }
     return { ok: true, code: room.code };
   }
 

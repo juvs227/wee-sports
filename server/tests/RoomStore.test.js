@@ -61,11 +61,11 @@ test('players take the lowest seat and every join returns the lobby', () => {
   ]);
 });
 
-test('tennis players can independently change player and racket colors', () => {
+test('tennis player and racket colors start alike and change independently', () => {
   const { store, code } = openTutorial([false, true]);
   for (const step of MOVES) store.tutorialMove('p1', { step: MOVES.indexOf(step) });
   assert.deepEqual(store.setPlayerColor('p1', { target: 'player', color: '#12AB34' }), { ok: true, code });
-  assert.equal(store.lobby(code).players.find((player) => player.slot === 1).racketColor, '#12ab34');
+  assert.equal(store.lobby(code).players.find((player) => player.slot === 1).racketColor, '#ef4444');
   assert.deepEqual(store.setPlayerColor('p1', { target: 'racket', color: '#abcdef' }), { ok: true, code });
   assert.deepEqual(store.lobby(code).players.find((player) => player.slot === 1), {
     slot: 1, name: 'P1', ready: false, setup: 'motion', color: '#12ab34',
