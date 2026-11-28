@@ -8,8 +8,8 @@ import {getSport} from './sportRegistry.js';
  */
 
 /** Bumped when a message shape changes incompatibly. */
-export const PROTOCOL_VERSION = 4;
-export const PROTOCOL_MINOR = 1;
+export const PROTOCOL_VERSION = 5;
+export const PROTOCOL_MINOR = 2;
 /** Combined phone/server queue-wait budget, excluding network travel time. */
 export const TENNIS_TRANSPORT_WAIT_MS = 160;
 
@@ -85,7 +85,7 @@ export const PHASES = {
 /**
  * Every lobby snapshot below has this shape:
  *
- *   { code, sport, phase, players: [{ slot, name, ready, setup, color }], countdown,
+ *   { code, sport, phase, players: [{ slot, name, ready, setup, color, racketColor, ballColor }], countdown,
  *     vote, tutorial, paused, reconnecting: [{ name, msLeft }], setupPending: [name] }
  *
  * Create/join/resume acknowledgements additionally contain a private token
@@ -141,9 +141,9 @@ export const EVENTS = {
    * un-readying during the countdown cancels it. Ack: { ok }.
    */
   PLAYER_READY: 'player:ready',
-  /** Phone -> server: set this player's avatar color during the avatar screen. */
+  /** Phone -> server: { target: 'player' | 'racket' | 'ball', color } during the avatar screen. */
   PLAYER_COLOR_SET: 'player:color-set',
-  /** TV -> server: set a player's color during the avatar screen. */
+  /** TV -> server: { slot, target: 'player' | 'racket' | 'ball', color } during the avatar screen. */
   HOST_PLAYER_COLOR_SET: 'host:player-color-set',
   /** Phone -> server: { watch: boolean }. One final vote per player. Ack: { ok }. */
   TUTORIAL_VOTE: 'tutorial:vote',

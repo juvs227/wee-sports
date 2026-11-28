@@ -55,8 +55,8 @@ test.each([-1, 1])('curve %s hooks to its named screen side after travelling thr
 
 test('active bowling ball color follows the player taking the next turn', () => {
   const players = [
-    {player: 1, name: 'Player 1', color: '#123456'},
-    {player: 2, name: 'Player 2', color: '#abcdef'},
+    {player: 1, name: 'Player 1', color: '#123456', ballColor: '#112233'},
+    {player: 2, name: 'Player 2', color: '#abcdef', ballColor: '#aabbcc'},
   ];
   const match = new BowlingMatch(players);
   const ballController = {setColor: vi.fn()};
@@ -65,8 +65,8 @@ test('active bowling ball color follows the player taking the next turn', () => 
   const syncBallColor = (world as unknown as {syncBallColor: () => void}).syncBallColor;
 
   syncBallColor.call(world);
-  expect(ballController.setColor).toHaveBeenLastCalledWith('#123456');
+  expect(ballController.setColor).toHaveBeenLastCalledWith('#112233');
   match.record([]);
   syncBallColor.call(world);
-  expect(ballController.setColor).toHaveBeenLastCalledWith('#abcdef');
+  expect(ballController.setColor).toHaveBeenLastCalledWith('#aabbcc');
 });

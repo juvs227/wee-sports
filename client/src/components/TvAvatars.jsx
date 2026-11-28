@@ -9,15 +9,25 @@ export function TvAvatars({ lobby }) {
   const bowling = lobby.sport === 'bowling';
   const [colors, setColors] = useState({});
   const [colorError, setColorError] = useState(null);
+  const objectTarget = bowling ? 'ball' : 'racket';
+  const objectColorField = bowling ? 'ballColor' : 'racketColor';
 
   useEffect(() => {
-    setColors(Object.fromEntries(lobby.players.map((player) => [player.slot, player.color])));
-  }, [lobby.players]);
+    setColors(Object.fromEntries(lobby.players.map((player) => [player.slot, {
+      player: player.color,
+      object: player[objectColorField]
+        ?? player.color
+        ?? '#3b82f6',
+    }])));
+  }, [lobby.players, objectColorField, bowling]);
 
-  async function changeColor(slot, color) {
-    setColors((current) => ({ ...current, [slot]: color }));
+  async function changeColor(slot, target, color) {
+    setColors((current) => ({
+      ...current,
+      [slot]: { ...current[slot], [target === 'player' ? 'player' : 'object']: color },
+    }));
     setColorError(null);
-    const result = await request(EVENTS.HOST_PLAYER_COLOR_SET, { slot, color });
+    const result = await request(EVENTS.HOST_PLAYER_COLOR_SET, { slot, target, color });
     if (!result?.ok) setColorError(result?.error ?? 'disconnected');
   }
 
@@ -40,52 +50,47 @@ export function TvAvatars({ lobby }) {
       </div>
       {colorError ? <p role="alert">Could not save color. Try again.</p> : null}
       <div style={{ display: 'flex', justifyContent: 'center', gap: '2rem', flexWrap: 'wrap' }}>
-        {lobby.players.map((player) => (
-          <section
-            key={player.slot}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '0.5rem',
-              width: '22rem',
-              minHeight: 'calc(100dvh - 18rem)',
-              padding: '2rem',
-              overflow: 'hidden',
-              border: '2px solid var(--p' + (player.slot + 1) + ')',
-              borderRadius: '1rem',
-            }}
-          >
-            {bowling ? (
-              <div
-                role="img"
-                aria-label={`${player.name}'s bowling ball, ${colors[player.slot] || player.color}`}
-                style={{
-                  position: 'relative',
-                  width: 180,
-                  height: 180,
-                  margin: 30,
-                  borderRadius: '50%',
-                  background: `radial-gradient(circle at 32% 25%, #ffffff88, transparent 24%), ${colors[player.slot] || player.color || '#6e47ad'}`,
-                  boxShadow: 'inset -18px -20px 28px #0007, 0 14px 22px #0004',
-                }}
-              >
-                <span aria-hidden="true" style={{ position: 'absolute', width: 15, height: 15, borderRadius: '50%', background: '#171526', top: '36%', left: '37%' }} />
-                <span aria-hidden="true" style={{ position: 'absolute', width: 15, height: 15, borderRadius: '50%', background: '#171526', top: '36%', left: '53%' }} />
-                <span aria-hidden="true" style={{ position: 'absolute', width: 19, height: 19, borderRadius: '50%', background: '#171526', top: '53%', left: '46%' }} />
-              </div>
-            ) : <TennisPlayerAvatar slot={player.slot} name={player.name} color={colors[player.slot] || player.color} size={240} />}
-            <strong>{player.name}</strong>
-            <span>P{player.slot + 1}</span>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
-              {bowling ? 'Ball color' : 'Player color'}
-              <input type="color" value={colors[player.slot] || player.color || '#3b82f6'}
-                aria-label={`Choose ${player.name}'s ${bowling ? 'ball' : 'player'} color`}
-                onChange={(event) => changeColor(player.slot, event.target.value)} />
-            </label>
-            <span>{player.ready ? 'Ready' : 'Waiting for Ready'}</span>
-          </section>
-        ))}
+        {lobby.players.map((player) => {
+          const playerColor = colors[player.slot]?.player ?? player.color ?? '#3b82f6';
+          const defaultObjectColor = player[objectColorField]
+            ?? player.color
+            ?? '#3b82f6';
+          const objectColor = colors[player.slot]?.object ?? defaultObjectColor;
+          return (
+            <section
+              key={player.slot}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '0.5rem',
+                width: '22rem',
+                minHeight: 'calc(100dvh - 18rem)',
+                padding: '2rem',
+                overflow: 'hidden',
+                border: '2px solid var(--p' + (player.slot + 1) + ')',
+                borderRadius: '1rem',
+              }}
+            >
+              <TennisPlayerAvatar slot={player.slot} name={player.name} color={playerColor} size={150} />
+              <strong>{player.name}</strong>
+              <span>P{player.slot + 1}</span>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
+                Player color
+                <input type="color" value={playerColor}
+                  aria-label={`Choose ${player.name}'s player color`}
+                  onChange={(event) => changeColor(player.slot, 'player', event.target.value)} />
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
+                {bowling ? 'Ball color' : 'Racket color'}
+                <input type="color" value={objectColor}
+                  aria-label={`Choose ${player.name}'s ${objectTarget} color`}
+                  onChange={(event) => changeColor(player.slot, objectTarget, event.target.value)} />
+              </label>
+              <span>{player.ready ? 'Ready' : 'Waiting for Ready'}</span>
+            </section>
+          );
+        })}
       </div>
     </main>
   );

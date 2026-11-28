@@ -395,11 +395,12 @@ export class BowlingWorld {
 
   private syncBallColor(): void {
     const currentPlayer = this.match.getState().currentPlayer;
-    const color =
-      currentPlayer !== null
-        ? this.players.find(player => player.player === currentPlayer)?.color
-        : undefined;
-    this.ballController.setColor(color ?? '#6e47ad');
+    const player = this.players.find(
+      candidate => candidate.player === currentPlayer,
+    );
+    this.ballController.setColor(
+      player?.ballColor ?? player?.color ?? '#6e47ad',
+    );
   }
 
   private syncBodies(): void {
@@ -463,9 +464,9 @@ export class BowlingWorld {
       const color = player.color
         ? new THREE.Color(player.color).getHex()
         : colors[player.player - 1] ?? 0x6e47ad;
-      const model = createBowlingPlayer(0.4, 0, -0.35, color, {
+      const model = createBowlingPlayer(0.4, 0.1, -0.35, color, {
         handedness: player.handedness ?? 'right',
-        ballColor: color,
+        ballColor: player.ballColor ?? player.color ?? '#6e47ad',
         onLoad: () => this.render(),
       });
       model.group.rotation.y = Math.PI;

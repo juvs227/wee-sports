@@ -27,6 +27,14 @@ const COUNTDOWN_MS = COUNTDOWN_SECONDS * 1000;
 const VOTE_MS = VOTE_SECONDS * 1000;
 const PLAYER_COLORS = ['#3b82f6', '#ef4444', '#2b9a66', '#e0a100'];
 
+function colorField(sport, target) {
+  const resolvedTarget = target ?? (sport === 'bowling' ? 'ball' : 'player');
+  if (resolvedTarget === 'player') return 'color';
+  if (sport === 'tennis' && resolvedTarget === 'racket') return 'racketColor';
+  if (sport === 'bowling' && resolvedTarget === 'ball') return 'ballColor';
+  return null;
+}
+
 const BEFORE_PLAY = new Set([PHASES.LOBBY, PHASES.READY]);
 /** After the countdown and before the game: the vote and the tutorial. */
 const PREGAME = new Set([PHASES.VOTE, PHASES.TUTORIAL, PHASES.AVATARS]);
@@ -143,6 +151,9 @@ export class RoomStore {
       ready: false,
       setup: null,
       color: PLAYER_COLORS[slot],
+      racketColor: PLAYER_COLORS[slot],
+      racketColorCustomized: false,
+      ballColor: PLAYER_COLORS[slot],
       handedness: 'right',
     });
     room.savedMatch = null; // A different roster must start its own match.
@@ -198,10 +209,20 @@ export class RoomStore {
     const player = room?.players.get(playerId);
     if (member?.role !== 'player' || !room || !player) return { ok: false, error: ERRORS.NOT_PLAYER };
     if (room.phase !== PHASES.AVATARS) return { ok: false, error: ERRORS.NO_READY_CHECK };
-    if (typeof payload?.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(payload.color)) {
+    const field = colorField(room.sport, payload?.target);
+    if (!field || typeof payload?.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(payload.color)) {
       return { ok: false, error: 'bad-color' };
     }
-    player.color = payload.color.toLowerCase();
+    player[field] = payload.color.toLowerCase();
+    if (room.sport === 'tennis' && field === 'racketColor') {
+      player.racketColorCustomized = true;
+    } else if (
+      room.sport === 'tennis' &&
+      field === 'color' &&
+      !player.racketColorCustomized
+    ) {
+      player.racketColor = payload.color.toLowerCase();
+    }
     return { ok: true, code: room.code };
   }
 
@@ -210,12 +231,22 @@ export class RoomStore {
     const room = member?.role === 'host' && this.#rooms.get(member.code);
     if (!room) return { ok: false, error: ERRORS.NO_ROOM };
     if (room.phase !== PHASES.AVATARS) return { ok: false, error: ERRORS.NO_READY_CHECK };
-    if (!Number.isInteger(payload?.slot) || typeof payload?.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(payload.color)) {
+    const field = colorField(room.sport, payload?.target);
+    if (!Number.isInteger(payload?.slot) || !field || typeof payload?.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(payload.color)) {
       return { ok: false, error: 'bad-color' };
     }
     const player = [...room.players.values()].find((seat) => seat.slot === payload.slot);
     if (!player) return { ok: false, error: 'no-player' };
-    player.color = payload.color.toLowerCase();
+    player[field] = payload.color.toLowerCase();
+    if (room.sport === 'tennis' && field === 'racketColor') {
+      player.racketColorCustomized = true;
+    } else if (
+      room.sport === 'tennis' &&
+      field === 'color' &&
+      !player.racketColorCustomized
+    ) {
+      player.racketColor = payload.color.toLowerCase();
+    }
     return { ok: true, code: room.code };
   }
 
@@ -809,8 +840,8 @@ export class RoomStore {
     const room = this.#rooms.get(code);
     if (!room) return null;
     const players = [...room.players.values()]
-      .map(({ slot, name, ready, setup, color, handedness }) => ({
-        slot, name, ready, setup, color,
+      .map(({ slot, name, ready, setup, color, racketColor, ballColor, handedness }) => ({
+        slot, name, ready, setup, color, racketColor, ballColor,
         ...(room.sport === 'bowling' && handedness === 'left' ? { handedness } : {}),
       }))
       .sort((a, b) => a.slot - b.slot);

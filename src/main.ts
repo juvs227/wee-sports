@@ -509,6 +509,10 @@ async function main(): Promise<void> {
     const p1 = players.find((player: {slot: number}) => player.slot === 0);
     const p2 = players.find((player: {slot: number}) => player.slot === 1);
     world.setPlayerColors(parsePlayerColor(p1?.color), parsePlayerColor(p2?.color));
+    world.setPlayerRacketColors(
+      parsePlayerColor(p1?.racketColor),
+      parsePlayerColor(p2?.racketColor),
+    );
     humanOpponent = Boolean(p2);
     const nextGameId =
       typeof event.data.gameId === 'string' ? event.data.gameId : null;

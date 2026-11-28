@@ -221,7 +221,7 @@ function render(state: BowlingState): void {
       : {}),
   });
 }
-function create(players: Array<{player: number; name: string; color?: string}>): void {
+function create(players: Array<{player: number; name: string; color?: string; ballColor?: string}>): void {
   callouts.reset();
   complete = false;
   clearCallout();
@@ -280,10 +280,11 @@ function receive(event: MessageEvent): void {
       return;
     }
     const players = (Array.isArray(data.players) ? data.players : []).map(
-      (p: {slot: number; name: string; color?: string; handedness?: 'left' | 'right'}) => ({
+      (p: {slot: number; name: string; color?: string; ballColor?: string; handedness?: 'left' | 'right'}) => ({
         player: p.slot + 1,
         name: p.name,
         color: p.color,
+        ballColor: p.ballColor ?? p.color,
         handedness: p.handedness === 'left' ? 'left' : 'right',
       }),
     );

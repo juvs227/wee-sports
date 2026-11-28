@@ -22,17 +22,24 @@
 .host-lobby__players { min-width: 0; }
 .host-lobby .ready { margin: 0; }
 .host-lobby .ready__cards { margin: 0; gap: .75rem; }
-.host-lobby .ready-card { gap: .8rem; padding: 1rem; border-width: 2px; }
+.host-lobby .ready-card { display: grid; gap: .65rem; padding: 1rem; border-width: 2px; }
+.host-lobby .ready-card__visuals { display: flex; align-items: center; justify-content: space-between; gap: .75rem; min-width: 0; }
+.host-lobby .ready-card__player { display: flex; align-items: center; gap: .6rem; min-width: 0; }
+.host-lobby .ready-card__player canvas { width: clamp(3rem, 5vw, 4.5rem) !important; height: clamp(3rem, 5vw, 4.5rem) !important; }
+.host-lobby .ready-card__identity { display: flex; align-items: center; gap: .55rem; min-width: 0; }
+.host-lobby .ready-card__identity .seat__badge { flex: none; width: 2.45rem; height: 2.45rem; }
 .host-lobby .ready-card__name { font-size: clamp(1.1rem, 1.8vw, 1.4rem); }
+.host-lobby .ready-card__visuals > svg { flex: none; width: 3.25rem; height: 3.25rem; }
 .host-lobby .ready-card__status { font-size: 1rem; }
 .host-lobby__start-cue { margin-top: 1.25rem; color: var(--text-muted); font-size: 1.05rem; line-height: 1.5; overflow-wrap: anywhere; }
 .host-lobby__waiting { color: var(--text-muted); text-align: center; font-size: 1.1rem; }
 .host-lobby[data-empty='true'] .host-lobby__content { grid-template-columns: minmax(0, 26rem); justify-content: center; gap: 1.5rem; }
 .host-lobby[data-party='true'] .ready__cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.host-lobby[data-party='true'] .ready-card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .4rem .65rem; padding: .8rem; }
+.host-lobby[data-party='true'] .ready-card { grid-template-columns: minmax(0, 1fr); gap: .4rem .65rem; padding: .8rem; }
 .host-lobby[data-party='true'] .ready-card__name { font-size: 1rem; }
-.host-lobby[data-party='true'] .ready-card__status { grid-column: 2; font-size: .85rem; }
-.host-lobby[data-party='true'] .ready-card .seat__badge { grid-row: 1 / 3; width: 2.35rem; height: 2.35rem; font-size: .9rem; }
+.host-lobby[data-party='true'] .ready-card__status { grid-column: 1; font-size: .85rem; }
+.host-lobby[data-party='true'] .ready-card__identity .seat__badge { width: 2.1rem; height: 2.1rem; font-size: .8rem; }
+.host-lobby[data-party='true'] .ready-card__visuals > svg { width: 2.75rem; height: 2.75rem; }
 .host-lobby > .stub__actions { margin-top: 2rem; }
 .host-lobby__resume { padding: 1.5rem; margin: 0 0 1.5rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); }
 .host-lobby__resume h2 { margin: 0 0 .5rem; font-size: clamp(1.4rem, 2.3vw, 2rem); }
@@ -61,8 +68,14 @@
 @media (max-width: 440px) {
   .host-lobby__heading { gap: .5rem; }
   .host-lobby__utilities { gap: .35rem; }
-  .host-lobby .ready-card { flex-wrap: wrap; gap: .6rem; padding: .75rem; }
-  .host-lobby .ready-card__status { width: 100%; padding-left: 3.4rem; }
+  .host-lobby .ready-card { gap: .5rem; padding: .75rem; }
+  .host-lobby .ready-card__visuals { gap: .35rem; }
+  .host-lobby .ready-card__player { gap: .35rem; }
+  .host-lobby .ready-card__identity { gap: .35rem; }
+  .host-lobby .ready-card__identity .seat__badge { width: 1.9rem; height: 1.9rem; font-size: .75rem; }
+  .host-lobby .ready-card__name { font-size: .9rem; }
+  .host-lobby .ready-card__visuals > svg { width: 2.25rem; height: 2.25rem; }
+  .host-lobby .ready-card__status { width: auto; padding-left: 0; }
   .host-lobby[data-party='true'] .ready__cards { grid-template-columns: minmax(0, 1fr); }
   .host-lobby[data-party='true'] .ready-card__status { width: auto; padding-left: 0; }
 }
